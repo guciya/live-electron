@@ -1,4 +1,4 @@
-export const WINDOW_TITLE_PREFIX = 'tuilivekit-electron';
+export const WINDOW_TITLE_PREFIX = 'niko-live';
 export const DEFAULT_WINDOW_TITLE = WINDOW_TITLE_PREFIX;
 export const STABLE_TITLE_WINDOW_TYPES = ['main', 'child', 'confirm', 'cover'] as const;
 

@@ -283,7 +283,7 @@ const endLiveDialogMessage = computed(() => {
  * finish before navigating away, otherwise the stale render surface remains
  * visible on the login page.
  */
-const NATIVE_RENDERING_SHUTDOWN_DELAY_MS = 5000;
+const NATIVE_RENDERING_SHUTDOWN_DELAY_MS = 500;
 let loginRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 // Explicit re-entry guard for logout-triggered redirect scheduling.
 let hasStartedLogoutRedirect = false;
@@ -457,10 +457,12 @@ const showAppQuitConfirmWindow = () => {
   const actions: Array<TUIButtonAction> = shouldEndLiveBeforeQuit
     ? [
       { text: t('Cancel'), value: 'cancel', type: TUIButtonActionType.Normal },
+      { text: t('Minimize to tray'), value: 'minimize-to-tray', type: TUIButtonActionType.Normal },
       { text: t('End live and quit'), value: 'end-live-and-quit', type: TUIButtonActionType.Dangerous },
     ]
     : [
       { text: t('Cancel'), value: 'cancel', type: TUIButtonActionType.Normal },
+      { text: t('Minimize to tray'), value: 'minimize-to-tray', type: TUIButtonActionType.Normal },
       { text: t('Quit app'), value: 'quit-app', type: TUIButtonActionType.Dangerous },
     ];
 
@@ -469,8 +471,8 @@ const showAppQuitConfirmWindow = () => {
     dialogId,
     title: shouldEndLiveBeforeQuit ? t('End live and quit?') : t('Quit app?'),
     content: shouldEndLiveBeforeQuit
-      ? t('You are currently live streaming. Do you want to end the live and quit the app?')
-      : t('Do you want to quit the app? Scene source settings will not be saved.'),
+      ? t('You are currently live streaming. Minimize to tray to keep streaming, or end the live and quit the app.')
+      : t('Minimize to the system tray, or quit the app directly.'),
     actions,
   });
 };
@@ -595,6 +597,16 @@ const onConfirmDialogAction = async (payload: ConfirmDialogActionPayload) => {
 
     const shouldEndLiveBeforeQuit = currentAppQuitNeedsEndLive.value;
     const confirmAction = shouldEndLiveBeforeQuit ? 'end-live-and-quit' : 'quit-app';
+
+    // 最小化到系统托盘：不退出，隐藏主窗口
+    if (payload.action === 'minimize-to-tray') {
+      currentAppQuitDialogId.value = '';
+      currentAppQuitNeedsEndLive.value = false;
+      window.ipcRenderer?.send('minimize-to-tray');
+      window.ipcRenderer?.send('app-quit-cancel');
+      return;
+    }
+
     if (payload.action !== confirmAction) {
       currentAppQuitDialogId.value = '';
       currentAppQuitNeedsEndLive.value = false;

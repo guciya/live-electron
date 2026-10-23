@@ -319,6 +319,10 @@ const demoResource = {
   'UserSig Login': 'UserSig Login',
   'Verification code': 'Verification code',
   'Verification code is required': 'Verification code is required',
+  'Send code': 'Send code',
+  'Sending...': 'Sending...',
+  's': 's',
+  'Code sent': 'Code sent',
   'get SMS code failed!': 'get SMS code failed!',
 
   // Media Sources
@@ -642,7 +646,7 @@ const demoResource = {
   'Gift-giving news': 'Gift-giving news',
   'Go Live': 'Go Live',
   'Interactive messages': 'Interactive messages',
-  'Live Streaming Assistant': 'Live Streaming Assistant',
+  'Live Streaming Assistant': 'Niko直播',
   'Live Tools': 'Live Tools',
   'Living not started': 'Living not started',
   'Message List': 'Messages',

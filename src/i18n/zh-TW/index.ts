@@ -647,7 +647,7 @@ export const resource = {
   'Gift-giving news': '送禮訊息',
   'Go Live': '開始直播',
   'Interactive messages': '互動訊息',
-  'Live Streaming Assistant': '直播推流助手',
+  'Live Streaming Assistant': 'Niko直播',
   'Live Tools': '直播工具',
   'Living not started': '直播未開始...',
   'Message List': '訊息清單',

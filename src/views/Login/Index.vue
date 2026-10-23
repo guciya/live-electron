@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-login-page">
+    <video class="tui-login-bg-video" :src="loginBgVideo" autoplay loop muted playsinline></video>
     <div class="tui-login-header">
       <div class="window-tool tui-window-header">
         <button class="tui-live-icon" @click="onMinimize">
@@ -16,41 +17,67 @@
       </div>
     </div>
     <div class="tui-login-body">
-      <div class="tui-login-logo">
-      </div>
-      <div class="tui-login-form">
-        <div class="tui-login-form-title">
-          <span>{{t('Live Streaming Assistant')}}</span>
+      <div class="tui-login-card">
+        <div class="tui-login-card-header">
+          <img class="tui-login-logo-img" src="../../assets/niko-logo.png" alt="Niko直播" />
+          <span class="tui-login-title-text">Niko直播</span>
         </div>
-        <div class="tui-login-type-container">
-          <span :class="{active:loginType===LoginType.UserAccount}" @click="onChangeLoginType(LoginType.UserAccount)">{{ t('Account Login')}}</span>
-          <span :class="{active:loginType===LoginType.SDKSecretKey}" @click="onChangeLoginType(LoginType.SDKSecretKey)">{{ t('SDK SecretKey Login')}}</span>
-          <span :class="{active:loginType===LoginType.UserSig}" @click="onChangeLoginType(LoginType.UserSig)">{{ t('UserSig Login')}}</span>
-        </div>
+
         <div class="tui-login-options">
-          <secret-key-form v-if="loginType === LoginType.SDKSecretKey"
-            :login-state="loginState"
-            :verify-states="verifyStates"
-            @update:sdk-app-id="value => loginState.sdkAppId = value"
-            @update:user-id="value => loginState.userId = value"
-            @update:sdk-secret-key="value => loginState.sdkSecretKey = value"
-            />
-          <user-sig-form v-else-if="loginType === LoginType.UserSig"
-            :login-state="loginState"
-            :verify-states="verifyStates"
-            @update:sdk-app-id="value => loginState.sdkAppId = value"
-            @update:user-id="value => loginState.userId = value"
-            @update:user-sig="value => loginState.userSig = value"
-          />
-          <password-form v-else-if="loginType === LoginType.UserAccount"
-            :login-state="loginState"
-            @update:user-id="value => loginState.userId = value"
-            @update:password="value => loginState.password = value"
-           />
+          <div class="tui-login-field">
+            <span class="tui-field-label">{{ t('Mobile number') }}</span>
+            <div class="tui-login-option-input">
+              <span class="tui-area-code">+86</span>
+              <input
+                v-model="mobile"
+                class="tui-field-input"
+                type="tel"
+                inputmode="numeric"
+                maxlength="11"
+                :placeholder="t('Please enter your phone number!')"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="tui-login-field">
+            <span class="tui-field-label">{{ t('Verification code') }}</span>
+            <div class="tui-login-option-input">
+              <input
+                v-model="verifyCode"
+                class="tui-field-input"
+                type="tel"
+                inputmode="numeric"
+                maxlength="6"
+                :placeholder="t('Please enter a 6-digit verification code')"
+                @keydown.enter="handleLogin"
+                autocomplete="off"
+              />
+              <button
+                class="tui-msg-control"
+                type="button"
+                :disabled="countdown > 0 || sending || !canSend"
+                @click="handleSendCode"
+              >
+                <span :class="{ 'tui-msg-sent': countdown > 0 }">
+                  {{ countdown > 0 ? `${countdown}${t('s')}` : (sending ? t('Sending...') : t('Send code')) }}
+                </span>
+              </button>
+            </div>
+          </div>
+
           <button class="tui-login-button tui-button-ripple" :disabled="isLoggingIn" @click="handleLogin">
             <span class="button">{{ !isLoggingIn ? t('Log In') : t('Logging In')}}</span>
           </button>
         </div>
+
+        <GeetestCaptcha
+          ref="captchaRef"
+          :captcha-id="GEETEST_CAPTCHA_ID"
+          product="bind"
+          @success="onCaptchaSuccess"
+          @error="onCaptchaError"
+        />
       </div>
     </div>
     </div>
@@ -58,192 +85,175 @@
 </template>
 
 <script setup lang="ts">
-import { ref, Ref, reactive, onMounted } from 'vue';
+import { computed, onBeforeUnmount, ref, Ref } from 'vue';
 import router from '../../router';
 import { getWindowType } from '../../TUILiveKit/utils/envUtils';
 import { UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
-import { getBasicInfo } from '../../debug/basic-info-config.js';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
 import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
 import TUIMessageBox from '../../TUILiveKit/common/base/MessageBox';
-import SecretKeyForm from './SecretKeyForm.vue';
-import UserSigForm from './UserSigForm.vue';
-import PasswordForm from './PasswordForm.vue';
 import logger from '../../TUILiveKit/utils/logger';
-import { LoginType, LoginState, VerifyStates } from './types';
+import { LoginType } from './types';
 import { USER_INFO_STORAGE_KEY } from '../../TUILiveKit/utils/userInfoStorage';
-
-const serverURL = ''; // ********** Please config your login server URL *********
-
-const loginState:LoginState = reactive({
-  privacyGuide: '',
-  userAgreement: '',
-  mode: '',
-  isAgreed: false,
-  phoneNumber: '',
-  mailAddress: '',
-  verifyCode: '',
-  sessionId: '',
-  sdkAppId: '',
-  userId: '',
-  userSig: '',
-  sdkSecretKey: '',
-  password: '',
-});
-
-const verifyStates:VerifyStates = reactive({
-  countdown: 0,
-  timer: 0,
-});
+import { NIKO_CONFIG } from '../../niko/config';
+import { useAuthStore } from '../../niko/store/auth';
+import { codeLogin, sendVerifyCode } from '../../niko/api/user';
+import GeetestCaptcha from '../../niko/components/GeetestCaptcha.vue';
+import type { GeetestValidateData } from '../../niko/types/geetest';
+import loginBgVideo from '../../assets/niko-live-video.mp4';
 
 const { t } = useUIKit();
+const authStore = useAuthStore();
 
-const loginType: Ref<LoginType> = ref(LoginType.UserAccount);
+const MOBILE_STORAGE_KEY = 'niko_live_mobile';
+
+const mobile = ref(window.localStorage.getItem(MOBILE_STORAGE_KEY) || '');
+const verifyCode = ref('');
 const isLoggingIn = ref(false);
+const sending = ref(false);
 
-const onChangeLoginType = (type: LoginType) => {
-  loginType.value = type;
+const countdown = ref(0);
+let countdownTimer: number | null = null;
+
+// 极验验证码
+const captchaRef = ref<InstanceType<typeof GeetestCaptcha> | null>(null);
+const GEETEST_CAPTCHA_ID = '343d223d6ad402391bdce9b6795f4cb8';
+
+const canSend = computed(() => /^1[3-9]\d{9}$/.test(mobile.value));
+
+function startCountdown() {
+  countdown.value = 60;
+  countdownTimer = window.setInterval(() => {
+    countdown.value--;
+    if (countdown.value <= 0 && countdownTimer !== null) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  }, 1000);
+}
+
+/** 极验验证通过后，调用发短信验证码接口 */
+async function onCaptchaSuccess(data: GeetestValidateData) {
+  if (!canSend.value) {
+    return;
+  }
+  sending.value = true;
+  try {
+    await sendVerifyCode({
+      mobile: mobile.value,
+      logNumber: data.lot_number,
+      captchaOutput: data.captcha_output,
+      passToken: data.pass_token,
+      genTime: data.gen_time,
+    });
+    TUIMessageBox({
+      title: t('Note'),
+      message: t('Code sent'),
+      confirmButtonText: t('Sure'),
+    });
+    startCountdown();
+  } catch (error: any) {
+    logger.warn('[Login] send verify code failed:', error);
+    TUIMessageBox({
+      title: t('Note'),
+      message: error?.message || t('get SMS code failed!'),
+      confirmButtonText: t('Sure'),
+    });
+    captchaRef.value?.resetCaptcha();
+  } finally {
+    sending.value = false;
+  }
+}
+
+function onCaptchaError(e: unknown) {
+  logger.warn('[Login] geetest error:', e);
+}
+
+/** 点击「获取验证码」：先校验手机号，再弹出极验图形验证码 */
+function handleSendCode() {
+  if (countdown.value > 0 || sending.value) {
+    return;
+  }
+  if (!canSend.value) {
+    TUIMessageBox({
+      title: t('Note'),
+      message: t('Please enter a valid mobile number'),
+      confirmButtonText: t('Sure'),
+    });
+    return;
+  }
+  captchaRef.value?.showCaptcha();
 }
 
 async function handleLogin() {
-  isLoggingIn.value = true;
-  if (validateLoginForm()) {
-    if (loginType.value === LoginType.UserAccount) {
-      await doPasswordLogin();
-    } else if (loginType.value === LoginType.UserSig) {
-      doUserSigLogin();
-    } else if (loginType.value === LoginType.SDKSecretKey) {
-      doSDKSecretKeyLogin();
-    } else {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Unknown login type!'),
-        confirmButtonText: t('Sure'),
-      });
-    }
+  if (isLoggingIn.value) {
+    return;
   }
-  isLoggingIn.value = false;
-}
-
-function validateLoginForm(): boolean {
-  let result = true;
-  if (loginType.value === LoginType.UserSig || loginType.value === LoginType.SDKSecretKey) {
-    if (loginState.sdkAppId.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter valid SDKAPPID number.'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-    if (loginState.userId.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter your user ID!'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-  }
-
-  if (loginType.value === LoginType.UserAccount) {
-    if (loginState.userId.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter your user ID!'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-    if (loginState.password.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter your password!'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-  } else if (loginType.value === LoginType.UserSig) {
-    if (loginState.userSig.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter your user signature!'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-  } else if (loginType.value === LoginType.SDKSecretKey) {
-    if (loginState.sdkSecretKey.trim() === '') {
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Please enter your SDK secret key!'),
-        confirmButtonText: t('Sure'),
-      });
-      result = false;
-    }
-  }
-  return result;
-}
-
-async function doPasswordLogin() {
-  const param = new URLSearchParams({
-    userId: loginState.userId.trim(),
-    password: loginState.password
-  });
-  const loginURL =  `${serverURL}?${param.toString()}`
-
-  try {
-    const response = await fetch(loginURL);
-    if (response.ok) {
-      const jsonResponse= response.json() as any;
-      window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
-        sdkAppId: jsonResponse.sdkAppId,
-        userId: jsonResponse.userId,
-        userSig: jsonResponse.userSig,
-        loginType: loginType.value
-      }));
-      await gotoNextPage();
-    } else {
-      logger.warn('Login failed:', response);
-      TUIMessageBox({
-        title: t('Note'),
-        message: t('Login failed.'),
-        confirmButtonText: t('Sure'),
-      });
-    }
-  } catch (error) {
-    logger.warn('Login failed:', error);
+  if (!/^1[3-9]\d{9}$/.test(mobile.value)) {
     TUIMessageBox({
       title: t('Note'),
-      message: t('Login failed.'),
+      message: t('Please enter a valid mobile number'),
       confirmButtonText: t('Sure'),
     });
+    return;
   }
-}
+  if (!/^\d{4,6}$/.test(verifyCode.value)) {
+    TUIMessageBox({
+      title: t('Note'),
+      message: t('Please enter the verification code!'),
+      confirmButtonText: t('Sure'),
+    });
+    return;
+  }
 
-async function doUserSigLogin() {
-  window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
-    sdkAppId: Number(loginState.sdkAppId),
-    userId: loginState.userId.trim(),
-    userSig: loginState.userSig.trim(),
-    loginType: loginType.value
-  }));
-  await gotoNextPage();
-}
+  isLoggingIn.value = true;
+  try {
+    const result = await codeLogin(mobile.value.trim(), verifyCode.value.trim());
 
-async function doSDKSecretKeyLogin() {
-  const { sdkAppId, userId, userSig }
-    = getBasicInfo(loginState.userId.trim(), Number(loginState.sdkAppId.trim()), loginState.sdkSecretKey.trim());
-  window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
-    sdkAppId,
-    userId,
-    userSig,
-    loginType: loginType.value
-  }));
-  await gotoNextPage();
+    // 后端下发的 sign 即为 TRTC / IM 的 UserSig
+    const userId = String(result.user_id);
+    const userSig = result.sign;
+
+    // 持久化后端登录态（token + 用户信息）
+    authStore.setSession(result.token, {
+      userId,
+      userShowId: String(result.user_show_id),
+      nickname: result.nickname,
+      avatar: result.avatar,
+      userSig,
+      fansCount: Number(result.fans_count || 0),
+    });
+
+    // Electron 应用登录凭据（供 TRTC 登录使用）
+    window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
+      sdkAppId: NIKO_CONFIG.sdkAppId,
+      userId,
+      userSig,
+      loginType: LoginType.UserSig,
+    }));
+
+    window.localStorage.setItem(MOBILE_STORAGE_KEY, mobile.value);
+    verifyCode.value = '';
+    if (countdownTimer !== null) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+    countdown.value = 0;
+
+    await gotoNextPage();
+  } catch (error: any) {
+    logger.warn('[Login] code login failed:', error);
+    TUIMessageBox({
+      title: t('Note'),
+      message: error?.message || t('Login failed.'),
+      confirmButtonText: t('Sure'),
+    });
+  } finally {
+    isLoggingIn.value = false;
+  }
 }
 
 async function gotoNextPage() {
@@ -260,22 +270,16 @@ async function gotoNextPage() {
     router.push({ name: 'tui-live-kit-cover' });
     break;
   default:
-    logger.warn('login success, unkonwn window source:', winType);
+    logger.warn('login success, unknown window source:', winType);
     break;
   }
   window.ipcRenderer.send('user-login');
 }
 
-onMounted(() => {
-  const scripts = document.getElementsByTagName('script');
-  const existed = Array.from(scripts).some(script => script.src.indexOf('TCaptcha.js') !== -1);
-
-  if (!existed) {
-    logger.log('[Login] add script TCaptcha');
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = 'https://turing.captcha.qcloud.com/TCaptcha.js';
-    document.getElementsByTagName('head')[0].appendChild(script);
+onBeforeUnmount(() => {
+  if (countdownTimer !== null) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
   }
 });
 
@@ -303,7 +307,26 @@ function onClose() {
 .tui-login-page {
   --font-size-primary: 1rem;
   --font-size-secondary: 0.75rem;
+  position: relative;
   height: 100%;
+  overflow: hidden;
+  background-color: #0b0d12;
+
+  .tui-login-bg-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+  }
+
+  .tui-login-header,
+  .tui-login-body {
+    position: relative;
+    z-index: 1;
+  }
 
   .tui-input-icon {
     flex: 0 0 1.25rem;
@@ -325,71 +348,71 @@ function onClose() {
 
   .tui-login-body {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     align-items: center;
     height: calc(100% - 2.75rem);
+    padding-right: 5rem;
   }
 
-  .tui-login-logo {
-    flex: 1 1 auto;
-    height: 100%;
-    background-image: url(../../assets/login-back.png);
-    background-position: center;
-    background-size: cover;
-    background-repeat: no-repeat;
+  .tui-login-card {
+    width: 26rem;
+    border-radius: 1rem;
+    padding: 2.5rem 2.25rem;
+    background: rgba(20, 22, 30, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   }
 
-  .tui-login-form {
-    flex: 0 0 28rem;
-    width: 28rem;
-    border-radius: 1.25rem;
-    margin: 0 3rem;
-    padding: 2.5rem 2rem;
-    background-image: linear-gradient(230deg, rgba(61, 119, 255, 0.53), rgba(61, 143, 255, 0) 50%);
+  .tui-login-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1.75rem;
   }
 
-  .tui-login-form-title {
+  .tui-login-logo-img {
+    width: 2.25rem;
+    height: 2.25rem;
+    object-fit: contain;
+    border-radius: 0.5rem;
+  }
+
+  .tui-login-title-text {
     font-size: 1.5rem;
     font-weight: bold;
+    color: #ffffff;
+    letter-spacing: 0.05em;
   }
 
-  .tui-login-type-container {
-    display: inline-flex;
+  .tui-login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
     margin-top: 1rem;
-    font-size: var(--font-size-primary);
 
-    span {
-      margin-right: 1rem;
-      cursor: pointer;
+    &:first-of-type {
+      margin-top: 0;
+    }
+  }
 
-      &:last-child {
-        margin-right: 0;
-      }
-    }
-    .active:after{
-      content: '';
-      width: 100%;
-      height: 0.125rem;
-      background:#006EFF;
-      border-radius: 0.0625rem;
-      display: block;
-      margin-top: 0.3125rem;
-    }
+  .tui-field-label {
+    font-size: var(--font-size-secondary);
+    color: #b3b8c8;
   }
 
   .tui-login-option-input {
     position: relative;
     display: flex;
     align-items: center;
-
-    margin-top: 2rem;
     padding: 0 1rem;
-
     border-radius: 0.5rem;
     background-color: #292d38;
     font-size: var(--font-size-primary);
 
-    input {
+    input.tui-field-input {
       -webkit-appearance: none;
       flex: 1 1 auto;
       width: auto;
@@ -399,47 +422,51 @@ function onClose() {
       color: #b3b8c8;
       font-size: var(--font-size-primary);
       outline: none;
+
+      &::placeholder {
+        color: #6b7280;
+      }
     }
 
-    .tui-msg-control,
-    .tui-generate-usersig {
-      flex: 0 0 6rem;
-      width: 6rem;
-      text-align: right;
+    .tui-area-code {
+      flex: 0 0 auto;
+      padding-right: 0.75rem;
+      color: #b3b8c8;
+      font-weight: 600;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      margin-right: 0.75rem;
     }
 
-    .tui-msg-send {
+    .tui-msg-control {
+      flex: 0 0 auto;
+      padding-left: 0.75rem;
+      margin-left: 0.75rem;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
       cursor: pointer;
       color: #1c66e5;
+      background: transparent;
+      border-top: none;
+      border-right: none;
+      border-bottom: none;
+      white-space: nowrap;
+
+      &:disabled {
+        cursor: not-allowed;
+        .tui-msg-sent {
+          color: #cccccc;
+        }
+      }
     }
+
     .tui-msg-sent {
       color: #cccccc;
     }
   }
 
-  .tui-login-option-license {
-    display: flex;
-    align-items: center;
-    margin: 1rem 0;
-    font-size: var(--font-size-secondary);
-
-    .tui-license-checkbox,
-    .tui-login-license {
-      height: 1rem;
-      line-height: 1rem;
-    }
-  }
-
-  .tui-warning-notice {
-    margin-top: 1rem;
-    color: $color-error;
-    font-size: 0.75rem;
-  }
-
   .tui-login-button {
     width: 100%;
     height: 3rem;
-    margin-top: 1rem;
+    margin-top: 1.5rem;
     border: 1px solid $color-primary;
     border-radius: 0.5rem;
     background-color: $color-primary;
@@ -462,6 +489,11 @@ function onClose() {
       background-color: $color-anchor-active;
       background-size: 100%;
       transition: background 0s;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   }
 }

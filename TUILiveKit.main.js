@@ -5,6 +5,7 @@ const {
   crashReporter,
   ipcMain,
   Menu,
+  Tray,
   shell,
 } = require('electron');
 const { exec, spawn } = require('child_process');
@@ -423,6 +424,7 @@ async function createWindow(width = 1366, height = 668) {
     minHeight: 650,
     frame: false,
     acceptFirstMouse: true,
+    icon: path.join(__dirname, 'favicon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'TUILiveKit.preload.js'),
       nodeIntegration: true,
@@ -487,11 +489,38 @@ async function createWindow(width = 1366, height = 668) {
   windowMap.mainCover.webContents.setWindowOpenHandler(windowOpenHandler);
   windowMap.confirm.webContents.setWindowOpenHandler(windowOpenHandler);
 
+  // 开发环境下支持 F12 / Ctrl+Shift+I 打开 DevTools（窗口无原生菜单栏，需手动绑定）
+  const toggleDevTools = (contents) => {
+    if (contents.isDevToolsOpened()) {
+      contents.closeDevTools();
+    } else {
+      contents.openDevTools({ mode: 'detach' });
+    }
+  };
+  const devToolsHandler = (event, input) => {
+    if (input.type === 'keyDown') {
+      const isF12 = input.key === 'F12';
+      const isCtrlShiftI = input.control && input.shift && (input.key === 'I' || input.key === 'i');
+      if (isF12 || isCtrlShiftI) {
+        event.preventDefault();
+        const focused = BrowserWindow.getFocusedWindow();
+        if (focused && focused.webContents) {
+          toggleDevTools(focused.webContents);
+        }
+      }
+    }
+  };
+  windowMap.main.webContents.on('before-input-event', devToolsHandler);
+  windowMap.child.webContents.on('before-input-event', devToolsHandler);
+  windowMap.mainCover.webContents.on('before-input-event', devToolsHandler);
+  windowMap.confirm.webContents.on('before-input-event', devToolsHandler);
+
   bindIPCEvent();
   bindMainWindowEvent();
   bindChildWindowEvent();
   bindCoverWindowEvent();
   bindConfirmWindowEvent();
+  createTray();
 
   if (app.isPackaged) {
     windowMap.main.loadFile('dist/index.html');
@@ -666,6 +695,14 @@ function bindIPCEvent() {
     // the renderer can decide whether the application should actually quit.
     if (isWindowAlive(windowMap.main)) {
       windowMap.main.close();
+    }
+  });
+
+  // 最小化到系统托盘（不退出）
+  ipcMain.on('minimize-to-tray', () => {
+    console.log(`${logPrefix}minimize-to-tray event`);
+    if (isWindowAlive(windowMap.main)) {
+      windowMap.main.hide();
     }
   });
 
@@ -981,6 +1018,7 @@ function unbindIPCMainEvent() {
   ipcMain.removeAllListeners('on-minimize-window');
   ipcMain.removeAllListeners('on-maximize-window');
   ipcMain.removeAllListeners('on-close-window');
+  ipcMain.removeAllListeners('minimize-to-tray');
   ipcMain.removeAllListeners('open-child');
   ipcMain.removeAllListeners('close-child');
   ipcMain.removeAllListeners('login');
@@ -1008,6 +1046,47 @@ function initMainWindowPage() {
     initMainWindowTimer = setTimeout(() => {
       initMainWindowPage();
     }, 300);
+  }
+}
+
+// 系统托盘
+let appTray = null;
+function createTray() {
+  try {
+    const iconPath = path.join(__dirname, 'favicon.ico');
+    appTray = new Tray(iconPath);
+    appTray.setToolTip('Niko直播');
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: '显示主窗口',
+        click: () => {
+          if (isWindowAlive(windowMap.main)) {
+            windowMap.main.show();
+            windowMap.main.focus();
+          }
+        },
+      },
+      {
+        label: '退出',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+    appTray.setContextMenu(contextMenu);
+    // 单击托盘图标恢复窗口
+    appTray.on('click', () => {
+      if (isWindowAlive(windowMap.main)) {
+        if (windowMap.main.isVisible()) {
+          windowMap.main.focus();
+        } else {
+          windowMap.main.show();
+        }
+      }
+    });
+  } catch (error) {
+    console.error(`${logPrefix} createTray failed:`, error);
   }
 }
 

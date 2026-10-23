@@ -1,10 +1,8 @@
 <template>
   <header class="live-header tui-window-header">
     <div class="left">
-      <svg-icon class="logo-icon">
-        <logo-icon></logo-icon>
-      </svg-icon>
-      <span class="title">LiveKit</span>
+      <img class="logo-icon" src="../../../assets/niko-logo.png" alt="Niko直播" />
+      <span class="title">Niko直播</span>
     </div>
     <div class="right">
       <div class="statistics">
@@ -390,6 +388,7 @@ onBeforeUnmount(() => {
     .logo-icon {
       width: 1.625rem;
       height: 1.5rem;
+      object-fit: contain;
     }
   }
   .header-left {

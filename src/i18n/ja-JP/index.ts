@@ -1076,7 +1076,7 @@ export const resource = {
   'Invalid params': 'パラメータエラー',
   'Gift-giving news': 'ギフトメッセージ',
   'Interactive messages': 'インタラクティブなメッセージ',
-  'Live Streaming Assistant': 'ライブストリーミングアシスタント',
+  'Live Streaming Assistant': 'Niko直播',
   'sb. living room: NO.': '{{userName}} のライブ ブロードキャスト ルーム:',
   'viewer': ' 人々は見ています',
   'history viewer': ' 人々はそれを見たことがあります',
