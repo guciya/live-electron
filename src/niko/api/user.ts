@@ -9,6 +9,15 @@ export interface NikoLoginResult {
   avatar: string;
   user_show_id: string;
   fans_count: number;
+  /** 后端可能下发 TRTC 专用签名（部分环境与 sign 不同） */
+  rtc_sign?: string;
+  trtc_sign?: string;
+  /** 后端可能下发的 SDKAppID，优先使用后端值 */
+  sdk_app_id?: number;
+  trtc_sdk_app_id?: number;
+  sdkAppId?: number;
+  is_new_user?: number;
+  refresh_token?: string;
 }
 
 /** 极验验证参数（发送短信验证码必传） */

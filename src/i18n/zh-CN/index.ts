@@ -332,7 +332,7 @@ const demoResource = {
   'Phone Device:': '设备：',
   'Phone Mirror': '投屏',
   'Phone Number': '手机号码',
-  'Please enter a 6-digit verification code': '请输入 6 位数字验证码',
+  'Please enter a 6-digit verification code': '请输入位数字验证码',
   'Please enter a valid email address!': '请输入正确的邮箱地址！',
   'Please enter a valid mobile number': '请输入有效的手机号码',
   'Please enter a valid phone number!': '请输入正确的手机号！',

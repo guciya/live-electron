@@ -489,24 +489,44 @@ async function createWindow(width = 1366, height = 668) {
   windowMap.mainCover.webContents.setWindowOpenHandler(windowOpenHandler);
   windowMap.confirm.webContents.setWindowOpenHandler(windowOpenHandler);
 
-  // 开发环境下支持 F12 / Ctrl+Shift+I 打开 DevTools（窗口无原生菜单栏，需手动绑定）
+  // 开发环境快捷键：F12/Ctrl+Shift+I 打开 DevTools，F5/Ctrl+R 刷新，Ctrl+Shift+D 切换 DevTools 停靠位置
+  let devToolsMode = 'right'; // right | bottom | detach
   const toggleDevTools = (contents) => {
     if (contents.isDevToolsOpened()) {
       contents.closeDevTools();
     } else {
-      contents.openDevTools({ mode: 'detach' });
+      contents.openDevTools({ mode: devToolsMode });
     }
   };
+  const cycleDevToolsMode = () => {
+    devToolsMode = devToolsMode === 'right' ? 'bottom' : devToolsMode === 'bottom' ? 'detach' : 'right';
+  };
   const devToolsHandler = (event, input) => {
-    if (input.type === 'keyDown') {
-      const isF12 = input.key === 'F12';
-      const isCtrlShiftI = input.control && input.shift && (input.key === 'I' || input.key === 'i');
-      if (isF12 || isCtrlShiftI) {
-        event.preventDefault();
-        const focused = BrowserWindow.getFocusedWindow();
-        if (focused && focused.webContents) {
-          toggleDevTools(focused.webContents);
-        }
+    if (input.type !== 'keyDown') return;
+    const isF12 = input.key === 'F12';
+    const isCtrlShiftI = input.control && input.shift && (input.key === 'I' || input.key === 'i');
+    const isF5 = input.key === 'F5';
+    const isCtrlR = input.control && (input.key === 'R' || input.key === 'r');
+    const isCtrlShiftD = input.control && input.shift && (input.key === 'D' || input.key === 'd');
+    if (isF12 || isCtrlShiftI) {
+      event.preventDefault();
+      const focused = BrowserWindow.getFocusedWindow();
+      if (focused && focused.webContents) {
+        toggleDevTools(focused.webContents);
+      }
+    } else if (isF5 || isCtrlR) {
+      event.preventDefault();
+      const focused = BrowserWindow.getFocusedWindow();
+      if (focused && focused.webContents) {
+        focused.webContents.reload();
+      }
+    } else if (isCtrlShiftD) {
+      event.preventDefault();
+      cycleDevToolsMode();
+      const focused = BrowserWindow.getFocusedWindow();
+      if (focused && focused.webContents && focused.webContents.isDevToolsOpened()) {
+        focused.webContents.closeDevTools();
+        focused.webContents.openDevTools({ mode: devToolsMode });
       }
     }
   };

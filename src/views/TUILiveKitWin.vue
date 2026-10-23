@@ -1,6 +1,10 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-livekit-win" :class="{ 'is-logout-transitioning': isGoingToLoginPage }">
+      <div v-if="!loginReady" class="login-loading">
+        <span class="login-loading-text">{{ t('Logging In') }}</span>
+      </div>
+      <template v-else>
       <LiveHeader @logout="handleLogout" :is-showing-in-child-window="true"/>
       <div class="live-pusher-main">
         <div class="main-left">
@@ -62,7 +66,7 @@
               {{ audienceCount }} {{ t('People watching') }}
             </div>
           </div>
-          <div class="main-center-center">
+          <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
             <StreamMixer
               v-if="nativeId !== null && !isGoingToLoginPage"
               :windowId="nativeId"
@@ -145,7 +149,12 @@
           </div>
         </div>
         <LivePusherNotification />
+        <PreLiveDialog
+          v-model:visible="showPreLiveDialog"
+          @confirm="onPreLiveConfirm"
+        />
       </div>
+      </template>
     </div>
   </UIKitProvider>
 </template>
@@ -155,7 +164,7 @@ import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, nextTi
 import { useRouter } from 'vue-router';
 import trtcCloud from '../TUILiveKit/utils/trtcCloud';
 import { releaseMediaResourcesBeforeQuit } from '../TUILiveKit/utils/appQuitCleanup';
-import TUIRoomEngine, { TUISeatMode } from '@tencentcloud/tuiroom-engine-electron';
+import TUIRoomEngine, { TUISeatMode, TUIRoomType } from '@tencentcloud/tuiroom-engine-electron';
 import {
   UIKitProvider,
   useUIKit,
@@ -223,6 +232,9 @@ import { useSystemAudioLoopback } from '../TUILiveKit/hooks/useSystemAudioLoopba
 import useRoomEngine from '../TUILiveKit/utils/useRoomEngine';
 import { mapToRoomEngineLanguage } from '../TUILiveKit/utils/common';
 import { LIVE_NAME_MAX_UTF8_BYTES } from '../TUILiveKit/constants/tuiConstant';
+import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
+import { stopLive as nikoStopLive } from '../niko/api/live';
+import type { PrepareLiveResult } from '../niko/api/live';
 
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
@@ -240,7 +252,7 @@ const props = defineProps<{
   seatMode?: TUISeatMode;
 }>();
 
-const { currentLive, startLive, endLive, joinLive, subscribeEvent, unsubscribeEvent } = useLiveListState();
+const { currentLive, endLive, joinLive, subscribeEvent, unsubscribeEvent } = useLiveListState();
 const { audienceCount } = useLiveAudienceState();
 const { openLocalMicrophone } = useDeviceState();
 const { connected: coGuestConnected } = useCoGuestState();
@@ -256,6 +268,11 @@ const { seatList } = useLiveSeatState();
 const roomEngine = useRoomEngine();
 const isInLive = computed(() => !!currentLive.value?.liveId);
 const isGoingToLoginPage = ref(false);
+// 登录完成前不渲染子组件，避免 TRTC 未初始化时拉直播列表/连麦候选报错
+const loginReady = ref(false);
+// 预开播弹窗（标题/封面/分类/方向）
+const showPreLiveDialog = ref(false);
+const pendingPreLiveId = ref<string>('');
 const isTransitioningToLogin = () => isGoingToLoginPage.value;
 // Dialog message follows the same priority as the Web LivePusherView
 // (PK > CoHost > CoGuest > default). While in PK the host can only end the
@@ -333,40 +350,58 @@ TUIRoomEngine.once('ready', async () => {
   await enableMultiPlaybackQuality();
 });
 
-const handleStartLive = async () => {
+const handleStartLive = () => {
+  if (loading.value || isTransitioningToLogin()) {
+    return;
+  }
+  if (!loginUserInfo.value?.userId) {
+    showMessage({
+      type: MessageToastType.Info,
+      message: t('Please login first'),
+    });
+    return;
+  }
+  if (isNetworkOffline()) {
+    showMessage({
+      type: MessageToastType.Error,
+      message: t('Network error, please check your connection and try again'),
+    });
+    return;
+  }
+  showPreLiveDialog.value = true;
+};
+
+// 预开播弹窗确认后：用后端返回的 room_id 进入 TRTC 房间
+// 注意：不使用 TUIKit 的 startLive（内部 createRoom 需要付费直播套餐，报 100013），
+// 改用 joinLive（内部走 enterRoom 进房，与 web-obs-live 的 trtc.enterRoom 一致）
+const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string; coverUrl: string }) => {
+  loading.value = true;
+  // TRTC 房间号用后端返回的 room_id；live_index_id 仅用于后端关播接口
+  const liveId = String(result.room_id || result.live_index_id);
+  pendingPreLiveId.value = String(result.live_index_id);
+  liveParamsEditForm.value.liveName = result.liveTitle;
+  liveParamsEditForm.value.coverUrl = result.coverUrl;
   try {
-    if (loading.value || isTransitioningToLogin()) {
-      return;
-    }
-    if (!loginUserInfo.value?.userId) {
-      showMessage({
-        type: MessageToastType.Info,
-        message: t('Please login first'),
-      });
-      return;
-    }
-    if (isNetworkOffline()) {
-      showMessage({
-        type: MessageToastType.Error,
-        message: t('Network error, please check your connection and try again'),
-      });
-      return;
-    }
-    loading.value = true;
     await TUIRoomEngine.callExperimentalAPI(JSON.stringify({
       api: 'setCurrentLanguage',
       params: {
         language: mapToRoomEngineLanguage(language.value),
       },
     }));
-    await startLive({
-      liveId: liveParams.value.liveId,
-      liveName: liveParams.value.liveName,
-      coverUrl: liveParams.value.coverUrl,
-    });
-    await joinLive({
-      liveId: liveParams.value.liveId,
-    });
+    // 先用原生 enterRoom 以 Live 类型建房/进房（joinLive 默认建 Conference 房会报 100006）
+    if (roomEngine.instance) {
+      await roomEngine.instance.enterRoom({
+        roomId: liveId,
+        roomType: TUIRoomType.kLive,
+      });
+    }
+    // 进房后同步 TUIKit 直播状态（currentLive 等）
+    try {
+      await joinLive({ liveId });
+    } catch (joinErr: any) {
+      // 已在房间内时 joinLive 可能报错，忽略，状态由 enterRoom 保证
+      console.warn('[Niko] joinLive after enterRoom:', joinErr?.message || joinErr);
+    }
     loading.value = false;
     await openLocalMicrophone();
     startSystemAudioLoopbackSafely();
@@ -379,17 +414,8 @@ const handleStartLive = async () => {
       });
       return;
     }
-    if (typeof error.message === 'string'
-      && error.message.indexOf('this room already exists, and you are the owner') !== -1) {
-      await joinLive({
-        liveId: liveParams.value.liveId,
-      });
-      await openLocalMicrophone();
-      startSystemAudioLoopbackSafely();
-      return;
-    }
     showMessage({ type: MessageToastType.Error,
-      message: t('Failed to create live'),
+      message: error?.message || t('Failed to create live'),
     });
   }
 };
@@ -680,8 +706,28 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
     }
 
     loading.value = true;
-    await endLive();
+    try {
+      await endLive();
+    } catch (endErr: any) {
+      // TUIKit endLive 依赖 currentLive 状态，若 joinLive 未同步成功则回退到原生退房
+      console.warn('[Niko] endLive failed, fallback to exitRoom:', endErr?.message || endErr);
+      try {
+        await roomEngine.instance?.exitRoom();
+      } catch (exitErr) {
+        console.warn('[Niko] exitRoom fallback failed:', exitErr);
+      }
+    }
     stopSystemAudioLoopbackSafely();
+    // 同步通知后端关播（失败不阻断本地流程）
+    if (pendingPreLiveId.value) {
+      const liveIndexId = Number(pendingPreLiveId.value);
+      if (!Number.isNaN(liveIndexId)) {
+        nikoStopLive({ liveIndexId }).catch((e) => {
+          console.warn('[Niko] stopLive backend call failed:', e?.message || e);
+        });
+      }
+      pendingPreLiveId.value = '';
+    }
     return true;
   } catch (error: any) {
     console.error('End live error:', error);
@@ -938,11 +984,11 @@ onMounted(async () => {
     const { sdkAppId, userSig, userId } = userInfo;
 
     // Use retry mechanism for login
-    await loginWithRetry({
-      sdkAppId,
-      userId,
-      userSig,
-    });
+    await loginWithRetry(
+      { sdkAppId, userId, userSig },
+      { suppressErrorModal: true },
+    );
+    loginReady.value = true;
   } catch (e) {
     redirectToLogin();
   }
@@ -1053,6 +1099,18 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   --live-shell-bg: #1c2638;
+
+  .login-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    .login-loading-text {
+      font-size: 1rem;
+      color: #fff;
+      opacity: 0.8;
+    }
+  }
   --live-panel-bg: #232f44;
   --live-panel-border: #3a4f6d;
   --live-stage-bg: #0a1018;
@@ -1229,6 +1287,15 @@ onBeforeUnmount(() => {
         min-width: 0;
         min-height: 0;
         overflow: hidden;
+        transition: flex-basis 0.2s;
+      }
+      .main-center-center.prelive-collapsed {
+        flex: 0 0 0;
+        width: 0;
+        height: 0;
+      }
+      .prelive-placeholder {
+        display: none;
       }
 
       .main-center-bottom {

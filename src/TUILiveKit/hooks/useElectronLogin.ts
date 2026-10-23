@@ -66,6 +66,11 @@ export interface UseElectronLoginOptions {
   forceLogoutMode?: ForceLogoutMode;
 }
 
+export interface LoginWithRetryOptions {
+  /** 初始登录（如从 localStorage 恢复凭据）失败时不弹错误模态框，仅走 onLoginFailed 跳转 */
+  suppressErrorModal?: boolean;
+}
+
 export interface UseElectronLoginReturn {
   // State
   isLoggingIn: Ref<boolean>;
@@ -73,7 +78,7 @@ export interface UseElectronLoginReturn {
   loginStatus: Ref<'idle' | 'logging' | 'success' | 'failed'>;
 
   // Methods
-  loginWithRetry: (options: LoginOptions) => Promise<void>;
+  loginWithRetry: (options: LoginOptions, retryOptions?: LoginWithRetryOptions) => Promise<void>;
   setupEventListeners: () => void;
   cleanupEventListeners: () => void;
   handleLogout: () => Promise<void>;
@@ -401,7 +406,8 @@ export function useElectronLogin(options: UseElectronLoginOptions = {}): UseElec
    * Login with retry mechanism
    * @param options - Login options
    */
-  async function loginWithRetry(options: LoginOptions): Promise<void> {
+  async function loginWithRetry(options: LoginOptions, retryOptions?: LoginWithRetryOptions): Promise<void> {
+    const { suppressErrorModal = false } = retryOptions || {};
     logger.log(`${logPrefix}loginWithRetry:`, options);
     latestLoginSdkAppId = options.sdkAppId;
 
@@ -464,8 +470,12 @@ export function useElectronLogin(options: UseElectronLoginOptions = {}): UseElec
       window.localStorage.removeItem(USER_INFO_STORAGE_KEY);
     }
 
-    // Handle login error with classification
-    handleLoginError(lastError, options.sdkAppId);
+    // Handle login error with classification (skip modal on suppressed initial login)
+    if (!suppressErrorModal) {
+      handleLoginError(lastError, options.sdkAppId);
+    } else {
+      logger.warn(`${logPrefix}login failed, error modal suppressed (initial login):`, lastError?.message);
+    }
 
     // Trigger login failed callback (views redirect to the login route here).
     onLoginFailed?.();

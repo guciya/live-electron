@@ -213,9 +213,27 @@ async function handleLogin() {
   try {
     const result = await codeLogin(mobile.value.trim(), verifyCode.value.trim());
 
-    // 后端下发的 sign 即为 TRTC / IM 的 UserSig
+    // 打印完整响应，便于确认后端返回字段
+    logger.log('[Login] login response:', result);
+
     const userId = String(result.user_id);
-    const userSig = result.sign;
+
+    // SDKAppID：优先用后端下发的，其次用本地配置
+    const sdkAppId = Number(
+      result.sdk_app_id
+      || result.trtc_sdk_app_id
+      || result.sdkAppId
+      || NIKO_CONFIG.sdkAppId,
+    );
+
+    // UserSig：优先用 TRTC 专用签名，其次用通用 sign
+    const userSig = result.rtc_sign || result.trtc_sign || result.sign;
+
+    logger.log('[Login] using credentials:', { sdkAppId, userId, userSigLen: userSig?.length });
+
+    if (!sdkAppId || !userSig) {
+      throw new Error('登录响应缺少 SDKAppID 或 userSig，请检查后端返回');
+    }
 
     // 持久化后端登录态（token + 用户信息）
     authStore.setSession(result.token, {
@@ -229,7 +247,7 @@ async function handleLogin() {
 
     // Electron 应用登录凭据（供 TRTC 登录使用）
     window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
-      sdkAppId: NIKO_CONFIG.sdkAppId,
+      sdkAppId,
       userId,
       userSig,
       loginType: LoginType.UserSig,
