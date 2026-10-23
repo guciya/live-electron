@@ -1216,24 +1216,28 @@ function openTUILiveKit() {
   const winWidth = width - 40;
   const winHeight = height - 40;
 
+  // 创建窗口优先，避免 vue-devtools 下载（可能超时）阻塞窗口弹出
+  createWindow(winWidth, winHeight);
+
   if (!app.isPackaged) {
-    console.log(`${logPrefix}Added Extension: installing vue-dev tool...`);
-    const {
-      default: installExtension,
-      VUEJS_DEVTOOLS,
-    } = require('electron-devtools-installer');
-    installExtension(VUEJS_DEVTOOLS)
-      .then((name) => {
-        console.log(`${logPrefix}Added Extension:  ${name}`);
-        createWindow(winWidth, winHeight);
-      })
-      .catch((err) => {
-        console.error(`${logPrefix}Added Extension failed: `, err);
-        createWindow(winWidth, winHeight);
-      });
+    console.log(`${logPrefix}Added Extension: installing vue-dev tool (non-blocking)...`);
+    try {
+      const {
+        default: installExtension,
+        VUEJS_DEVTOOLS,
+      } = require('electron-devtools-installer');
+      installExtension(VUEJS_DEVTOOLS)
+        .then((name) => {
+          console.log(`${logPrefix}Added Extension:  ${name}`);
+        })
+        .catch((err) => {
+          console.error(`${logPrefix}Added Extension failed: `, err);
+        });
+    } catch (e) {
+      console.error(`${logPrefix}Failed to load electron-devtools-installer: `, e);
+    }
   } else {
     console.log(`${logPrefix}Packaged env, create window without dev-tool extension.`);
-    createWindow(winWidth, winHeight);
   }
 }
 
