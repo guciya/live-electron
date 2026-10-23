@@ -1,0 +1,184 @@
+export function safelyParse(data: string) {
+  if (typeof data !== 'string') {
+    return data;
+  }
+  let result;
+  try {
+    const tempData = JSON.parse(data);
+    if (typeof tempData === 'object' && tempData) {
+      result = tempData;
+    } else {
+      result = data;
+    }
+  } catch (error) {
+    result = data;
+  }
+  return result;
+}
+
+export function changeTheme(windowElement: Element|null, theme: string) {
+  if (windowElement == null) return;
+  const ThemeList = Object.values(ThemeColor);
+  ThemeList.forEach(theme => {
+    if(windowElement?.classList.value.includes(theme)){
+      windowElement ?.classList.remove(theme);
+    }
+  })
+  windowElement ?.classList.add(theme);
+}
+
+export enum ThemeColor {
+  DarkTheme = 'dark-theme',
+  LightTheme = 'light-theme'
+}
+
+export function generateUniqueId(): number {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+export const debounce = <F extends (...args: any[]) => void>(
+  func: F,
+  waitFor: number
+) => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = (...args: Parameters<F>) => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    timeout = setTimeout(() => func(...args), waitFor);
+  };
+
+  return debounced as (...args: Parameters<F>) => ReturnType<F>;
+};
+
+/**
+ * A throttled function returned by {@link throttle}. Calling it forwards the
+ * arguments according to the throttle policy; calling `.cancel()` drops any
+ * queued trailing invocation and resets internal state (useful from
+ * `onBeforeUnmount` hooks).
+ */
+export interface ThrottledFunction<F extends (...args: any[]) => void> {
+  (...args: Parameters<F>): void;
+  cancel: () => void;
+}
+
+/**
+ * Returns a throttled version of `func` with leading + trailing semantics.
+ *
+ * - **Leading edge**: the first call after a quiet period of `>= waitFor` ms
+ *   invokes `func` synchronously, so user-perceptible latency is minimized
+ *   (e.g. PK start / layout switch should not be delayed by the throttle).
+ * - **Trailing edge**: subsequent calls within the throttle window are
+ *   coalesced; only the LAST set of arguments seen during the window is
+ *   invoked once when the timer fires, ensuring final-state consistency.
+ *
+ * Matches lodash `throttle(func, wait, { leading: true, trailing: true })`
+ * semantics without pulling in lodash. Pair with
+ * `throttledFn.cancel()` in `onBeforeUnmount` to drop pending calls.
+ */
+export const throttle = <F extends (...args: any[]) => void>(
+  func: F,
+  waitFor: number
+): ThrottledFunction<F> => {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let pendingArgs: Parameters<F> | null = null;
+
+  const throttled = ((...args: Parameters<F>) => {
+    pendingArgs = args;
+    if (timeout !== null) {
+      // Inside throttle window: only remember the latest args, do not invoke.
+      return;
+    }
+    // Leading edge: invoke immediately with the freshest args.
+    func(...pendingArgs);
+    pendingArgs = null;
+    // Arm trailing-edge timer; if more calls come in before it fires, the
+    // last set of args will be flushed.
+    timeout = setTimeout(() => {
+      timeout = null;
+      if (pendingArgs) {
+        const trailingArgs = pendingArgs;
+        pendingArgs = null;
+        func(...trailingArgs);
+      }
+    }, waitFor);
+  }) as ThrottledFunction<F>;
+
+  throttled.cancel = () => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    pendingArgs = null;
+  };
+
+  return throttled;
+};
+
+export async function copyToClipboard(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
+}
+
+export function isNetworkOffline(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return navigator.onLine === false;
+}
+
+export function isNetworkTimeoutError(error: any): boolean {
+  if (!error) {
+    return false;
+  }
+  const message = String(error.message || error.errorMessage || '');
+  if (message.includes('NETWORK_TIMEOUT') || message.includes('Network error')) {
+    return true;
+  }
+  return false;
+}
+
+const utf8Encoder = new TextEncoder();
+
+export function getUtf8ByteLength(value: string): number {
+  if (!value) {
+    return 0;
+  }
+  return utf8Encoder.encode(value).length;
+}
+
+export function trimToUtf8ByteLength(value: string, maxBytes: number): string {
+  if (!value || maxBytes <= 0) {
+    return '';
+  }
+  if (getUtf8ByteLength(value) <= maxBytes) {
+    return value;
+  }
+  let bytes = 0;
+  let endIndex = 0;
+  for (const char of value) {
+    const nextBytes = utf8Encoder.encode(char).length;
+    if (bytes + nextBytes > maxBytes) {
+      break;
+    }
+    bytes += nextBytes;
+    endIndex += char.length;
+  }
+  return value.slice(0, endIndex);
+}
+
+export function isSvgCoverUrl(coverUrl: string): boolean {
+  if (!coverUrl) {
+    return false;
+  }
+  const normalizedUrl = coverUrl.trim().toLowerCase();
+  if (!normalizedUrl) {
+    return false;
+  }
+  if (normalizedUrl.startsWith('data:image/svg+xml')) {
+    return true;
+  }
+  const urlWithoutQuery = normalizedUrl.split('#')[0].split('?')[0];
+  return urlWithoutQuery.endsWith('.svg') || urlWithoutQuery.endsWith('.svgz');
+}

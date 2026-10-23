@@ -1,0 +1,640 @@
+import { ref, Ref, computed } from 'vue';
+import { useLoginState, useRoomEngine, useLiveListState, useLiveErrorModal } from 'tuikit-atomicx-vue3-electron';
+import { useUIKit, TUIMessageBox } from '@tencentcloud/uikit-base-component-vue3';
+import { showMessage, MessageToastType } from '../base-component/MessageToast';
+import TUIRoomEngine, { TUIRoomEvents } from '@tencentcloud/tuiroom-engine-electron';
+import logger from '../utils/logger';
+import { USER_INFO_STORAGE_KEY } from '../utils/userInfoStorage';
+import { isMacPlatform } from '../utils/platform';
+
+const logPrefix = '[useElectronLogin]';
+const KICKED_OFFLINE_MODAL_CODE = 41013;
+
+// Constants
+const MAX_LOGIN_RETRY_COUNT = 1;
+const LOGIN_RETRY_INTERVAL = 2000; // ms
+
+// Error classification types
+export enum LoginErrorType {
+  USER_SIG_EXPIRED = 'USER_SIG_EXPIRED',
+  USER_SIG_MISMATCH = 'USER_SIG_MISMATCH',
+  INVALID_PARAMETERS = 'INVALID_PARAMETERS',
+  UNKNOWN = 'UNKNOWN',
+}
+
+export enum LoginErrorCode {
+  ERR_SVR_ACCOUNT_USERSIG_EXPIRED             = 70001,
+  ERR_SVR_ACCOUNT_USERSIG_EMPTY               = 70002,
+  ERR_SVR_ACCOUNT_USERSIG_CHECK_FAILED        = 70003,
+  ERR_SVR_ACCOUNT_USERSIG_CHECK_FAILED_EX     = 70005,
+  ERR_SVR_ACCOUNT_USERSIG_MISMATCH_PUBLICKEY  = 70009,
+  ERR_SVR_ACCOUNT_USERSIG_MISMATCH_ID         = 70013,
+  ERR_SVR_ACCOUNT_USERSIG_MISMATCH_SDKAPPID   = 70014,
+  ERR_SVR_ACCOUNT_USERSIG_PUBLICKEY_NOT_FOUND = 70016,
+  ERR_SVR_ACCOUNT_SDKAPPID_NOT_FOUND          = 70020,
+  ERR_SVR_ACCOUNT_INVALID_USERSIG             = 70052,
+}
+
+// Types
+export interface LoginOptions {
+  sdkAppId: number;
+  userId: string;
+  userSig: string;
+}
+
+export type ForceLogoutReason = 'kicked-off-line' | 'user-sig-expired';
+export type ForceLogoutMode = 'alert-confirm' | 'immediate';
+
+export interface ForceLogoutNoticePayload {
+  reason: ForceLogoutReason;
+  title: string;
+  content: string;
+  eventInfo?: { roomId?: string; message?: string };
+}
+
+export interface UseElectronLoginOptions {
+  /**
+   * Invoked inside the logout cleanup, right BEFORE the underlying `logout()`
+   * runs. Use it to release resources that must be torn down while the native
+   * session is still alive (e.g. beauty plugins). Covers both manual and force
+   * logout. Failures are caught and logged so they never block logout.
+   */
+  onBeforeLogout?: () => void | Promise<void>;
+  onLogout?: () => void | Promise<void>;
+  onLoginFailed?: () => void;
+  onForceLogoutNotice?: (payload: ForceLogoutNoticePayload) => void | Promise<void>;
+  forceLogoutMode?: ForceLogoutMode;
+}
+
+export interface UseElectronLoginReturn {
+  // State
+  isLoggingIn: Ref<boolean>;
+  loginError: Ref<Error | null>;
+  loginStatus: Ref<'idle' | 'logging' | 'success' | 'failed'>;
+
+  // Methods
+  loginWithRetry: (options: LoginOptions) => Promise<void>;
+  setupEventListeners: () => void;
+  cleanupEventListeners: () => void;
+  handleLogout: () => Promise<void>;
+}
+
+interface LiveModalErrorInput {
+  code?: number;
+  message: string;
+  sdkAppId?: number;
+}
+
+/**
+ * Electron login management hook with retry mechanism
+ * @param options - Configuration options
+ * @returns Login management functions and state
+ */
+export function useElectronLogin(options: UseElectronLoginOptions = {}): UseElectronLoginReturn {
+  const {
+    onBeforeLogout,
+    onLogout,
+    onLoginFailed,
+    onForceLogoutNotice,
+    forceLogoutMode = 'alert-confirm',
+  } = options;
+  const { login, logout } = useLoginState();
+  const { t } = useUIKit();
+  const roomEngine = useRoomEngine();
+  const { currentLive, endLive } = useLiveListState();
+  const { handleErrorWithModal } = useLiveErrorModal();
+
+  // State
+  const isLoggingIn = ref<boolean>(false);
+  const loginError = ref<Error | null>(null);
+  const loginStatus = ref<'idle' | 'logging' | 'success' | 'failed'>('idle');
+
+  // Computed: Check if currently in live
+  const isInLive = computed(() => !!currentLive.value?.liveId);
+
+  // Event handler references for cleanup
+  let kickedOffLineHandler: ((eventInfo: { roomId: string; message: string }) => void) | null = null;
+  let userSigExpiredHandler: (() => void) | null = null;
+  let forceLogoutAlertVisible = false;
+  let forceLogoutTriggered = false;
+  // Internal concurrency guards; intentionally non-reactive and not exposed to template.
+  let forceLogoutInProgress = false;
+  let logoutInProgress = false;
+  let latestLoginSdkAppId: number | undefined;
+
+  function resetLoginRuntimeState() {
+    loginStatus.value = 'idle';
+    isLoggingIn.value = false;
+    loginError.value = null;
+  }
+
+  async function triggerLogoutCallback(reason?: ForceLogoutReason) {
+    try {
+      await Promise.resolve(onLogout?.());
+    } catch (error) {
+      logger.error(`${logPrefix}onLogout callback failed:`, {
+        reason: reason || '',
+        error,
+      });
+    }
+  }
+
+  async function performLogoutCleanup(source: 'manual' | 'force-logout') {
+    if (logoutInProgress) {
+      logger.warn(`${logPrefix}skip logout cleanup: already in progress`, { source });
+      return;
+    }
+    logoutInProgress = true;
+    try {
+      cleanupEventListeners();
+      // Release pre-logout resources (e.g. beauty plugins) while the native
+      // session is still alive. Best-effort: never block logout on failure.
+      try {
+        await Promise.resolve(onBeforeLogout?.());
+      } catch (error) {
+        logger.error(`${logPrefix}onBeforeLogout callback failed:`, { source, error });
+      }
+      await logout();
+      window.localStorage.removeItem(USER_INFO_STORAGE_KEY);
+      resetLoginRuntimeState();
+      latestLoginSdkAppId = undefined;
+      if (window.ipcRenderer) {
+        window.ipcRenderer.send('user-logout');
+      }
+      logger.log(`${logPrefix}logout cleanup completed`, { source });
+    } finally {
+      logoutInProgress = false;
+    }
+  }
+
+  async function showForceLogoutNotice(
+    reason: ForceLogoutReason,
+    content: string,
+    eventInfo?: { roomId?: string; message?: string },
+  ) {
+    const payload: ForceLogoutNoticePayload = {
+      reason,
+      title: t('Note'),
+      content,
+      eventInfo,
+    };
+    if (onForceLogoutNotice) {
+      await Promise.resolve(onForceLogoutNotice(payload));
+      return;
+    }
+    TUIMessageBox.alert({
+      title: payload.title,
+      content: payload.content,
+      confirmText: t('Sure'),
+    });
+  }
+
+  async function runForceLogout(
+    reason: ForceLogoutReason,
+    eventInfo?: { roomId?: string; message?: string },
+    action?: 'cancel' | 'confirm' | 'close' | 'auto',
+  ) {
+    if (forceLogoutTriggered || forceLogoutInProgress) {
+      logger.warn(`${logPrefix}skip force logout execute:`, {
+        reason,
+        action: action || '',
+        forceLogoutTriggered,
+        forceLogoutInProgress,
+        roomId: eventInfo?.roomId || '',
+        message: eventInfo?.message || '',
+        happenedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    forceLogoutTriggered = true;
+    forceLogoutInProgress = true;
+    logger.warn(`${logPrefix}trigger force logout:`, {
+      reason,
+      action: action || '',
+      roomId: eventInfo?.roomId || '',
+      message: eventInfo?.message || '',
+      happenedAt: new Date().toISOString(),
+    });
+    if (isInLive.value) {
+      void endLive().catch((error: unknown) => {
+        logger.warn(`${logPrefix}best-effort endLive failed before force logout:`, {
+          reason,
+          error,
+        });
+      });
+    }
+    try {
+      await performLogoutCleanup('force-logout');
+    } catch (error) {
+      logger.error(`${logPrefix}force logout cleanup failed:`, {
+        reason,
+        error,
+      });
+    } finally {
+      forceLogoutInProgress = false;
+    }
+    // Force-logout must continue to login redirect even if best-effort cleanup fails.
+    await triggerLogoutCallback(reason);
+  }
+
+  function triggerForceLogout(
+    reason: ForceLogoutReason,
+    content: string,
+    eventInfo?: { roomId?: string; message?: string },
+  ) {
+    if (forceLogoutTriggered || forceLogoutAlertVisible || forceLogoutInProgress) {
+      logger.warn(`${logPrefix}skip force logout alert:`, {
+        reason,
+        forceLogoutTriggered,
+        forceLogoutAlertVisible,
+        forceLogoutInProgress,
+        roomId: eventInfo?.roomId || '',
+        message: eventInfo?.message || '',
+        happenedAt: new Date().toISOString(),
+      });
+      return;
+    }
+    logger.warn(`${logPrefix}show force logout alert:`, {
+      reason,
+      mode: forceLogoutMode,
+      roomId: eventInfo?.roomId || '',
+      message: eventInfo?.message || '',
+      happenedAt: new Date().toISOString(),
+    });
+
+    if (forceLogoutMode === 'immediate') {
+      forceLogoutAlertVisible = true;
+      void Promise.resolve()
+        .then(async () => {
+          await showForceLogoutNotice(reason, content, eventInfo);
+        })
+        .catch((error) => {
+          logger.error(`${logPrefix}show force logout notice failed:`, {
+            reason,
+            error,
+          });
+        })
+        .finally(() => {
+          forceLogoutAlertVisible = false;
+        });
+      void runForceLogout(reason, eventInfo, 'auto');
+      return;
+    }
+
+    forceLogoutAlertVisible = true;
+    TUIMessageBox.alert({
+      title: t('Note'),
+      content,
+      confirmText: t('Sure'),
+      callback: async (action?: 'cancel' | 'confirm' | 'close') => {
+        forceLogoutAlertVisible = false;
+        await runForceLogout(reason, eventInfo, action);
+      },
+    });
+  }
+
+  /**
+   * Classify login error type based on error message
+   * @param error - The error object
+   * @returns Error type classification
+   */
+  function classifyLoginError(error: Error | null): LoginErrorType {
+    if (!error || !error.message) {
+      return LoginErrorType.UNKNOWN;
+    }
+
+    const errorMsg = error.message;
+    const errorCode = (error as any).code as number;
+    if ([
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_CHECK_FAILED,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_CHECK_FAILED_EX,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_EMPTY,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_MISMATCH_PUBLICKEY,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_MISMATCH_ID,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_MISMATCH_SDKAPPID,
+      LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_PUBLICKEY_NOT_FOUND,
+      LoginErrorCode.ERR_SVR_ACCOUNT_SDKAPPID_NOT_FOUND,
+      LoginErrorCode.ERR_SVR_ACCOUNT_INVALID_USERSIG,
+    ].indexOf(errorCode) !== -1) {
+      return LoginErrorType.USER_SIG_MISMATCH;
+    }
+    if (errorCode === LoginErrorCode.ERR_SVR_ACCOUNT_USERSIG_EXPIRED) {
+      return LoginErrorType.USER_SIG_EXPIRED;
+    }
+
+    if (errorMsg.indexOf('Invaild parameters.') !== -1) {
+      return LoginErrorType.INVALID_PARAMETERS;
+    }
+
+    return LoginErrorType.UNKNOWN;
+  }
+
+  /**
+   * Get error message based on error type
+   * @param errorType - The classified error type
+   * @returns Localized error message
+   */
+  function getErrorMessage(errorType: LoginErrorType): string {
+    const baseMessage = t('Login failed.');
+
+    switch (errorType) {
+    case LoginErrorType.USER_SIG_EXPIRED:
+      return baseMessage + t('The UserSig in use is expired.');
+    case LoginErrorType.USER_SIG_MISMATCH:
+      return baseMessage + t('The UserSig does not match.');
+    case LoginErrorType.INVALID_PARAMETERS:
+      return baseMessage + t('Invalid login parameters.');
+    case LoginErrorType.UNKNOWN:
+    default:
+      return '';
+    }
+  }
+
+  /**
+   * Handle login error with classification
+   * @param error - The error object
+   */
+  function normalizeErrorForLiveModal(error: unknown, sdkAppId?: number): LiveModalErrorInput {
+    const errorRecord = (error && typeof error === 'object')
+      ? error as Record<string, unknown>
+      : null;
+    const normalizedCode = Number(errorRecord?.code ?? errorRecord?.errorCode);
+    const normalizedMessage = typeof errorRecord?.message === 'string'
+      ? errorRecord.message
+      : (error as Error)?.message || '';
+
+    return {
+      code: Number.isFinite(normalizedCode) ? normalizedCode : undefined,
+      message: normalizedMessage,
+      sdkAppId,
+    };
+  }
+
+  function handleLoginError(error: Error | null, sdkAppId?: number) {
+    if (!error) {
+      logger.warn(`${logPrefix}handleLoginError: error is null`);
+      return;
+    }
+
+    const errorType = classifyLoginError(error);
+    const errorMessage = getErrorMessage(errorType);
+
+    logger.error(`${logPrefix}handleLoginError:`, {
+      errorType,
+      errorMessage: error.message,
+      classifiedMessage: errorMessage,
+    });
+
+    if (handleErrorWithModal(normalizeErrorForLiveModal(error, sdkAppId))) {
+      return;
+    }
+
+    if (errorMessage) {
+      showMessage({
+        type: MessageToastType.Error,
+        message: errorMessage,
+      });
+    }
+  }
+
+  /**
+   * Login with retry mechanism
+   * @param options - Login options
+   */
+  async function loginWithRetry(options: LoginOptions): Promise<void> {
+    logger.log(`${logPrefix}loginWithRetry:`, options);
+    latestLoginSdkAppId = options.sdkAppId;
+
+    isLoggingIn.value = true;
+    loginStatus.value = 'logging';
+    loginError.value = null;
+
+    let retryCount = 0;
+    let lastError: Error | null = null;
+
+    while (retryCount < MAX_LOGIN_RETRY_COUNT) {
+      try {
+        logger.log(`${logPrefix}login attempt ${retryCount + 1}/${MAX_LOGIN_RETRY_COUNT}`);
+
+        // Call useLoginState's login method
+        await login({
+          sdkAppId: options.sdkAppId,
+          userId: options.userId,
+          userSig: options.userSig,
+        });
+
+        // Login successful, exit retry loop
+        logger.log(`${logPrefix}login successful after ${retryCount} retries`);
+        loginStatus.value = 'success';
+        isLoggingIn.value = false;
+
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        logger.error(`${logPrefix}login attempt ${retryCount + 1} failed:`, error);
+
+        retryCount++;
+
+        if (retryCount < MAX_LOGIN_RETRY_COUNT) {
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, LOGIN_RETRY_INTERVAL));
+        }
+      }
+    }
+
+    // All retries failed
+    logger.error(`${logPrefix}login failed after ${MAX_LOGIN_RETRY_COUNT} attempts`);
+    loginError.value = lastError;
+    loginStatus.value = 'failed';
+    isLoggingIn.value = false;
+
+    // Drop the stored credential when the failure is credential-related
+    // (expired / mismatched userSig, invalid params). The userSig / SDK-secret
+    // / userID login types have no `expire` field, so this SDK login error is
+    // the ONLY signal that their credential is no longer usable — clearing it
+    // forces a clean re-login and prevents a "login failed -> login page" flash
+    // on every relaunch. Transient errors (network, UNKNOWN) keep the
+    // credential so a later retry / relaunch can still succeed.
+    const failureType = classifyLoginError(lastError);
+    const isCredentialInvalid = failureType === LoginErrorType.USER_SIG_EXPIRED
+      || failureType === LoginErrorType.USER_SIG_MISMATCH
+      || failureType === LoginErrorType.INVALID_PARAMETERS;
+    if (isCredentialInvalid) {
+      logger.warn(`${logPrefix}clearing stored credential due to invalid login: ${failureType}`);
+      window.localStorage.removeItem(USER_INFO_STORAGE_KEY);
+    }
+
+    // Handle login error with classification
+    handleLoginError(lastError, options.sdkAppId);
+
+    // Trigger login failed callback (views redirect to the login route here).
+    onLoginFailed?.();
+
+    // Throw error for caller to handle
+    throw lastError;
+  }
+
+  /**
+   * Handle kicked off line event
+   * @param eventInfo - Event information
+   */
+  function handleKickedOffLine(eventInfo: { roomId: string; message: string }) {
+    logger.log(`${logPrefix}handleKickedOffLine:`, eventInfo);
+    resetLoginRuntimeState();
+
+    const normalizedEventInfo = {
+      roomId: eventInfo?.roomId || '',
+      message: eventInfo?.message || 'kicked off line.',
+    };
+
+    if (forceLogoutMode === 'alert-confirm' && isMacPlatform()) {
+      const handled = handleErrorWithModal({
+        code: KICKED_OFFLINE_MODAL_CODE,
+        message: normalizedEventInfo.message,
+        sdkAppId: latestLoginSdkAppId,
+      }, {
+        onConfirm: () => {
+          forceLogoutAlertVisible = false;
+          void runForceLogout('kicked-off-line', normalizedEventInfo, 'confirm');
+        },
+      });
+      if (handled) {
+        forceLogoutAlertVisible = true;
+        return;
+      }
+    }
+
+    triggerForceLogout(
+      'kicked-off-line',
+      t('You have been kicked off line.'),
+      normalizedEventInfo,
+    );
+  }
+
+  /**
+   * Handle userSig expired event
+   */
+  function handleUserSigExpired() {
+    logger.log(`${logPrefix}handleUserSigExpired:`);
+    resetLoginRuntimeState();
+    triggerForceLogout(
+      'user-sig-expired',
+      t('The UserSig in use is expired. Please log in again.'),
+      { message: 'onUserSigExpired', roomId: '' },
+    );
+  }
+
+  /**
+   * Setup event listeners
+   */
+  function setupEventListeners() {
+    logger.log(`${logPrefix}setupEventListeners: setting up event listeners`);
+
+    // Create handler references for cleanup
+    kickedOffLineHandler = handleKickedOffLine;
+    userSigExpiredHandler = handleUserSigExpired;
+
+    // Check if TUIRoomEngine is already ready
+    if (roomEngine.instance) {
+      logger.log(`${logPrefix}TUIRoomEngine instance already available, registering event listeners immediately`);
+      registerEventListeners();
+    } else {
+      // Wait for TUIRoomEngine to be ready
+      TUIRoomEngine.once('ready', () => {
+        logger.log(`${logPrefix}TUIRoomEngine ready, registering event listeners`);
+        registerEventListeners();
+      });
+    }
+  }
+
+  /**
+   * Register event listeners on roomEngine instance
+   */
+  function registerEventListeners() {
+    if (!roomEngine.instance) {
+      logger.error(`${logPrefix}registerEventListeners: roomEngine.instance is null`);
+      return;
+    }
+
+    if (!kickedOffLineHandler || !userSigExpiredHandler) {
+      logger.error(`${logPrefix}registerEventListeners: handlers are null`);
+      return;
+    }
+
+    // Register event listeners
+    roomEngine.instance.on(TUIRoomEvents.onKickedOffLine, kickedOffLineHandler);
+    roomEngine.instance.on(TUIRoomEvents.onUserSigExpired, userSigExpiredHandler);
+
+    logger.log(`${logPrefix}Event listeners registered successfully`);
+  }
+
+  /**
+   * Cleanup event listeners
+   */
+  function cleanupEventListeners() {
+    logger.log(`${logPrefix}cleanupEventListeners: cleaning up event listeners`);
+
+    if (roomEngine.instance && kickedOffLineHandler && userSigExpiredHandler) {
+      roomEngine.instance.off(TUIRoomEvents.onKickedOffLine, kickedOffLineHandler);
+      roomEngine.instance.off(TUIRoomEvents.onUserSigExpired, userSigExpiredHandler);
+
+      logger.log(`${logPrefix}Event listeners cleaned up successfully`);
+    }
+
+    // Clear handler references
+    kickedOffLineHandler = null;
+    userSigExpiredHandler = null;
+    forceLogoutAlertVisible = false;
+    forceLogoutTriggered = false;
+  }
+
+  /**
+   * Handle logout with live status check
+   */
+  async function handleLogout() {
+    logger.log(`${logPrefix}handleLogout: starting logout process`);
+
+    try {
+      if (logoutInProgress) {
+        logger.warn(`${logPrefix}handleLogout: logout already in progress`);
+        return;
+      }
+      // Check if currently in live
+      if (isInLive.value) {
+        logger.log(`${logPrefix}handleLogout: currently in live, ending live first`);
+        try {
+          await endLive();
+          logger.log(`${logPrefix}handleLogout: live ended successfully`);
+        } catch (error) {
+          logger.error(`${logPrefix}handleLogout: end live failed:`, error);
+          // Show error message but continue with logout
+          showMessage({
+            type: MessageToastType.Error,
+            message: t('End live failed when log out'),
+          });
+          // Continue with logout even if end live failed
+        }
+      }
+
+      await performLogoutCleanup('manual');
+
+      logger.log(`${logPrefix}handleLogout: logout completed successfully`);
+
+      // Trigger logout callback
+      await triggerLogoutCallback();
+    } catch (error) {
+      logger.error(`${logPrefix}handleLogout error:`, error);
+      throw error;
+    }
+  }
+
+  return {
+    isLoggingIn,
+    loginError,
+    loginStatus,
+    loginWithRetry,
+    setupEventListeners,
+    cleanupEventListeners,
+    handleLogout,
+  };
+}
