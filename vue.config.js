@@ -16,10 +16,18 @@ module.exports = defineConfig({
   configureWebpack: {
     // eval-cheap-module-source-map 比 inline-source-map 快得多，且调试体验基本不变
     devtool: isProduction ? 'source-map' : 'eval-cheap-module-source-map',
-    // webpack5 持久化缓存，二次启动增量编译
-    cache: {
-      type: 'filesystem',
-    },
+    // 仅生产构建使用 webpack 持久化缓存。
+    // 开发构建配合 transpileDependencies: false 时，vue-loader 写入的 SFC 缓存缺少
+    // buildMeta，下一次增量构建会直接崩溃（Cannot read properties of undefined）。
+    // 开发环境改用内存缓存：dev server 的 watch 会话内依然是增量编译。
+    cache: isProduction
+      ? {
+        type: 'filesystem',
+        buildDependencies: { config: [__filename] },
+      }
+      : {
+        type: 'memory',
+      },
     target: 'electron-renderer',
     resolve: {
       alias: {

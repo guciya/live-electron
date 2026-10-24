@@ -37,6 +37,24 @@ function readSession(): PersistedSession | null {
   }
 }
 
+/**
+ * 直接从 localStorage 读取 token。
+ * 业务请求的鉴权头不依赖 pinia 内存状态，避免窗口重建 / store 未恢复时
+ * 请求缺少 Token 而被后端判定为「请先登录」。
+ */
+export function readStoredAuthToken(): string {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return '';
+    }
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.token === 'string' ? parsed.token : '';
+  } catch (error) {
+    return '';
+  }
+}
+
 export const useAuthStore = defineStore('niko-auth', {
   state: () => ({
     token: '' as string,
@@ -59,6 +77,10 @@ export const useAuthStore = defineStore('niko-auth', {
     },
 
     setSession(token: string, userInfo: NikoUserInfo) {
+      if (!token) {
+        // 后端登录响应缺少 token 时，业务接口会一律返回「请先登录」
+        console.error('[niko/auth] setSession received an empty token, business APIs will fail');
+      }
       this.token = token;
       this.userInfo = userInfo;
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, userInfo }));

@@ -49,3 +49,12 @@ export function createPrepareLive(params: PrepareLiveParams): Promise<PrepareLiv
 export function stopLive(params: { liveIndexId: number }): Promise<void> {
   return request.post('/live/stopLive', params) as unknown as Promise<void>;
 }
+
+/** 发送直播弹幕（后端转发到 IM 群，与 web-obs-live 一致） */
+export function sendLiveMessage(params: {
+  liveIndexId: string | number;
+  content: string;
+  replyUserId?: string;
+}): Promise<void> {
+  return request.post('/live/liveMessage', params) as unknown as Promise<void>;
+}

@@ -20,6 +20,8 @@ import { beauty as beautyJaJP } from './i18n/ja-JP/beauty';
 import { beauty as beautyKoKR } from './i18n/ko-KR/beauty';
 
 import App from './App.vue'
+import { useAuthStore } from './niko/store/auth'
+import { USER_INFO_STORAGE_KEY } from './TUILiveKit/utils/userInfoStorage'
 
 // Beauty panel baseline translations derived from the xmagic plugin's built-in
 // labelKey table (zh / en only). Kept as a LAST-RESORT fallback so any labelKey
@@ -39,7 +41,46 @@ addI18n('ja-JP', { translation: { ...beautyEn, ...beautyJaJP, ...jaResource } })
 addI18n('ko-KR', { translation: { ...beautyEn, ...beautyKoKR, ...koResource } });
 initLanguageSync();
 
-const app = createApp(App);
-app.use(createPinia()).use(router);
+const RELOGIN_ON_START_FLAG = 'niko-relogin-on-start-done';
 
-app.mount('#app');
+/**
+ * 每次启动应用都要求重新登录。
+ * 主窗口启动时清掉上次遗留的登录态（TUIKit 凭据 + 业务 token），
+ * 避免带着旧凭据直接进直播间。
+ * 用 sessionStorage 标记，使开发时的页面热重载不会反复把用户踢回登录页。
+ */
+async function clearStaleLoginOnStart() {
+  try {
+    if (!window.ipcRenderer?.invoke) {
+      return;
+    }
+    const windowType = await window.ipcRenderer.invoke('window-type');
+    if (windowType !== 'main') {
+      return;
+    }
+    if (window.sessionStorage.getItem(RELOGIN_ON_START_FLAG)) {
+      return;
+    }
+    window.sessionStorage.setItem(RELOGIN_ON_START_FLAG, '1');
+    window.localStorage.removeItem(USER_INFO_STORAGE_KEY);
+    window.localStorage.removeItem('niko-auth');
+    console.log('[Niko] stale login cleared, login required this launch');
+  } catch (error) {
+    console.warn('[Niko] clear stale login failed:', error);
+  }
+}
+
+async function bootstrap() {
+  await clearStaleLoginOnStart();
+
+  const app = createApp(App);
+  const pinia = createPinia();
+  app.use(pinia).use(router);
+
+  // 恢复本地登录态（本次启动已清空，需要重新登录后会重新写入）
+  useAuthStore(pinia).restore();
+
+  app.mount('#app');
+}
+
+bootstrap();

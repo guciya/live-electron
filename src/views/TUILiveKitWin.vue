@@ -71,7 +71,7 @@
               />
             </div>
             <div class="main-center-top-right">
-              {{ audienceCount }} {{ t('People watching') }}
+              {{ displayAudienceCount }} {{ t('People watching') }}
             </div>
           </div>
           <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
@@ -146,10 +146,10 @@
                 {{ t('Online viewers') }}
               </div>
               <div class="title-count">
-                ({{ audienceCount }})
+                ({{ displayAudienceCount }})
               </div>
             </div>
-            <LiveAudienceList height="calc(100% - 40px)" />
+            <LiveAudiencePanel height="calc(100% - 40px)" @count-change="onAudienceCountChange" />
           </div>
           <div class="main-right-bottom">
             <div class="main-right-bottom-header">
@@ -158,14 +158,10 @@
               </div>
             </div>
             <div class="message-list-container">
-              <BarrageList />
-            </div>
-            <div class="message-input-container">
-              <BarrageInput
-                height="56px"
+              <LiveChatPanel
+                :room-id="nikoRoomId"
+                :live-index-id="pendingPreLiveId"
                 :disabled="!isInLive"
-                :placeholder="isInLive ? '' : t('Live not started')"
-                emoji-popup-mode="inset"
               />
             </div>
           </div>
@@ -228,6 +224,9 @@ import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import CoGuestButton from '../TUILiveKit/components/CoGuestButton.vue';
 import CoHostButton from '../TUILiveKit/components/CoHostButton.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
+import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
+import LiveAudiencePanel from '../niko/components/LiveAudiencePanel.vue';
+import { leaveLiveChat } from '../niko/im/liveIm';
 import {
   isNetworkOffline,
   isNetworkTimeoutError,
@@ -368,6 +367,14 @@ const loginReady = ref(false);
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
 const pendingPreLiveId = ref<string>('');
+// TRTC 房间号 / IM 群 ID（= 后端 room_id）
+const nikoRoomId = ref<string>('');
+// 在线人数来自 IM 群成员（TUIRoomEngine 房间不可用，TUIKit 的 audienceCount 恒为 0）
+const nikoAudienceCount = ref(0);
+const displayAudienceCount = computed(() => (nikoAudienceCount.value > 0 ? nikoAudienceCount.value : audienceCount.value));
+const onAudienceCountChange = (count: number) => {
+  nikoAudienceCount.value = count;
+};
 const isTransitioningToLogin = () => isGoingToLoginPage.value;
 // Dialog message follows the same priority as the Web LivePusherView
 // (PK > CoHost > CoGuest > default). While in PK the host can only end the
@@ -463,6 +470,10 @@ const handleStartLive = () => {
     });
     return;
   }
+  // 摄像头预热改为在用户真正准备开播时触发：
+  // 页面一进来就 addMediaSource 会产生 USB 摄像头 5s 超时、TIM 未就绪等大量报错，
+  // 而用户可能根本不打算开播。放在这里既不误报，也能在填标题/封面期间完成预热。
+  void ensureDefaultCamera();
   showPreLiveDialog.value = true;
 };
 
@@ -517,40 +528,21 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
         language: mapToRoomEngineLanguage(language.value),
       },
     }));
-    // 进房策略：
-    // 1) 优先用 TUIRoomEngine 以「会议类型」创建并进入房间。
-    //    直播类型(kLive) 会触发套餐限制 100013；会议类型不受限，
-    //    且房间存在后 TUIKit 的在线观众、聊天室、连麦/PK 才能正常工作。
-    // 2) 创建/进入失败时回退到原生 trtcCloud 进房，保证至少能推流。
-    let enteredByRoomEngine = false;
-    try {
-      if (roomEngine.instance) {
-        await roomEngine.instance.createRoom({
-          roomId: liveId,
-          roomName: liveParamsEditForm.value.liveName || liveId,
-          roomType: TUIRoomType.kConference,
-        });
-        await roomEngine.instance.enterRoom({
-          roomId: liveId,
-          roomType: TUIRoomType.kConference,
-        });
-        enteredByRoomEngine = true;
-        console.log('[Niko] roomEngine createRoom + enterRoom ok, roomId:', liveId);
-      }
-    } catch (roomErr: any) {
-      console.warn('[Niko] roomEngine createRoom/enterRoom failed:', roomErr?.code, roomErr?.message || roomErr);
-      enteredByRoomEngine = false;
-    }
-    if (!enteredByRoomEngine) {
-      // 原生 TRTC 进房（主播身份隐式建房）
-      await enterTrtcRoom(liveId);
-    }
+    // 实测 TUIRoomEngine.createRoom 返回 100007（the bill information is not available,
+    // please purchase roomkit first），kLive / kConference 均不可用，
+    // 因此不再通过 TUIRoomEngine 建房，完全对齐 web-obs-live：
+    // 原生 TRTC 以主播身份进房推流 + LiteChat 加入同 ID 的 IM 群（聊天室 / 在线观众）。
+    await enterTrtcRoom(liveId);
+    // 进房成功后再赋值 roomId：LiveChatPanel 监听该值去登录 IM 并加群，
+    // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰
+    nikoRoomId.value = liveId;
     // 开播前确保摄像头已加入混流，否则推出去的是黑屏
-    await autoAddDefaultCamera();
+    await ensureDefaultCamera();
     // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
     // 这里没有走 TUIKit startLive，需要手动 startPublish，否则手机端收不到画面。
     try {
-      const mixingManager = roomEngine.instance?.getTRTCCloud().getMediaMixingManager();
+      const cloud = roomEngine.instance?.getTRTCCloud?.();
+      const mixingManager = (cloud || trtcCloud).getMediaMixingManager();
       if (mixingManager) {
         await mixingManager.startPublish();
         console.log('[Niko] mediaMixing startPublish ok');
@@ -560,6 +552,7 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     } catch (publishErr: any) {
       console.warn('[Niko] mediaMixing startPublish failed:', publishErr?.message || publishErr);
     }
+    // 加入 IM 群由聊天面板在 roomId 变化时完成（对齐 web-obs-live 的 IM 监听）
     nikoIsLive.value = true;
     loading.value = false;
     await openLocalMicrophone();
@@ -896,12 +889,14 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
         console.warn('[Niko] trtcCloud.exitRoom fallback failed:', exitErr);
       }
     }
-    // 解散自己创建的会议房间，避免残留占用并发房间数
+    // 退出 IM 群并重置本地状态
     try {
-      await roomEngine.instance?.destroyRoom();
-    } catch (destroyErr: any) {
-      console.warn('[Niko] destroyRoom failed:', destroyErr?.message || destroyErr);
+      await leaveLiveChat();
+    } catch (leaveErr: any) {
+      console.warn('[Niko] leaveLiveChat failed:', leaveErr?.message || leaveErr);
     }
+    nikoRoomId.value = '';
+    nikoAudienceCount.value = 0;
     nikoIsLive.value = false;
     stopSystemAudioLoopbackSafely();
     return true;
@@ -994,6 +989,12 @@ const handleLogout = async () => {
 };
 
 function redirectToLogin() {
+  // 区分「业务接口 401」与「TUIKit 被踢/签名过期」两类跳转来源
+  console.warn('[Niko] redirect to login page', {
+    hasStartedLogoutRedirect,
+    isInLive: isInLive.value,
+    loginReady: loginReady.value,
+  });
   hasStartedLogoutRedirect = true;
   if (currentForceLogoutDialogId.value) {
     ipcBridge.sendToConfirm(IPCMessageType.CLOSE_CONFIRM_DIALOG, {
@@ -1165,8 +1166,6 @@ onMounted(async () => {
       { suppressErrorModal: true },
     );
     loginReady.value = true;
-    // 登录成功后自动开启默认摄像头预览
-    nextTick(() => autoAddDefaultCamera());
   } catch (e) {
     redirectToLogin();
   }
@@ -1202,14 +1201,37 @@ const autoAddDefaultCamera = async (retryCount = 3) => {
         rect: { left: 0, top: 0, right: width, bottom: height },
         mirrorType: TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
       } as MediaSource);
+      console.log('[Niko] default camera added:', firstCamera.deviceName);
       return;
     } catch (err) {
-      console.warn(`[Niko] auto add default camera failed (${attempt}/${retryCount}):`, err);
+      // USB 摄像头冷启动首次 addMediaSource 超时属于正常现象，重试通常即可成功，
+      // 因此中间重试只在 log 中记录，最后一次失败才用 warn，避免未开播就刷一堆错误
       if (attempt < retryCount) {
+        console.log(`[Niko] auto add default camera retry (${attempt}/${retryCount}):`, err);
         await new Promise((resolve) => setTimeout(resolve, 2000));
+      } else {
+        console.warn(`[Niko] auto add default camera failed after ${retryCount} attempts:`, err);
       }
     }
   }
+};
+
+// 同一时刻只允许一次摄像头加入流程：
+// 启动预热与点击开播可能并发调用，重复 addMediaSource 会互相干扰
+let cameraEnsurePromise: Promise<void> | null = null;
+const hasCameraInMixer = () => videoMixerState.mediaSourceList.value.some(
+  (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+);
+const ensureDefaultCamera = (): Promise<void> => {
+  if (hasCameraInMixer()) {
+    return Promise.resolve();
+  }
+  if (!cameraEnsurePromise) {
+    cameraEnsurePromise = autoAddDefaultCamera().finally(() => {
+      cameraEnsurePromise = null;
+    });
+  }
+  return cameraEnsurePromise;
 };
 
 const handleLiveSettingConfirm = async (form: { liveName: string; coverUrl?: string }) => {
