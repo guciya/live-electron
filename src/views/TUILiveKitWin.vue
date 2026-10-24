@@ -40,6 +40,14 @@
             >
               <CoGuestButton :isShowingInChildWindow="true" />
               <CoHostButton :isShowingInChildWindow="true" />
+              <TUIButton
+                class="pk-button"
+                :type="currentBattleInfo?.battleId ? 'danger' : 'primary'"
+                :disabled="!isInLive || loading"
+                @click="handlePkClick"
+              >
+                {{ currentBattleInfo?.battleId ? t('End PK') : t('PK') }}
+              </TUIButton>
               <MusicButton :isShowingInChildWindow="true" />
             </div>
           </div>
@@ -50,13 +58,13 @@
               <span class="live-title" :title="currentLive?.liveName || liveParams.liveName">
                 {{ currentLive?.liveName || liveParams.liveName }}
               </span>
-              <LiveSettingButton
+              <!-- <LiveSettingButton
                 v-if="loginUserInfo?.userId && !isGoingToLoginPage"
                 :live-name="liveParams.liveName"
                 :cover-url="liveParams.coverUrl"
                 @confirm="showLiveSettingChildWindow"
                 :isShowingInChildWindow="true"
-              />
+              /> -->
               <LiveURLCopy
                 v-if="isInLive && !isGoingToLoginPage"
                 :live-id="currentLive?.liveId"
@@ -67,6 +75,20 @@
             </div>
           </div>
           <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
+            <div v-if="currentBattleInfo?.battleId" class="pk-overlay">
+              <div class="pk-bar">
+                <div class="pk-side pk-left">
+                  <span class="pk-score">{{ battleScoreMap.get(loginUserInfo?.userId) || 0 }}</span>
+                </div>
+                <div class="pk-progress">
+                  <div class="pk-progress-inner" :style="{ width: pkProgressPercent + '%' }"></div>
+                  <span class="pk-countdown">{{ pkCountdown }}s</span>
+                </div>
+                <div class="pk-side pk-right">
+                  <span class="pk-score">{{ pkOpponentScore }}</span>
+                </div>
+              </div>
+            </div>
             <StreamMixer
               v-if="nativeId !== null && !isGoingToLoginPage"
               :windowId="nativeId"
@@ -163,8 +185,9 @@
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import trtcCloud from '../TUILiveKit/utils/trtcCloud';
+import { TRTCVideoMirrorType, TRTCParams, TRTCAppScene, TRTCRoleType } from 'trtc-electron-sdk';
 import { releaseMediaResourcesBeforeQuit } from '../TUILiveKit/utils/appQuitCleanup';
-import TUIRoomEngine, { TUISeatMode, TUIRoomType } from '@tencentcloud/tuiroom-engine-electron';
+import TUIRoomEngine, { TUISeatMode, TUIRoomType, TRTCMediaSourceType } from '@tencentcloud/tuiroom-engine-electron';
 import {
   UIKitProvider,
   useUIKit,
@@ -187,6 +210,8 @@ import {
   useCoHostState,
   useBattleState,
   useLiveSeatState,
+  useVideoMixerState,
+  MediaSource,
   CoHostStatus,
   StreamMixer,
   LiveListEvent,
@@ -252,21 +277,91 @@ const props = defineProps<{
   seatMode?: TUISeatMode;
 }>();
 
-const { currentLive, endLive, joinLive, subscribeEvent, unsubscribeEvent } = useLiveListState();
+const { currentLive, endLive, subscribeEvent, unsubscribeEvent } = useLiveListState();
 const { audienceCount } = useLiveAudienceState();
-const { openLocalMicrophone } = useDeviceState();
+const { openLocalMicrophone, cameraList, getCameraList } = useDeviceState();
+const videoMixerState = useVideoMixerState();
 const { connected: coGuestConnected } = useCoGuestState();
 const { connected: coHostConnected, coHostStatus, exitHostConnection } = useCoHostState();
 const {
   currentBattleInfo,
   battleUsers,
   battleScore,
+  requestBattle,
+  exitBattle,
   subscribeEvent: subscribeBattleEvent,
   unsubscribeEvent: unsubscribeBattleEvent,
 } = useBattleState();
 const { seatList } = useLiveSeatState();
 const roomEngine = useRoomEngine();
-const isInLive = computed(() => !!currentLive.value?.liveId);
+
+// ===== PK 状态 =====
+const battleScoreMap = computed(() => battleScore.value || new Map<string, number>());
+const pkOpponentScore = computed(() => {
+  const selfId = loginUserInfo.value?.userId;
+  for (const [uid, score] of battleScoreMap.value.entries()) {
+    if (uid !== selfId) return score;
+  }
+  return 0;
+});
+const pkProgressPercent = computed(() => {
+  const self = battleScoreMap.value.get(loginUserInfo.value?.userId) || 0;
+  const opp = pkOpponentScore.value;
+  const total = self + opp;
+  if (total <= 0) return 50;
+  return Math.round((self / total) * 100);
+});
+const pkCountdown = ref(0);
+let pkTimer: ReturnType<typeof setInterval> | null = null;
+const startPkCountdown = (seconds: number) => {
+  pkCountdown.value = seconds;
+  if (pkTimer) clearInterval(pkTimer);
+  pkTimer = setInterval(() => {
+    pkCountdown.value--;
+    if (pkCountdown.value <= 0) {
+      if (pkTimer) clearInterval(pkTimer);
+      pkTimer = null;
+    }
+  }, 1000);
+};
+// 监听 PK 开始/结束，启动/清除倒计时
+watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
+  if (battleId && !oldId) {
+    const duration = currentBattleInfo.value?.config?.duration || 300;
+    startPkCountdown(duration);
+  } else if (!battleId) {
+    if (pkTimer) clearInterval(pkTimer);
+    pkTimer = null;
+  }
+});
+
+const handlePkClick = async () => {
+  if (currentBattleInfo.value?.battleId) {
+    // 结束 PK
+    try {
+      await exitBattle({ battleId: currentBattleInfo.value.battleId });
+    } catch (e) {
+      console.warn('[Niko] exitBattle failed:', e);
+    }
+    return;
+  }
+  // 发起 PK：输入目标主播 userId
+  const targetId = window.prompt(t('Enter target anchor userId for PK'));
+  if (!targetId) return;
+  try {
+    await requestBattle({
+      config: { duration: 300, needResponse: true, extensionInfo: '' },
+      userIdList: [targetId],
+      timeout: 30,
+    });
+    showMessage({ type: MessageToastType.Success, message: t('PK invitation sent') });
+  } catch (e: any) {
+    showMessage({ type: MessageToastType.Error, message: e?.message || t('Failed to start PK') });
+  }
+};
+// 当前 SDKAppID 未开通直播房间套餐，使用 Conference 类型进房，手动维护直播状态
+const nikoIsLive = ref(false);
+const isInLive = computed(() => nikoIsLive.value || !!currentLive.value?.liveId);
 const isGoingToLoginPage = ref(false);
 // 登录完成前不渲染子组件，避免 TRTC 未初始化时拉直播列表/连麦候选报错
 const loginReady = ref(false);
@@ -371,9 +466,43 @@ const handleStartLive = () => {
   showPreLiveDialog.value = true;
 };
 
-// 预开播弹窗确认后：用后端返回的 room_id 进入 TRTC 房间
-// 注意：不使用 TUIKit 的 startLive（内部 createRoom 需要付费直播套餐，报 100013），
-// 改用 joinLive（内部走 enterRoom 进房，与 web-obs-live 的 trtc.enterRoom 一致）
+// 预开播弹窗确认后：用原生 trtcCloud.enterRoom 进房（与 web-obs-live 一致）
+// 不使用 TUIRoomEngine.startLive/enterRoom：
+//   - startLive 内部 createRoom 触发付费直播套餐校验（100013）
+//   - enterRoom(kLive) 报房间类型错误（100006），enterRoom(kConference) 报房间不存在（100004）
+// 原生 TRTC SDK 的 enterRoom({role:'anchor'}) 会隐式创建房间，不触发上述校验
+const enterTrtcRoom = (roomId: string): Promise<number> => new Promise((resolve, reject) => {
+  const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+  const userInfo = stored ? JSON.parse(stored) : {};
+  // 注意：trtc-electron-sdk 的 TRTCParams 构造函数是位置参数
+  // (sdkAppId, userId, userSig, roomId, strRoomId, role, ...)，不支持对象传参。
+  // 传对象会导致 strRoomId 为空，报 -3318 RoomID is invalid
+  const params = new TRTCParams(
+    Number(userInfo.sdkAppId),
+    String(userInfo.userId || ''),
+    String(userInfo.userSig || ''),
+    0,
+    String(roomId),
+    TRTCRoleType.TRTCRoleAnchor,
+  );
+  console.log('[Niko] enterTrtcRoom params:', JSON.stringify({
+    sdkAppId: params.sdkAppId,
+    userId: params.userId,
+    strRoomId: params.strRoomId,
+    role: params.role,
+  }));
+  const onEnterRoom = (result: number) => {
+    trtcCloud.off('onEnterRoom', onEnterRoom);
+    if (result > 0) {
+      resolve(result);
+    } else {
+      reject(new Error(`enterRoom failed, code: ${result}`));
+    }
+  };
+  trtcCloud.on('onEnterRoom', onEnterRoom);
+  trtcCloud.enterRoom(params, TRTCAppScene.TRTCAppSceneLIVE);
+});
+
 const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string; coverUrl: string }) => {
   loading.value = true;
   // TRTC 房间号用后端返回的 room_id；live_index_id 仅用于后端关播接口
@@ -388,20 +517,50 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
         language: mapToRoomEngineLanguage(language.value),
       },
     }));
-    // 先用原生 enterRoom 以 Live 类型建房/进房（joinLive 默认建 Conference 房会报 100006）
-    if (roomEngine.instance) {
-      await roomEngine.instance.enterRoom({
-        roomId: liveId,
-        roomType: TUIRoomType.kLive,
-      });
-    }
-    // 进房后同步 TUIKit 直播状态（currentLive 等）
+    // 进房策略：
+    // 1) 优先用 TUIRoomEngine 以「会议类型」创建并进入房间。
+    //    直播类型(kLive) 会触发套餐限制 100013；会议类型不受限，
+    //    且房间存在后 TUIKit 的在线观众、聊天室、连麦/PK 才能正常工作。
+    // 2) 创建/进入失败时回退到原生 trtcCloud 进房，保证至少能推流。
+    let enteredByRoomEngine = false;
     try {
-      await joinLive({ liveId });
-    } catch (joinErr: any) {
-      // 已在房间内时 joinLive 可能报错，忽略，状态由 enterRoom 保证
-      console.warn('[Niko] joinLive after enterRoom:', joinErr?.message || joinErr);
+      if (roomEngine.instance) {
+        await roomEngine.instance.createRoom({
+          roomId: liveId,
+          roomName: liveParamsEditForm.value.liveName || liveId,
+          roomType: TUIRoomType.kConference,
+        });
+        await roomEngine.instance.enterRoom({
+          roomId: liveId,
+          roomType: TUIRoomType.kConference,
+        });
+        enteredByRoomEngine = true;
+        console.log('[Niko] roomEngine createRoom + enterRoom ok, roomId:', liveId);
+      }
+    } catch (roomErr: any) {
+      console.warn('[Niko] roomEngine createRoom/enterRoom failed:', roomErr?.code, roomErr?.message || roomErr);
+      enteredByRoomEngine = false;
     }
+    if (!enteredByRoomEngine) {
+      // 原生 TRTC 进房（主播身份隐式建房）
+      await enterTrtcRoom(liveId);
+    }
+    // 开播前确保摄像头已加入混流，否则推出去的是黑屏
+    await autoAddDefaultCamera();
+    // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
+    // 这里没有走 TUIKit startLive，需要手动 startPublish，否则手机端收不到画面。
+    try {
+      const mixingManager = roomEngine.instance?.getTRTCCloud().getMediaMixingManager();
+      if (mixingManager) {
+        await mixingManager.startPublish();
+        console.log('[Niko] mediaMixing startPublish ok');
+      } else {
+        console.warn('[Niko] getMediaMixingManager returned null, skip startPublish');
+      }
+    } catch (publishErr: any) {
+      console.warn('[Niko] mediaMixing startPublish failed:', publishErr?.message || publishErr);
+    }
+    nikoIsLive.value = true;
     loading.value = false;
     await openLocalMicrophone();
     startSystemAudioLoopbackSafely();
@@ -707,27 +866,44 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
 
     loading.value = true;
     try {
+      // 先停止本地混流推流，否则房间解散后 SDK 会持续报错
+      try {
+        const mixingManager = roomEngine.instance?.getTRTCCloud().getMediaMixingManager();
+        await mixingManager?.stopPublish();
+      } catch (stopPublishErr: any) {
+        console.warn('[Niko] mediaMixing stopPublish failed:', stopPublishErr?.message || stopPublishErr);
+      }
+      // 通知后端关播要在房间还存活时调用：后端需要解散/停止该房间，房间不存在会返回 500
+      if (pendingPreLiveId.value) {
+        const liveIndexId = Number(pendingPreLiveId.value);
+        if (!Number.isNaN(liveIndexId)) {
+          try {
+            await nikoStopLive({ liveIndexId });
+            console.log('[Niko] stopLive backend ok, liveIndexId:', liveIndexId);
+          } catch (e: any) {
+            console.warn('[Niko] stopLive backend call failed:', e?.message || e);
+          }
+        }
+        pendingPreLiveId.value = '';
+      }
       await endLive();
     } catch (endErr: any) {
-      // TUIKit endLive 依赖 currentLive 状态，若 joinLive 未同步成功则回退到原生退房
+      // TUIKit endLive 依赖 currentLive 状态，原生进房无 currentLive，回退到原生退房
       console.warn('[Niko] endLive failed, fallback to exitRoom:', endErr?.message || endErr);
       try {
-        await roomEngine.instance?.exitRoom();
+        trtcCloud.exitRoom();
       } catch (exitErr) {
-        console.warn('[Niko] exitRoom fallback failed:', exitErr);
+        console.warn('[Niko] trtcCloud.exitRoom fallback failed:', exitErr);
       }
     }
+    // 解散自己创建的会议房间，避免残留占用并发房间数
+    try {
+      await roomEngine.instance?.destroyRoom();
+    } catch (destroyErr: any) {
+      console.warn('[Niko] destroyRoom failed:', destroyErr?.message || destroyErr);
+    }
+    nikoIsLive.value = false;
     stopSystemAudioLoopbackSafely();
-    // 同步通知后端关播（失败不阻断本地流程）
-    if (pendingPreLiveId.value) {
-      const liveIndexId = Number(pendingPreLiveId.value);
-      if (!Number.isNaN(liveIndexId)) {
-        nikoStopLive({ liveIndexId }).catch((e) => {
-          console.warn('[Niko] stopLive backend call failed:', e?.message || e);
-        });
-      }
-      pendingPreLiveId.value = '';
-    }
     return true;
   } catch (error: any) {
     console.error('End live error:', error);
@@ -989,10 +1165,52 @@ onMounted(async () => {
       { suppressErrorModal: true },
     );
     loginReady.value = true;
+    // 登录成功后自动开启默认摄像头预览
+    nextTick(() => autoAddDefaultCamera());
   } catch (e) {
     redirectToLogin();
   }
 });
+
+// 自动添加默认摄像头到媒体混流（无需用户手动点击选择）
+// USB 摄像头冷启动较慢，addMediaSource 可能 5 秒超时，这里重试几次避免预览/推流无画面
+const autoAddDefaultCamera = async (retryCount = 3) => {
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    try {
+      if (cameraList.value.length === 0) {
+        await getCameraList();
+      }
+      const firstCamera = cameraList.value[0];
+      if (!firstCamera) {
+        console.warn('[Niko] no camera device found');
+        return;
+      }
+      // 避免重复添加
+      const exists = videoMixerState.mediaSourceList.value.some(
+        (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera
+          && String(m.sourceId) === String(firstCamera.deviceId),
+      );
+      if (exists) return;
+      const width = 1280;
+      const height = 720;
+      await videoMixerState.addMediaSource({
+        sourceId: firstCamera.deviceId,
+        sourceType: TRTCMediaSourceType.kCamera,
+        name: firstCamera.deviceName,
+        width,
+        height,
+        rect: { left: 0, top: 0, right: width, bottom: height },
+        mirrorType: TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
+      } as MediaSource);
+      return;
+    } catch (err) {
+      console.warn(`[Niko] auto add default camera failed (${attempt}/${retryCount}):`, err);
+      if (attempt < retryCount) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+  }
+};
 
 const handleLiveSettingConfirm = async (form: { liveName: string; coverUrl?: string }) => {
   const updatedForm = {
@@ -1062,6 +1280,10 @@ onBeforeUnmount(() => {
     clearTimeout(loginRedirectTimer);
     loginRedirectTimer = null;
   }
+  if (pkTimer) {
+    clearInterval(pkTimer);
+    pkTimer = null;
+  }
   hasStartedLogoutRedirect = false;
   stopSystemAudioLoopbackSafely();
   if (currentForceLogoutDialogId.value) {
@@ -1092,6 +1314,62 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 @import "../TUILiveKit/assets/mac.scss";
+
+/* PK 进度条覆盖层 */
+.pk-overlay {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: 80%;
+  max-width: 500px;
+  .pk-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 20px;
+    padding: 6px 12px;
+    .pk-side {
+      flex: 0 0 auto;
+      min-width: 50px;
+      text-align: center;
+      .pk-score {
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+      }
+    }
+    .pk-progress {
+      flex: 1;
+      height: 14px;
+      background: #2a3142;
+      border-radius: 7px;
+      position: relative;
+      overflow: hidden;
+      .pk-progress-inner {
+        height: 100%;
+        background: linear-gradient(90deg, #ff6b6b, #ffa500);
+        border-radius: 7px;
+        transition: width 0.5s ease;
+      }
+      .pk-countdown {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+      }
+    }
+  }
+}
+.pk-button {
+  min-width: 56px;
+}
 
 .tui-livekit-win {
   width: 100%;

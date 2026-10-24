@@ -49,6 +49,8 @@
     "start": "concurrently \"npm run serve\" \"npm run electron\"",
     "preelectron": "node scripts/postinstall.js",
     "electron": "electron .",
+    "build:dev": "vue-cli-service build --mode development --dest dist-dev",
+    "start:fast": "electron . --dist",
     "build:win64": "electron-builder --win --x64",
     "pack:win64": "npm run build && npm run build:win64",
     "build:mac-x64": "electron-builder --mac --x64",

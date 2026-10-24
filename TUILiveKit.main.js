@@ -542,11 +542,15 @@ async function createWindow(width = 1366, height = 668) {
   bindConfirmWindowEvent();
   createTray();
 
-  if (app.isPackaged) {
-    windowMap.main.loadFile('dist/index.html');
-    windowMap.child.loadFile('dist/index.html');
-    windowMap.mainCover.loadFile('dist/index.html');
-    windowMap.confirm.loadFile('dist/index.html');
+  // --dist 参数（npm run start:fast）跳过 dev server，直接加载已构建的 dist-dev，
+  // 避免每次启动都等 webpack 编译；代码有改动时先执行 npm run build:dev
+  const useDistBundle = app.isPackaged || process.argv.includes('--dist');
+  const bundleDir = process.argv.includes('--dist') ? 'dist-dev' : 'dist';
+  if (useDistBundle) {
+    windowMap.main.loadFile(bundleDir + '/index.html');
+    windowMap.child.loadFile(bundleDir + '/index.html');
+    windowMap.mainCover.loadFile(bundleDir + '/index.html');
+    windowMap.confirm.loadFile(bundleDir + '/index.html');
   } else {
     windowMap.main.loadURL('http://localhost:8080');
     windowMap.child.loadURL('http://localhost:8080/#/tui-live-kit-child');

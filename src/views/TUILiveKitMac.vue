@@ -46,12 +46,12 @@
               <span class="live-title" :title="currentLive?.liveName || liveParams.liveName">
                 {{ currentLive?.liveName || liveParams.liveName }}
               </span>
-              <LiveSettingButton
+              <!-- <LiveSettingButton
                 v-if="loginUserInfo?.userId"
                 :live-name="currentLive?.liveName || liveParams.liveName"
                 :cover-url="liveParams.coverUrl"
                 @confirm="handleLiveSettingConfirm"
-              />
+              /> -->
               <LiveURLCopy
                 v-if="isInLive"
                 :live-id="currentLive?.liveId"

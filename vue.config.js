@@ -8,10 +8,18 @@ const isProduction = process.env.NODE_ENV === 'production';
 const platform = os.platform();
 
 module.exports = defineConfig({
-  transpileDependencies: true,
+  // 所有依赖均为预编译产物，无需 babel 再次转译 node_modules，大幅加快首次构建
+  transpileDependencies: false,
+  // dev server 下关闭 eslint 校验（仍可用 npm run lint 手动检查），减少每次启动的额外开销
+  lintOnSave: false,
   publicPath: './',
   configureWebpack: {
-    devtool: isProduction ? 'source-map' : 'inline-source-map',
+    // eval-cheap-module-source-map 比 inline-source-map 快得多，且调试体验基本不变
+    devtool: isProduction ? 'source-map' : 'eval-cheap-module-source-map',
+    // webpack5 持久化缓存，二次启动增量编译
+    cache: {
+      type: 'filesystem',
+    },
     target: 'electron-renderer',
     resolve: {
       alias: {

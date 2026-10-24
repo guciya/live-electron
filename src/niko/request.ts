@@ -65,7 +65,12 @@ request.interceptors.response.use(
     return Promise.reject(new Error(body.message || '请求失败'));
   },
   (error) => {
-    const message = error?.response?.data?.message || error.message || '网络异常';
+    const status = error?.response?.status;
+    const body = error?.response?.data;
+    // 打印完整状态码与响应体，便于定位后端 5xx（如 /live/stopLive 500）
+    console.error('[NikoRequest] HTTP', status, error?.config?.url, body);
+    const bodyMessage = typeof body === 'string' ? body.slice(0, 200) : body?.message;
+    const message = bodyMessage || error.message || '网络异常';
     if (AUTH_ERROR_MESSAGES.some((text) => message.includes(text))) {
       handleAuthFailure();
     }

@@ -7,8 +7,6 @@ import { onMounted } from 'vue';
 import { vTuiLoading } from '@tencentcloud/uikit-base-component-vue3';
 import router from '../router';
 import { isMainWindow } from '../TUILiveKit/utils/envUtils';
-import { getBasicInfo } from '../debug/basic-info-config.js';
-import { LoginType } from './Login/types';
 import logger from '../TUILiveKit/utils/logger';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
 
@@ -34,18 +32,9 @@ onMounted(() => {
   const storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
   let userInfo;
   if (!storedUserInfo) {
-    userInfo = getBasicInfo();
-    if (userInfo) {
-      window.localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify({
-        sdkAppId: userInfo.sdkAppId,
-        userId: userInfo.userId,
-        userSig: userInfo.userSig,
-        loginType: LoginType.SDKSecretKey,
-      }));
-    } else {
-      gotoLogin();
-      return;
-    }
+    // 未登录：直接跳转登录页，不再用 debug 配置生成测试用户（避免闪直播页）
+    gotoLogin();
+    return;
   } else {
     try {
       userInfo = JSON.parse(storedUserInfo);
