@@ -11,6 +11,16 @@ const routes: Array<RouteRecordRaw> = [
     component: Loading,
   },
   {
+    path: '/anchor-list',
+    name: 'anchor-list',
+    component: () => import(/* webpackChunkName: "AnchorList" */ '../views/AnchorList.vue')
+  },
+  {
+    path: '/live-player',
+    name: 'live-player',
+    component: () => import(/* webpackChunkName: "LivePlayer" */ '../views/LivePlayer.vue')
+  },
+  {
     path: '/tui-live-kit-main',
     name: 'tui-live-kit-main',
     component: () => import(/* webpackChunkName: "TUILiveKitWin" */ '../views/TUILiveKitWin.vue')
@@ -36,6 +46,12 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import(/* webpackChunkName: "TUILiveKitConfirm" */ '../views/TUILiveKitConfirm.vue'),
   },
   {
+    // 透明礼物覆盖窗口：原生视频窗口永远在 DOM 之上，礼物特效必须放到同级透明窗口里播放
+    path: '/gift-overlay',
+    name: 'gift-overlay',
+    component: () => import(/* webpackChunkName: "GiftOverlay" */ '../views/GiftOverlay.vue'),
+  },
+  {
     path: '/login',
     name: 'login',
     component: Login,
@@ -49,14 +65,19 @@ const router = createRouter({
 
 window.ipcRenderer.on('window-type', (event: any, type: string) => {
   console.log(`[router]on('window-type'):${type} current href:${window.location.href}`);
-  router.replace({ name: `tui-live-kit-${type}`});
+  // 主窗口登录成功后先进主播列表页，其余窗口类型仍进入各自页面
+  const targetName = type === 'main' ? 'anchor-list' : `tui-live-kit-${type}`;
+  if (router.currentRoute.value.name === targetName) {
+    return;
+  }
+  router.replace({ name: targetName });
 });
 
 router.beforeEach((to) => {
   if (isMacPlatform() && to.name === 'tui-live-kit-main') {
     return { name: 'tui-livekit-mac' };
   }
-  if (to.name === 'tui-live-kit-main') {
+  if (to.name === 'tui-live-kit-main' || to.name === 'anchor-list' || to.name === 'live-player') {
     let storedUserInfo: string | null = null;
     try {
       storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);

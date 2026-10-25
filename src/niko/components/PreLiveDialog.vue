@@ -199,7 +199,7 @@ watch(
 .prelive-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,43 +207,45 @@ watch(
 }
 .prelive-dialog {
   width: 480px;
-  background: #1e2433;
+  background: #101013;
+  border: 1px solid #232329;
   border-radius: 12px;
   overflow: hidden;
   color: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
 }
 .prelive-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid #232329;
   .prelive-title { font-size: 16px; font-weight: 600; }
   .prelive-close {
-    background: none; border: none; color: #999; font-size: 22px; cursor: pointer;
+    background: none; border: none; color: rgba(255,255,255,0.45); font-size: 22px; cursor: pointer;
     &:hover { color: #fff; }
   }
 }
 .prelive-body { padding: 20px; }
 .prelive-field { margin-bottom: 16px; }
-.prelive-label { display: block; margin-bottom: 8px; font-size: 14px; color: #ccc; }
+.prelive-label { display: block; margin-bottom: 8px; font-size: 14px; color: rgba(255,255,255,0.6); }
 .prelive-input, .prelive-select {
   width: 100%;
   padding: 8px 12px;
-  background: #2a3142;
-  border: 1px solid #3a4256;
+  background: #17171b;
+  border: 1px solid #26262c;
   border-radius: 6px;
   color: #fff;
   font-size: 14px;
   outline: none;
   &:focus { border-color: #4a90d9; }
 }
-.prelive-select option { background: #2a3142; color: #fff; }
+.prelive-select option { background: #17171b; color: #fff; }
 .prelive-cover {
   width: 100%;
   min-height: 160px;
-  background: #2a3142;
-  border: 1px dashed #3a4256;
+  background: #17171b;
+  border: 1px dashed #26262c;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -255,7 +257,7 @@ watch(
 }
 .prelive-cover-img { width: 100%; height: auto; display: block; background: #000; }
 .prelive-cover-placeholder {
-  display: flex; flex-direction: column; align-items: center; color: #888;
+  display: flex; flex-direction: column; align-items: center; color: rgba(255,255,255,0.35);
   .prelive-cover-tip { font-size: 12px; margin-top: 4px; }
 }
 .prelive-cover-loading {
@@ -264,12 +266,12 @@ watch(
 }
 .prelive-footer {
   display: flex; justify-content: flex-end; gap: 12px;
-  padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 16px 20px; border-top: 1px solid #232329;
 }
 .prelive-btn {
   padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px;
 }
-.prelive-btn-cancel { background: #3a4256; color: #ccc; }
+.prelive-btn-cancel { background: #232329; color: rgba(255,255,255,0.7); }
 .prelive-btn-confirm {
   background: #4a90d9; color: #fff;
   &:disabled { opacity: 0.6; cursor: not-allowed; }

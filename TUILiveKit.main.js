@@ -7,6 +7,7 @@ const {
   Menu,
   Tray,
   shell,
+  net,
 } = require('electron');
 const { exec, spawn } = require('child_process');
 const path = require('path');
@@ -26,9 +27,19 @@ const windowMap = {
   child: null,
   mainCover: null,
   confirm: null,
+  // 礼物特效覆盖窗口：原生视频窗口永远在 DOM 之上，礼物必须放到同级透明窗口里播放
+  giftOverlay: null,
 };
 
 const coverWindowRelativeBounds = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+};
+
+// 礼物覆盖窗口相对于主窗口内容区的坐标（视频预览区域）
+const giftOverlayRelativeBounds = {
   x: 0,
   y: 0,
   width: 0,
@@ -71,6 +82,11 @@ function handleQuitConfirmed() {
   clearQuitTimers();
   pendingQuitRequest = false;
   isQuitting = true;
+  if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
+    windowMap.giftOverlay.close();
+  }
+  windowMap.giftOverlay = null;
+
   if (windowMap.mainCover && !windowMap.mainCover.isDestroyed()) {
     windowMap.mainCover.close();
   }
@@ -108,6 +124,11 @@ function forceQuitApp() {
   pendingQuitRequest = false;
 
   // Close all windows
+  if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
+    windowMap.giftOverlay.close();
+  }
+  windowMap.giftOverlay = null;
+
   if (windowMap.mainCover && !windowMap.mainCover.isDestroyed()) {
     windowMap.mainCover.close();
   }
@@ -482,12 +503,36 @@ async function createWindow(width = 1366, height = 668) {
       nodeIntegrationInWorker: true,
     },
   });
+  // 透明礼物覆盖窗口：覆盖在视频预览区域之上，只负责播放礼物特效
+  windowMap.giftOverlay = new BrowserWindow({
+    show: false,
+    width: 10,
+    height: 10,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    focusable: false,
+    acceptFirstMouse: true,
+    parent: windowMap.main,
+    webPreferences: {
+      preload: path.join(__dirname, 'TUILiveKit.preload.js'),
+      nodeIntegration: true,
+      contextIsolation: false,
+      nodeIntegrationInWorker: true,
+      // 覆盖窗口从不获得焦点，关闭后台节流，保证礼物动画流畅
+      backgroundThrottling: false,
+    },
+  });
+  windowMap.giftOverlay.setIgnoreMouseEvents(true);
 
   // Make all links open with the browser, not with current application
   windowMap.main.webContents.setWindowOpenHandler(windowOpenHandler);
   windowMap.child.webContents.setWindowOpenHandler(windowOpenHandler);
   windowMap.mainCover.webContents.setWindowOpenHandler(windowOpenHandler);
   windowMap.confirm.webContents.setWindowOpenHandler(windowOpenHandler);
+  windowMap.giftOverlay.webContents.setWindowOpenHandler(windowOpenHandler);
 
   // 开发环境快捷键：F12/Ctrl+Shift+I 打开 DevTools，F5/Ctrl+R 刷新，Ctrl+Shift+D 切换 DevTools 停靠位置
   let devToolsMode = 'right'; // right | bottom | detach
@@ -551,11 +596,13 @@ async function createWindow(width = 1366, height = 668) {
     windowMap.child.loadFile(bundleDir + '/index.html');
     windowMap.mainCover.loadFile(bundleDir + '/index.html');
     windowMap.confirm.loadFile(bundleDir + '/index.html');
+    windowMap.giftOverlay.loadFile(bundleDir + '/index.html', { hash: '/gift-overlay' });
   } else {
     windowMap.main.loadURL('http://localhost:8080');
     windowMap.child.loadURL('http://localhost:8080/#/tui-live-kit-child');
     windowMap.mainCover.loadURL('http://localhost:8080/#/tui-live-kit-cover');
     windowMap.confirm.loadURL('http://localhost:8080/#/tui-live-kit-confirm');
+    windowMap.giftOverlay.loadURL('http://localhost:8080/#/gift-overlay');
   }
 }
 
@@ -566,6 +613,28 @@ function bindIPCEvent() {
   ipcMain.handle('get-language', () => {
     return language;
   });
+
+  // 礼物特效配置（VAP JSON）由主进程转发，规避资源域无 CORS 头导致渲染进程 fetch 失败
+  ipcMain.handle('fetch-gift-config', (_event, url) => new Promise((resolve, reject) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      reject(new Error('invalid url'));
+      return;
+    }
+    const request = net.request({ url, method: 'GET' });
+    let body = '';
+    request.on('response', (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}`));
+        return;
+      }
+      response.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      response.on('end', () => resolve(body));
+    });
+    request.on('error', reject);
+    request.end();
+  }));
 
   ipcMain.handle('window-type', (event) => {
     if (event.sender === windowMap.main?.webContents) {
@@ -958,8 +1027,74 @@ function bindIPCEvent() {
           height: coverWindowRelativeBounds.height,
         });
       }
+      // 礼物覆盖窗口跟随视频区域实时移动（最大化/布局变化时保持压住视频）
+      if (isWindowAlive(windowMap.giftOverlay) && windowMap.giftOverlay.isVisible()) {
+        giftOverlayRelativeBounds.x = coverWindowRelativeBounds.x;
+        giftOverlayRelativeBounds.y = coverWindowRelativeBounds.y;
+        giftOverlayRelativeBounds.width = coverWindowRelativeBounds.width;
+        giftOverlayRelativeBounds.height = coverWindowRelativeBounds.height;
+        windowMap.giftOverlay.setBounds({
+          x: coverWindowRelativeBounds.x + mainBounds.x,
+          y: coverWindowRelativeBounds.y + mainBounds.y,
+          width: coverWindowRelativeBounds.width,
+          height: coverWindowRelativeBounds.height,
+        });
+      }
     }
     console.log('stream-layout-area finished');
+  });
+
+  // ===== 礼物覆盖窗口：原生视频永远在 DOM 之上，礼物特效改在透明覆盖窗口播放 =====
+  ipcMain.on('gift-overlay-play', (event, payload) => {
+    const gift = payload?.gift;
+    if (!gift || !isWindowAlive(windowMap.giftOverlay) || !isWindowAlive(windowMap.main)) {
+      return;
+    }
+    // 优先复用 stream-layout-area 持续维护的视频区域坐标（与 mainCover 同源、随布局实时更新）；
+    // 渲染进程一次性量取的 DOM 坐标在窗口最大化/布局动画等场景会出现偏差，仅作为兜底
+    let rel = null;
+    if (coverWindowRelativeBounds.width > 0 && coverWindowRelativeBounds.height > 0) {
+      rel = {
+        x: coverWindowRelativeBounds.x,
+        y: coverWindowRelativeBounds.y,
+        width: coverWindowRelativeBounds.width,
+        height: coverWindowRelativeBounds.height,
+      };
+    } else if (payload?.bounds) {
+      rel = {
+        x: Math.round(payload.bounds.left || 0),
+        y: Math.round(payload.bounds.top || 0),
+        width: Math.max(1, Math.round(payload.bounds.width || 0)),
+        height: Math.max(1, Math.round(payload.bounds.height || 0)),
+      };
+    }
+    if (!rel || !rel.width || !rel.height) {
+      return;
+    }
+    giftOverlayRelativeBounds.x = rel.x;
+    giftOverlayRelativeBounds.y = rel.y;
+    giftOverlayRelativeBounds.width = rel.width;
+    giftOverlayRelativeBounds.height = rel.height;
+
+    const mainBounds = windowMap.main.getContentBounds();
+    windowMap.giftOverlay.setBounds({
+      x: rel.x + mainBounds.x,
+      y: rel.y + mainBounds.y,
+      width: rel.width,
+      height: rel.height,
+    });
+    // 原生视频窗口由 TRTC SDK 独立创建，普通 show 不一定能压住它，先置顶再显示
+    windowMap.giftOverlay.setAlwaysOnTop(true);
+    windowMap.giftOverlay.showInactive();
+    windowMap.giftOverlay.moveTop();
+    sendToWindow(windowMap.giftOverlay, 'gift-overlay-gift', { gift });
+  });
+
+  ipcMain.on('gift-overlay-hide', () => {
+    if (isWindowAlive(windowMap.giftOverlay)) {
+      windowMap.giftOverlay.setAlwaysOnTop(false);
+      windowMap.giftOverlay.hide();
+    }
   });
 
   ipcMain.on('stream-layout', (event, args) => {
@@ -1052,6 +1187,8 @@ function unbindIPCMainEvent() {
   ipcMain.removeAllListeners('app-quit-confirmed');
   ipcMain.removeAllListeners('app-quit-cancel');
   ipcMain.removeAllListeners('confirm-window-ready');
+  ipcMain.removeAllListeners('gift-overlay-play');
+  ipcMain.removeAllListeners('gift-overlay-hide');
 }
 
 let initMainWindowTimer = null;
@@ -1156,6 +1293,11 @@ function bindMainWindowEvent() {
     }
     windowMap.mainCover = null;
 
+    if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
+      windowMap.giftOverlay.close();
+    }
+    windowMap.giftOverlay = null;
+
     if (windowMap.confirm && !windowMap.confirm.isDestroyed()) {
       windowMap.confirm.close();
     }
@@ -1182,6 +1324,15 @@ function bindMainWindowEvent() {
     if (isWindowAlive(windowMap.mainCover)) {
       windowMap.mainCover.setBounds(bounds);
     }
+    if (isWindowAlive(windowMap.giftOverlay) && windowMap.giftOverlay.isVisible()
+      && giftOverlayRelativeBounds.width > 0 && giftOverlayRelativeBounds.height > 0) {
+      windowMap.giftOverlay.setBounds({
+        x: giftOverlayRelativeBounds.x + newBounds.x,
+        y: giftOverlayRelativeBounds.y + newBounds.y,
+        width: giftOverlayRelativeBounds.width,
+        height: giftOverlayRelativeBounds.height,
+      });
+    }
   });
 
   windowMap.main.on('will-resize', (event, newBounds, details) => {
@@ -1194,6 +1345,15 @@ function bindMainWindowEvent() {
     };
     if (isWindowAlive(windowMap.mainCover)) {
       windowMap.mainCover.setBounds(bounds);
+    }
+    if (isWindowAlive(windowMap.giftOverlay) && windowMap.giftOverlay.isVisible()
+      && giftOverlayRelativeBounds.width > 0 && giftOverlayRelativeBounds.height > 0) {
+      windowMap.giftOverlay.setBounds({
+        x: giftOverlayRelativeBounds.x + newBounds.x,
+        y: giftOverlayRelativeBounds.y + newBounds.y,
+        width: giftOverlayRelativeBounds.width,
+        height: giftOverlayRelativeBounds.height,
+      });
     }
   });
 }
@@ -1363,6 +1523,10 @@ const TUILiveKitMain = {
         windowMap.mainCover.close();
       }
       windowMap.mainCover = null;
+      if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
+        windowMap.giftOverlay.close();
+      }
+      windowMap.giftOverlay = null;
       windowMap.main.close();
       windowMap.main = null;
     }

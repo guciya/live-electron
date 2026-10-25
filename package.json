@@ -16,7 +16,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -33,7 +35,9 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -51,8 +55,12 @@
     "electron": "electron .",
     "build:dev": "vue-cli-service build --mode development --dest dist-dev",
     "start:fast": "electron . --dist",
+    "build:test": "vue-cli-service build --mode test --dest dist",
+    "build:prod": "vue-cli-service build --mode production --dest dist",
     "build:win64": "electron-builder --win --x64",
     "pack:win64": "npm run build && npm run build:win64",
+    "pack:test": "npm run build:test && electron-builder --win --x64 -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
+    "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.productName=Niko直播 -c.artifactName=NikoLive-Setup-${version}.${ext}",
     "build:mac-x64": "electron-builder --mac --x64",
     "pack:mac-x64": "npm run build && npm run build:mac-x64",
     "upload-server": "npm --prefix ./upload-server run start",
@@ -64,10 +72,12 @@
     "@tencentcloud/tuiroom-engine-electron": "~4.2.1",
     "@tencentcloud/uikit-base-component-vue3": "1.4.8",
     "core-js": "^3.36.1",
+    "flv.js": "^1.6.2",
     "pinia": "^2.1.7",
-    "trtc-electron-sdk": "13.4.802-beta.1",
     "trtc-electron-plugin-xmagic": "2.0.0-beta.0",
+    "trtc-electron-sdk": "13.4.802-beta.1",
     "tuikit-atomicx-vue3-electron": "6.5.0",
+    "video-animation-player": "^1.0.5",
     "vue": "^3.4.0",
     "vue-router": "^4.3.1"
   },

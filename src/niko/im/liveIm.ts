@@ -1,20 +1,70 @@
 import { TUILogin } from '@tencentcloud/tui-core-lite';
 import { TUIChatEngine } from '@tencentcloud/chat-uikit-engine-lite';
+import { resolveImageUrl } from '../config';
 
-/** 直播聊天消息（对齐 web-obs-live：文本消息 + 系统/礼物自定义消息） */
+/** 直播聊天消息（对齐 web-obs-live：文本消息 + 系统/进房/礼物自定义消息） */
 export interface LiveImMessage {
   id: string;
+  /** chat=普通弹幕  join=进房提示  gift=礼物  system=系统提示 */
+  kind: 'chat' | 'join' | 'gift' | 'system';
   fromUserId: string;
   nickname: string;
   avatar: string;
   text: string;
   time: number;
+  /** 礼物消息额外字段（用于礼物特效） */
+  gift?: LiveImGift;
+  /** 等级/勋章/身份展示信息（对齐 H5 niko/im 与 web-obs-live 的 message_data 结构） */
+  extra?: {
+    levelColor?: string;
+    levelCardIcon?: string;
+    medalImage?: string;
+    isManager?: boolean;
+    isSuper?: boolean;
+    isAnchor?: boolean;
+    isMystery?: boolean;
+  };
+}
+
+export interface LiveImGift {
+  giftId: string;
+  giftName: string;
+  giftCount: number;
+  giftIcon: string;
+  /** VAP 特效资源，存在时优先播放动画 */
+  effectUrl: string;
+  configUrl: string;
+  nickname: string;
+  avatar: string;
+  userId: string;
 }
 
 export interface LiveImMember {
   userId: string;
   nickname: string;
   avatar: string;
+}
+
+/** 直播结算数据（后端 action 118 下发，与 web-obs-live 的 LiveEndStats 对齐） */
+export interface LiveSettleStats {
+  liveDuration: string;
+  audienceCount: number;
+  newFansCount: number;
+  raw: any;
+}
+
+/**
+ * 直播间系统事件（对齐 web-obs-live ChatRoom）：
+ * - warning：action 53 operate_type=0，仅警告，不中断直播
+ * - forbidden：action 53 operate_type=1 或 system_aide 封禁文案，需终止直播
+ * - ended：action 118 结算 / system_aide 断开直播，需终止直播
+ * - system：其他 system_aide 系统提示
+ */
+export interface LiveImSystemEvent {
+  kind: 'warning' | 'forbidden' | 'ended' | 'system';
+  reason: string;
+  /** 是否必须终止直播 / 退出直播间 */
+  stop: boolean;
 }
 
 /**
@@ -37,8 +87,27 @@ let currentGroupId = '';
 let lastRoomId = '';
 let boundChat: any = null;
 let memberListUnsupported = false;
+/** 收到过 action 101/102 的权威观众列表后，不再用群成员列表覆盖（两者顺序/成员不同，切换会闪） */
+let audienceFromMessage = false;
 const messageListeners = new Set<(message: LiveImMessage) => void>();
 const memberListeners = new Set<(members: LiveImMember[]) => void>();
+const giftListeners = new Set<(gift: LiveImGift) => void>();
+const settleListeners = new Set<(stats: LiveSettleStats) => void>();
+const systemListeners = new Set<(event: LiveImSystemEvent) => void>();
+
+/** 进房提示去重：同一个人在该时间窗内只提示一次（action 101 与群系统通知会重复推送） */
+const JOIN_NOTICE_DEDUPE_MS = 10000;
+const recentJoinNotices = new Map<string, number>();
+
+function shouldEmitJoinNotice(key: string): boolean {
+  const now = Date.now();
+  const last = recentJoinNotices.get(key) || 0;
+  if (now - last < JOIN_NOTICE_DEDUPE_MS) {
+    return false;
+  }
+  recentJoinNotices.set(key, now);
+  return true;
+}
 
 function getEngine(): any {
   return TUIChatEngine as any;
@@ -58,14 +127,63 @@ function emitMembers(members: LiveImMember[]): void {
   memberListeners.forEach((listener) => listener(members));
 }
 
-function toMessage(raw: any, text: string): LiveImMessage {
+function emitMessage(message: LiveImMessage): void {
+  messageListeners.forEach((listener) => listener(message));
+}
+
+function emitGift(gift: LiveImGift): void {
+  giftListeners.forEach((listener) => listener(gift));
+}
+
+function emitSystem(event: LiveImSystemEvent): void {
+  console.log('[NikoIM] system event:', event.kind, event.reason);
+  systemListeners.forEach((listener) => listener(event));
+}
+
+/** 消息年龄（秒），对齐全网 web-obs-live 的 30 秒过期过滤 */
+function messageAge(raw: any): number {
+  return Math.floor(Date.now() / 1000) - Number(raw?.time || 0);
+}
+
+function uniqueId(raw: any): string {
+  return String(raw?.ID || raw?.id || `${Date.now()}-${Math.random()}`);
+}
+
+function messageTime(raw: any): number {
+  return Number(raw?.time || 0) * 1000 || Date.now();
+}
+
+function toMessage(raw: any, text: string, kind: LiveImMessage['kind'] = 'chat'): LiveImMessage {
   return {
-    id: String(raw.ID || raw.id || `${Date.now()}-${Math.random()}`),
-    fromUserId: String(raw.from || ''),
-    nickname: String(raw.nick || raw.from || ''),
-    avatar: String(raw.avatar || ''),
+    id: uniqueId(raw),
+    kind,
+    fromUserId: String(raw?.from || ''),
+    nickname: String(raw?.nick || raw?.from || ''),
+    avatar: resolveImageUrl(String(raw?.avatar || '')),
     text,
-    time: Number(raw.time || 0) * 1000 || Date.now(),
+    time: messageTime(raw),
+    extra: buildExtra(raw?.message_data),
+  };
+}
+
+/**
+ * 解析等级牌/勋章/身份角标。
+ * 对齐 H5 niko/im 的 normalizeMessage：等级图标优先 card → gif → 普通 icon。
+ */
+function buildExtra(data: any): LiveImMessage['extra'] {
+  if (!data) {
+    return {};
+  }
+  const levelInfo = data.user_level_info || {};
+  const medalInfo = data.adorn?.medal_info || {};
+  return {
+    levelColor: String(levelInfo.level_color || ''),
+    levelCardIcon: String(levelInfo.level_card_icon || levelInfo.level_gif_icon || levelInfo.level_icon || ''),
+    medalImage: String(medalInfo.medal_image || ''),
+    isManager: !!data.is_manager,
+    isSuper: !!data.is_super,
+    isAnchor: !!data.is_anchor,
+    isMystery: !!data.is_mystery,
   };
 }
 
@@ -78,68 +196,231 @@ function applyAudienceInfo(custom: any): boolean {
   if (!messageData) {
     return false;
   }
-  const audienceInfo = messageData.audience_info || messageData.join_audience?.audience_info;
+  const audienceInfo = messageData.audience_info;
   if (!audienceInfo) {
     return false;
   }
   const list: any[] = Array.isArray(audienceInfo.audience_list)
     ? audienceInfo.audience_list
     : [];
+  audienceFromMessage = true;
   emitMembers(list.map((item) => ({
     userId: String(item.user_id ?? item.userId ?? ''),
     nickname: String(item.nickname || item.user_id || ''),
-    avatar: String(item.avatar || ''),
+    avatar: resolveImageUrl(String(item.avatar || '')),
   })));
   return true;
 }
 
+/** 处理进房提示：PC 端会额外插入一条「XXX 来了」聊天记录 */
+function handleJoinNotice(custom: any, raw: any): void {
+  const joinInfo = custom?.message_data?.join_audience;
+  const audienceInfo = joinInfo?.show_audience_info || custom?.message_data?.audience_info;
+  const nickname = String(audienceInfo?.nickname || audienceInfo?.user_id || '');
+  if (!nickname) {
+    return;
+  }
+  // 自己进群时 action 101 与 TIM 群系统通知（type=5）会各推一条，按人去重避免重复提示
+  if (!shouldEmitJoinNotice(String(audienceInfo?.user_id || nickname))) {
+    return;
+  }
+  emitMessage({
+    id: `join-${uniqueId(raw)}`,
+    kind: 'join',
+    fromUserId: String(audienceInfo?.user_id || ''),
+    nickname,
+    avatar: resolveImageUrl(String(audienceInfo?.avatar || '')),
+    text: '来了',
+    time: messageTime(raw),
+  });
+}
+
+/** 处理聊天弹幕（message_action 103） */
+function handleChatMessage(custom: any, raw: any): void {
+  const data = custom?.message_data || {};
+  const text = String(custom?.message_text || custom?.content || '');
+  if (!text) {
+    return;
+  }
+  emitMessage({
+    id: uniqueId(raw),
+    kind: 'chat',
+    fromUserId: String(data.user_id || raw?.from || ''),
+    nickname: String(data.nickname || data.user_id || raw?.nick || ''),
+    avatar: resolveImageUrl(String(data.avatar || raw?.avatar || '')),
+    text,
+    time: messageTime(raw),
+    extra: buildExtra(data),
+  });
+}
+
+/** 处理礼物消息（message_action 104）：弹幕一条 + 触发礼物特效 */
+function handleGiftMessage(custom: any, raw: any): void {
+  const data = custom?.message_data || {};
+  const giftInfo = data.gift_info || {};
+  const gift: LiveImGift = {
+    giftId: String(giftInfo.gift_id || ''),
+    giftName: String(giftInfo.gift_name || '礼物'),
+    giftCount: Number(giftInfo.gift_count || 1),
+    giftIcon: resolveImageUrl(String(giftInfo.gift_icon || giftInfo.gift_gif_icon || '')),
+    effectUrl: resolveImageUrl(String(giftInfo.effect_url || giftInfo.gift_url || '')),
+    configUrl: resolveImageUrl(String(giftInfo.gift_url_config || '')),
+    nickname: String(data.nickname || '').trim() || '用户',
+    avatar: resolveImageUrl(String(data.avatar || raw?.avatar || '')),
+    userId: String(data.user_id || ''),
+  };
+  emitMessage({
+    id: uniqueId(raw),
+    kind: 'gift',
+    fromUserId: gift.userId,
+    nickname: gift.nickname,
+    avatar: gift.avatar,
+    text: `${gift.giftName} x${gift.giftCount}`,
+    time: messageTime(raw),
+    gift,
+    extra: buildExtra(data),
+  });
+  emitGift(gift);
+}
+
+function handleCustomMessage(custom: any, raw: any): void {
+  const action = Number(custom?.message_action);
+
+  // 进房/离开（101/102）：同步观众列表，101 额外插入「来了」提示
+  if (action === 101) {
+    applyAudienceInfo(custom);
+    handleJoinNotice(custom, raw);
+    return;
+  }
+  if (action === 102) {
+    applyAudienceInfo(custom);
+    return;
+  }
+  // 聊天弹幕
+  if (action === 103) {
+    handleChatMessage(custom, raw);
+    return;
+  }
+  // 礼物
+  if (action === 104) {
+    handleGiftMessage(custom, raw);
+    return;
+  }
+  // 1001 飘屏弹幕：按普通聊天展示
+  if (action === 1001) {
+    const data = custom?.message_data || {};
+    const text = String(custom?.message_text || custom?.content || '');
+    if (text) {
+      emitMessage({
+        id: uniqueId(raw),
+        kind: 'chat',
+        fromUserId: String(data.user_id || raw?.from || ''),
+        nickname: String(data.nickname || raw?.nick || ''),
+        avatar: resolveImageUrl(String(data.avatar || '')),
+        text,
+        time: messageTime(raw),
+      });
+    }
+    return;
+  }
+  // 直播结算（对齐 web-obs-live：message_action 118 携带本场数据）
+  if (action === 118) {
+    if (messageAge(raw) > 30) {
+      console.log('[NikoIM] ignore expired settlement message:', messageAge(raw), 's');
+      return;
+    }
+    const data = custom?.message_data || {};
+    const stats: LiveSettleStats = {
+      liveDuration: String(data.live_duration ?? ''),
+      audienceCount: Number(data.audience_count ?? 0),
+      newFansCount: Number(data.new_fans_count ?? 0),
+      raw: data,
+    };
+    console.log('[NikoIM] settlement received:', stats);
+    settleListeners.forEach((listener) => listener(stats));
+    emitSystem({ kind: 'ended', reason: '直播已结束', stop: true });
+    return;
+  }
+  // 警告 / 禁播 / 封禁（对齐 web-obs-live：message_action 53）
+  if (action === 53) {
+    const data = custom?.message_data || {};
+    if (messageAge(raw) > 30) {
+      console.log('[NikoIM] ignore expired action 53 message:', messageAge(raw), 's');
+      return;
+    }
+    const reason = String(data.reason || '');
+    const operateType = Number(data.operate_type ?? 0);
+    if (operateType === 0) {
+      emitSystem({ kind: 'warning', reason, stop: false });
+    } else {
+      // operate_type=1：禁用/封禁，必须终止直播
+      emitSystem({ kind: 'forbidden', reason, stop: true });
+    }
+    return;
+  }
+  // 其他系统动作不展示，避免刷屏
+}
+
+/** 从文本/自定义消息中解析出后端下发的 JSON 动作体 */
+function parseCustomMessage(raw: any): any {
+  if (raw?.type === 'TIMCustomElem') {
+    const data = raw.payload?.data;
+    if (!data) {
+      return null;
+    }
+    try {
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    } catch (error) {
+      return null;
+    }
+  }
+  if (raw?.type === 'TIMTextElem') {
+    const text = String(raw.payload?.text || '');
+    if (text.startsWith('{') && text.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.message_action === 'number') {
+          return parsed;
+        }
+      } catch (error) {
+        // 普通文本，交给后续文本分支
+      }
+    }
+  }
+  return null;
+}
+
 function handleRawMessage(raw: any): void {
-  if (currentGroupId && raw?.to && String(raw.to) !== currentGroupId) {
+  // 系统助手 C2C 消息（下播 / 封禁通知），to 为用户自身，必须在群过滤之前处理
+  if (raw?.type === 'TIMTextElem' && String(raw?.from || '') === 'system_aide') {
+    const text = String(raw?.payload?.text || '');
+    if (text && messageAge(raw) <= 30) {
+      const stop = text.includes('断开直播') || text.includes('封禁');
+      emitSystem({
+        kind: stop ? 'forbidden' : 'system',
+        reason: text,
+        stop,
+      });
+    }
+    return;
+  }
+
+  // 对齐 H5 niko/im：自定义消息（进房/聊天/礼物/系统动作）先处理，
+  // 不再按 raw.to 过滤，避免群 ID 与后端 room_id 写法不一致时整批消息被丢掉
+  const custom = parseCustomMessage(raw);
+  if (custom) {
+    handleCustomMessage(custom, raw);
     return;
   }
 
   if (raw?.type === 'TIMTextElem') {
-    const text = String(raw.payload?.text || '');
-    if (!text) {
+    // 只有普通文本需要确认来自当前直播群
+    if (currentGroupId && raw?.to && String(raw.to) !== currentGroupId) {
       return;
     }
-    // 后端也会把结构化事件（进房、飘屏等）以 JSON 文本下发
-    if (text.startsWith('{') && text.endsWith('}')) {
-      try {
-        const custom = JSON.parse(text);
-        if (custom?.message_action === 101 && applyAudienceInfo(custom)) {
-          return;
-        }
-        if (typeof custom?.message_action === 'number') {
-          return;
-        }
-      } catch (error) {
-        // 普通文本，继续按文本处理
-      }
-    }
-    messageListeners.forEach((listener) => listener(toMessage(raw, text)));
-    return;
-  }
-
-  if (raw?.type === 'TIMCustomElem') {
-    const data = raw.payload?.data;
-    if (!data) {
-      return;
-    }
-    let custom: any = null;
-    try {
-      custom = typeof data === 'string' ? JSON.parse(data) : data;
-    } catch (error) {
-      return;
-    }
-    // 进房消息：同步在线观众列表（与 web-obs-live 一致）
-    if (custom?.message_action === 101 && applyAudienceInfo(custom)) {
-      return;
-    }
-    // 其余系统/礼物类消息：能取到文案就展示
-    const text = custom?.content || custom?.text || custom?.msg || custom?.message_text || '';
+    const text = String(raw?.payload?.text || '');
     if (text) {
-      messageListeners.forEach((listener) => listener(toMessage(raw, String(text))));
+      emitMessage(toMessage(raw, text));
     }
     return;
   }
@@ -162,7 +443,63 @@ function bindListeners(chat: any): void {
   }
   chat.on(EVENT_MESSAGE_RECEIVED, (event: any) => {
     const list: any[] = Array.isArray(event?.data) ? event.data : [];
-    list.forEach(handleRawMessage);
+    list.forEach((raw) => {
+      // 便于排查「消息到了但没渲染」：打印消息类型与动作
+      try {
+        const payload = raw?.payload;
+        const text = payload?.text;
+        let action = '';
+        if (payload?.data) {
+          const parsed = typeof payload.data === 'string' ? JSON.parse(payload.data) : payload.data;
+          action = String(parsed?.message_action ?? '');
+        } else if (typeof text === 'string' && text.startsWith('{')) {
+          action = String(JSON.parse(text)?.message_action ?? '');
+        }
+        console.log('[NikoIM] message received:', raw?.type, 'action:', action || '-', 'to:', raw?.to);
+      } catch (error) {
+        // 日志失败不影响主流程
+      }
+      handleRawMessage(raw);
+    });
+  });
+
+  // 群系统通知兜底：后端未下发 action 101 时，TIM 仍会推送「新成员入群」通知
+  chat.on('onGroupSystemNoticeReceived', (notice: any) => {
+    const info = notice?.data || notice || {};
+    const type = Number(info?.type ?? notice?.type ?? 0);
+    const nickname = String(
+      info?.nick
+      || info?.operatorInfo?.nick
+      || info?.memberInfo?.nick
+      || info?.payload?.nick
+      || '',
+    );
+    console.log('[NikoIM] group system notice:', type, nickname);
+    // 5=新成员入群 6=成员退群（TIMGroupSystemNoticeType）
+    // 入群提示与 action 101 的 join_audience 去重，避免同一个人提示两次
+    if (type === 5 && nickname && shouldEmitJoinNotice(nickname)) {
+      emitMessage({
+        id: `system-${Date.now()}-${Math.random()}`,
+        kind: 'join',
+        fromUserId: '',
+        nickname,
+        avatar: '',
+        text: '来了',
+        time: Date.now(),
+      });
+      return;
+    }
+    if (type === 6 && nickname) {
+      emitMessage({
+        id: `system-${Date.now()}-${Math.random()}`,
+        kind: 'system',
+        fromUserId: '',
+        nickname,
+        avatar: '',
+        text: '离开了直播间',
+        time: Date.now(),
+      });
+    }
   });
 }
 
@@ -172,9 +509,21 @@ async function doJoinGroup(roomId: string): Promise<void> {
     groupID: roomId,
     type: GROUP_TYPE_AV_CHAT_ROOM,
   });
-  const status = res?.data?.status ?? res?.status;
+  // 不同版本 SDK 返回结构不一致：
+  // - Web / LiteChat：{ data: { status: 0|1 } }
+  // - Electron TUIKit：返回里没有 status，只在日志里带 joinedStatus
+  // 因此只有「明确拿到非 0/1 的状态」或「明确的错误码」时才判定加群失败。
+  const rawStatus = res?.data?.status ?? res?.status;
+  const status = Number(rawStatus);
+  if (rawStatus != null && Number.isFinite(status) && status !== 0 && status !== 1) {
+    throw new Error(`加入聊天室失败(status=${status})`);
+  }
+  const code = Number(res?.data?.code ?? res?.code ?? 0);
+  if (code !== 0) {
+    throw new Error(res?.data?.message || res?.message || `加入聊天室失败(code=${code})`);
+  }
   currentGroupId = roomId;
-  console.log('[NikoIM] joined group:', roomId, 'status:', status);
+  console.log('[NikoIM] joined group:', roomId, 'status:', rawStatus ?? 'unknown');
 }
 
 /** 加入直播 IM 群（群 ID = 后端 room_id），复用 TUIKit 已建立的登录态 */
@@ -194,6 +543,7 @@ export async function joinLiveChat(roomId: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await doJoinGroup(roomId);
   }
+  console.log('[NikoIM] chat ready, listening messages on group:', currentGroupId);
   await refreshMembers();
 }
 
@@ -212,6 +562,9 @@ export async function leaveLiveChat(): Promise<void> {
   }
   currentGroupId = '';
   lastRoomId = '';
+  audienceFromMessage = false;
+  // 退出直播间后清空进房提示去重记录，下次进房能正常提示
+  recentJoinNotices.clear();
 }
 
 /**
@@ -235,6 +588,10 @@ export async function refreshMembers(): Promise<void> {
   if (memberListUnsupported) {
     return;
   }
+  // 已有 action 101 下发的权威观众列表时，群成员列表会引入差异（缺主播/顺序不同）导致闪烁
+  if (audienceFromMessage) {
+    return;
+  }
   try {
     const res = await getChat().getGroupMemberList({
       groupID: currentGroupId,
@@ -244,7 +601,7 @@ export async function refreshMembers(): Promise<void> {
     const members: LiveImMember[] = (res?.memberList || res?.data?.memberList || []).map((item: any) => ({
       userId: String(item.userID || ''),
       nickname: String(item.nick || item.userID || ''),
-      avatar: String(item.avatar || ''),
+      avatar: resolveImageUrl(String(item.avatar || '')),
     }));
     emitMembers(members);
   } catch (error: any) {
@@ -261,6 +618,24 @@ export function onLiveImMessage(listener: (message: LiveImMessage) => void): () 
 export function onLiveImMembers(listener: (members: LiveImMember[]) => void): () => void {
   memberListeners.add(listener);
   return () => memberListeners.delete(listener);
+}
+
+/** 礼物消息订阅（用于播放礼物特效），返回取消订阅函数 */
+export function onLiveImGift(listener: (gift: LiveImGift) => void): () => void {
+  giftListeners.add(listener);
+  return () => giftListeners.delete(listener);
+}
+
+/** 直播间系统事件订阅（下播 / 禁播 / 封禁 / 警告） */
+export function onLiveImSystem(listener: (event: LiveImSystemEvent) => void): () => void {
+  systemListeners.add(listener);
+  return () => systemListeners.delete(listener);
+}
+
+/** 直播结算订阅（关播后展示结算面板），返回取消订阅函数 */
+export function onLiveImSettle(listener: (stats: LiveSettleStats) => void): () => void {
+  settleListeners.add(listener);
+  return () => settleListeners.delete(listener);
 }
 
 export function isLiveChatConnected(): boolean {

@@ -24,7 +24,7 @@ async function init(userInfo: Record<string, any>) {
     window.ipcRenderer.send('openTUILiveKit', {
       userInfo
     });
-    router.push('/tui-live-kit-main');
+    router.push({ name: 'anchor-list' });
   }
 }
 

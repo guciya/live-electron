@@ -3,7 +3,7 @@
     <AudioIcon
       :size="16"
       :audio-volume="currentMicVolume"
-      :is-muted="microphoneStatus === DeviceStatus.Off"
+      :is-muted="micMuted"
       @click="switchMicrophoneStatus"
     />
     <TUISlider
@@ -19,42 +19,59 @@
 
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
-import { TUISlider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
-import { showMessage, MessageToastType } from '../base-component/MessageToast';
-import { DeviceError, DeviceStatus, useDeviceState, useLiveListState } from 'tuikit-atomicx-vue3-electron';
+import { TUISlider } from '@tencentcloud/uikit-base-component-vue3';
+import { useDeviceState } from 'tuikit-atomicx-vue3-electron';
 import AudioIcon from '../base-component/AudioIcon.vue';
-
-const { t } = useUIKit();
 
 const {
   captureVolume,
   setCaptureVolume,
-  microphoneStatus,
   muteLocalAudio,
   unmuteLocalAudio,
-  microphoneLastError,
   currentMicVolume,
 } = useDeviceState();
-const { currentLive } = useLiveListState();
 
 const DEFAULT_VOLUME = 100;
-const microphoneVolume = ref(captureVolume.value);
-const microphoneVolumeBeforeMute = ref(captureVolume.value);
+const microphoneVolume = ref(captureVolume.value || DEFAULT_VOLUME);
+const microphoneVolumeBeforeMute = ref(DEFAULT_VOLUME);
+/**
+ * 原生 TRTC 进房不会触发 TUIKit 房间事件，microphoneStatus 永远停留在 Off，
+ * 图标一直显示静音、点击也没有反应；这里改为本地状态驱动（开播时已调用 openLocalMicrophone）。
+ */
+const micMuted = ref(false);
 
-// To ensure that when the initial microphone is in the off state, the capture volume is also 0, which is consistent on the ui
-setCaptureVolume(0);
+const switchMicrophoneStatus = async () => {
+  try {
+    if (micMuted.value) {
+      await unmuteLocalAudio();
+      const volumeToRestore = microphoneVolumeBeforeMute.value || DEFAULT_VOLUME;
+      microphoneVolume.value = volumeToRestore;
+      await setCaptureVolume(volumeToRestore);
+      micMuted.value = false;
+    } else {
+      microphoneVolumeBeforeMute.value = microphoneVolume.value || DEFAULT_VOLUME;
+      await muteLocalAudio();
+      await setCaptureVolume(0);
+      micMuted.value = true;
+    }
+  } catch (error) {
+    console.warn('[MicVolumeSetting] switch microphone failed:', error);
+  }
+};
 
 const handleMicrophoneVolumeChange = async (value: number) => {
   if (value !== captureVolume.value) {
     await setCaptureVolume(value);
   }
 
-  if (value === 0 && microphoneStatus.value === DeviceStatus.On) {
+  if (value === 0 && !micMuted.value) {
     await muteLocalAudio();
+    micMuted.value = true;
   }
 
-  if (value > 0 && microphoneStatus.value === DeviceStatus.Off) {
+  if (value > 0 && micMuted.value) {
     await unmuteLocalAudio();
+    micMuted.value = false;
   }
 };
 
@@ -64,59 +81,8 @@ const saveMicrophoneVolumeBeforeMute = () => {
   }
 };
 
-const switchMicrophoneStatus = () => {
-  if (microphoneLastError.value !== DeviceError.NoError) {
-    switch (microphoneLastError.value) {
-    case DeviceError.NoDeviceDetected:
-      showMessage({
-        type: MessageToastType.Error,
-        message: t('No device detected'),
-      });
-      break;
-    case DeviceError.NoSystemPermission:
-      showMessage({
-        type: MessageToastType.Error,
-        message: t('No system permission'),
-      });
-      break;
-    case DeviceError.NotSupportCapture:
-      showMessage({
-        type: MessageToastType.Error,
-        message: t('Not support capture'),
-      });
-      break;
-    default:
-      break;
-    }
-  }
-  if (microphoneStatus.value === DeviceStatus.On) {
-    microphoneVolumeBeforeMute.value = microphoneVolume.value || DEFAULT_VOLUME;
-    setCaptureVolume(0);
-    muteLocalAudio();
-  } else {
-    const volumeToRestore = microphoneVolumeBeforeMute.value || DEFAULT_VOLUME;
-    setCaptureVolume(volumeToRestore);
-    unmuteLocalAudio();
-  }
-};
-
 watch(captureVolume, (newVal) => {
   microphoneVolume.value = newVal;
-});
-
-watch(() => currentLive.value?.liveId, (newVal) => {
-  if (newVal) {
-    if (microphoneVolumeBeforeMute.value === 0) {
-      setCaptureVolume(DEFAULT_VOLUME);
-      return;
-    }
-    setCaptureVolume(microphoneVolumeBeforeMute.value);
-  } else {
-    microphoneVolumeBeforeMute.value = microphoneVolume.value;
-    setCaptureVolume(0);
-  }
-}, {
-  immediate: true,
 });
 </script>
 

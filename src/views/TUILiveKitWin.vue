@@ -38,16 +38,35 @@
               v-show="isToolsExpanded"
               class="main-left-bottom-tools"
             >
-              <CoGuestButton :isShowingInChildWindow="true" />
-              <CoHostButton :isShowingInChildWindow="true" />
-              <TUIButton
-                class="pk-button"
-                :type="currentBattleInfo?.battleId ? 'danger' : 'primary'"
+              <!-- 连麦 / PK 均走后端「查询开播主播」列表，对齐 web-obs-live / H5 逻辑 -->
+              <button
+                class="niko-tool-btn"
+                type="button"
+                :disabled="!isInLive || loading"
+                @click="openLinkMicDialog"
+              >
+                <svg class="niko-tool-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M10.2 10.2l3.6 3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <span class="niko-tool-label">连麦</span>
+              </button>
+              <button
+                class="niko-tool-btn"
+                type="button"
+                :class="{ 'is-pk-active': !!currentBattleInfo?.battleId }"
                 :disabled="!isInLive || loading"
                 @click="handlePkClick"
               >
-                {{ currentBattleInfo?.battleId ? t('End PK') : t('PK') }}
-              </TUIButton>
+                <svg class="niko-tool-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6.4 3.6l4.2 4.2-2.6 2.6L3.8 6.2z" fill="currentColor" opacity=".9" />
+                  <path d="M17.6 3.6l4.2 4.2-2.6 2.6-4.2-4.2z" fill="currentColor" opacity=".9" />
+                  <path d="M8 16l6-6M10 19l6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+                  <path d="M4.2 16.2l3.6 3.6M16.2 16.2l3.6 3.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+                </svg>
+                <span class="niko-tool-label">{{ currentBattleInfo?.battleId ? '结束PK' : 'PK' }}</span>
+              </button>
               <MusicButton :isShowingInChildWindow="true" />
             </div>
           </div>
@@ -74,7 +93,7 @@
               {{ displayAudienceCount }} {{ t('People watching') }}
             </div>
           </div>
-          <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
+          <div ref="mainCenterCenterRef" class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
             <div v-if="currentBattleInfo?.battleId" class="pk-overlay">
               <div class="pk-bar">
                 <div class="pk-side pk-left">
@@ -90,7 +109,7 @@
               </div>
             </div>
             <StreamMixer
-              v-if="nativeId !== null && !isGoingToLoginPage"
+              v-if="nativeId !== null && !isGoingToLoginPage && mixerActive"
               :windowId="nativeId"
               @on-user-on-seat-info-changed="onUserOnSeatInfoChanged"
               @on-stream-layout-changed="onStreamLayoutChanged"
@@ -149,7 +168,11 @@
                 ({{ displayAudienceCount }})
               </div>
             </div>
-            <LiveAudiencePanel height="calc(100% - 40px)" @count-change="onAudienceCountChange" />
+            <LiveAudiencePanel
+              height="calc(100% - 40px)"
+              :live-index-id="pendingPreLiveId"
+              @count-change="onAudienceCountChange"
+            />
           </div>
           <div class="main-right-bottom">
             <div class="main-right-bottom-header">
@@ -162,15 +185,58 @@
                 :room-id="nikoRoomId"
                 :live-index-id="pendingPreLiveId"
                 :disabled="!isInLive"
+                @user-click="handleUserClick"
               />
             </div>
           </div>
         </div>
         <LivePusherNotification />
+        <!-- 点击聊天室用户名称/等级弹出的用户信息卡片 -->
+        <UserInfoCard
+          :visible="userCardVisible"
+          :info="userCardInfo"
+          :loading="userCardLoading"
+          @close="userCardVisible = false"
+        />
         <PreLiveDialog
           v-model:visible="showPreLiveDialog"
           @confirm="onPreLiveConfirm"
         />
+        <PkInviteDialog
+          v-model:visible="showPkDialog"
+          :title="pkDialogTitle"
+          :pk-id="currentPkId"
+          @invited="onPkInvited"
+        />
+
+        <!-- 关播结算（对齐 web-obs-live 的结算层） -->
+        <div v-if="settleStats" class="niko-settle-mask">
+          <div class="niko-settle-card">
+            <div class="niko-settle-header">直播已结束</div>
+            <div class="niko-settle-hero">
+              <div class="niko-settle-hero-value">{{ settleStats.kTicket }}</div>
+              <div class="niko-settle-hero-label">本场K票</div>
+            </div>
+            <div class="niko-settle-row">
+              <div class="niko-settle-item">
+                <div class="niko-settle-item-value">{{ settleStats.liveDuration }}</div>
+                <div class="niko-settle-item-label">直播时长</div>
+              </div>
+              <div class="niko-settle-item">
+                <div class="niko-settle-item-value">{{ settleStats.audienceCount }}</div>
+                <div class="niko-settle-item-label">观看人数</div>
+              </div>
+              <div class="niko-settle-item">
+                <div class="niko-settle-item-value">{{ settleStats.newFansCount }}</div>
+                <div class="niko-settle-item-label">新增粉丝</div>
+              </div>
+            </div>
+            <div class="niko-settle-footer">
+              <TUIButton type="primary" @click="handleRestartLive">重新开播</TUIButton>
+              <TUIButton color="gray" @click="settleStats = null">关闭</TUIButton>
+            </div>
+          </div>
+        </div>
       </div>
       </template>
     </div>
@@ -221,12 +287,21 @@ import LiveHeader from '../TUILiveKit/components/LiveHeader/index.vue';
 import LiveScenePanel from '../TUILiveKit/components/LiveScenePanel/index.vue';
 import LiveSettingButton from '../TUILiveKit/components/LiveSettingButton.vue';
 import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
-import CoGuestButton from '../TUILiveKit/components/CoGuestButton.vue';
-import CoHostButton from '../TUILiveKit/components/CoHostButton.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
+import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import LiveAudiencePanel from '../niko/components/LiveAudiencePanel.vue';
-import { leaveLiveChat } from '../niko/im/liveIm';
+import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
+import {
+  joinLiveChat,
+  leaveLiveChat,
+  onLiveImGift,
+  onLiveImSettle,
+  onLiveImSystem,
+  type LiveImGift,
+  type LiveImSystemEvent,
+  type LiveSettleStats,
+} from '../niko/im/liveIm';
 import {
   isNetworkOffline,
   isNetworkTimeoutError,
@@ -257,12 +332,14 @@ import useRoomEngine from '../TUILiveKit/utils/useRoomEngine';
 import { mapToRoomEngineLanguage } from '../TUILiveKit/utils/common';
 import { LIVE_NAME_MAX_UTF8_BYTES } from '../TUILiveKit/constants/tuiConstant';
 import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
-import { stopLive as nikoStopLive } from '../niko/api/live';
-import type { PrepareLiveResult } from '../niko/api/live';
+import { stopLive as nikoStopLive, getAudienceCardInfo } from '../niko/api/live';
+import type { AudienceCardInfo, PrepareLiveResult } from '../niko/api/live';
 
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
 const nativeId = ref<number | Uint8Array | null>(null);
+/** 是否挂载 StreamMixer（原生视频预览窗口）。关播后置 false 销毁原生窗口，否则它会一直盖在 DOM 上方 */
+const mixerActive = ref(true);
 
 const router = useRouter();
 const { loginUserInfo } = useLoginState();
@@ -312,6 +389,12 @@ const pkProgressPercent = computed(() => {
 });
 const pkCountdown = ref(0);
 let pkTimer: ReturnType<typeof setInterval> | null = null;
+let unsubscribeSettle: (() => void) | null = null;
+let unsubscribeSystem: (() => void) | null = null;
+let unsubscribeGift: (() => void) | null = null;
+/** 禁播/封禁/下播提示弹窗的 dialogId，用于区分普通「结束直播」确认框 */
+let liveStopDialogId = '';
+let liveStopNoticePending = false;
 const startPkCountdown = (seconds: number) => {
   pkCountdown.value = seconds;
   if (pkTimer) clearInterval(pkTimer);
@@ -344,19 +427,33 @@ const handlePkClick = async () => {
     }
     return;
   }
-  // 发起 PK：输入目标主播 userId
-  const targetId = window.prompt(t('Enter target anchor userId for PK'));
-  if (!targetId) return;
-  try {
-    await requestBattle({
-      config: { duration: 300, needResponse: true, extensionInfo: '' },
-      userIdList: [targetId],
-      timeout: 30,
-    });
-    showMessage({ type: MessageToastType.Success, message: t('PK invitation sent') });
-  } catch (e: any) {
-    showMessage({ type: MessageToastType.Error, message: e?.message || t('Failed to start PK') });
+  // 对齐 web-obs-live / H5：先查「正在开播的主播」列表再发邀请，
+  // 不再直接调用 TUIKit requestBattle（当前 SDKAppID 未开通 RoomKit，会报 100007）。
+  pkDialogTitle.value = 'PK';
+  showPkDialog.value = true;
+};
+
+/** 连麦入口：同样走「查询开播主播」列表 */
+const openLinkMicDialog = () => {
+  if (!isInLive.value || loading.value) {
+    return;
   }
+  pkDialogTitle.value = '连麦';
+  showPkDialog.value = true;
+};
+
+const onPkInvited = (anchorId: string) => {
+  console.log('[NikoPK] invitation sent, anchorId:', anchorId);
+  showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
+};
+
+/** 关闭结算面板后回到预开播弹窗，实现「重新开播」 */
+const handleRestartLive = () => {
+  settleStats.value = null;
+  // 结算层「重新开播」：先恢复原生预览窗口挂载，再预热摄像头
+  mixerActive.value = true;
+  void ensureDefaultCamera();
+  showPreLiveDialog.value = true;
 };
 // 当前 SDKAppID 未开通直播房间套餐，使用 Conference 类型进房，手动维护直播状态
 const nikoIsLive = ref(false);
@@ -367,13 +464,91 @@ const loginReady = ref(false);
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
 const pendingPreLiveId = ref<string>('');
-// TRTC 房间号 / IM 群 ID（= 后端 room_id）
+/** 连麦/PK 主播列表弹窗（对齐 web-obs-live：先查开播主播再邀请） */
+const showPkDialog = ref(false);
+const pkDialogTitle = ref('PK');
+const currentPkId = computed(() => String((currentBattleInfo.value as any)?.pkId || ''));
+/** 本场开播时间，用于结算面板计算直播时长 */
+const liveStartedAt = ref(0);
+/** 本场峰值在线人数 */
+const peakAudienceCount = ref(0);
+/** 关播结算数据；非空时展示结算层 */
+const settleStats = ref<{
+  kTicket: string;
+  liveDuration: string;
+  audienceCount: number;
+  newFansCount: number;
+} | null>(null);
+// IM 群组 ID（= 后端 room_id，与 TRTC 房间号 live_index_id 不同）
 const nikoRoomId = ref<string>('');
 // 在线人数来自 IM 群成员（TUIRoomEngine 房间不可用，TUIKit 的 audienceCount 恒为 0）
 const nikoAudienceCount = ref(0);
+/** 聊天室点击用户名称/等级弹出的用户信息卡片 */
+const userCardVisible = ref(false);
+const userCardLoading = ref(false);
+const userCardInfo = ref<AudienceCardInfo | null>(null);
+
+/** 视频预览区域（用于定位透明礼物覆盖窗口） */
+const mainCenterCenterRef = ref<HTMLElement | null>(null);
+
+/**
+ * 礼物特效必须显示在原生视频之上：
+ * StreamMixer 通过 TRTC SDK 创建了独立原生窗口，DOM 层永远被它盖住，
+ * 所以把礼物转发给主进程的透明覆盖窗口播放。
+ */
+const handleLiveGift = (gift: LiveImGift) => {
+  if (!isInLive.value) {
+    return;
+  }
+  const el = mainCenterCenterRef.value;
+  if (!el) {
+    return;
+  }
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return;
+  }
+  window.ipcRenderer?.send('gift-overlay-play', {
+    bounds: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    gift,
+  });
+};
+
+const hideGiftOverlay = () => {
+  window.ipcRenderer?.send('gift-overlay-hide');
+};
+
+/** 对齐 web-obs-live ChatRoom.handleUserClick：按用户 + 直播场次拉取个人信息卡片 */
+const handleUserClick = async (payload: { userId: string; isMystery: boolean }) => {
+  const audienceUserId = String(payload?.userId || '');
+  if (!audienceUserId) {
+    return;
+  }
+  userCardVisible.value = true;
+  userCardLoading.value = true;
+  userCardInfo.value = { is_mystery: !!payload.isMystery, user_id: audienceUserId };
+  try {
+    const result = await getAudienceCardInfo({
+      audienceUserId,
+      liveIndexId: pendingPreLiveId.value || undefined,
+    });
+    const info = (result as any)?.audience_info || (result as any)?.data?.audience_info || null;
+    if (info) {
+      userCardInfo.value = { ...info, is_mystery: (info as any).is_mystery ?? payload.isMystery };
+    }
+  } catch (error: any) {
+    console.warn('[NikoLive] getAudienceCardInfo failed:', error?.message || error);
+  } finally {
+    userCardLoading.value = false;
+  }
+};
+
 const displayAudienceCount = computed(() => (nikoAudienceCount.value > 0 ? nikoAudienceCount.value : audienceCount.value));
 const onAudienceCountChange = (count: number) => {
   nikoAudienceCount.value = count;
+  if (count > peakAudienceCount.value) {
+    peakAudienceCount.value = count;
+  }
 };
 const isTransitioningToLogin = () => isGoingToLoginPage.value;
 // Dialog message follows the same priority as the Web LivePusherView
@@ -473,6 +648,8 @@ const handleStartLive = () => {
   // 摄像头预热改为在用户真正准备开播时触发：
   // 页面一进来就 addMediaSource 会产生 USB 摄像头 5s 超时、TIM 未就绪等大量报错，
   // 而用户可能根本不打算开播。放在这里既不误报，也能在填标题/封面期间完成预热。
+  // 关播后 StreamMixer 会被卸载，重新开播前先恢复挂载（原生预览窗口重新绑定）
+  mixerActive.value = true;
   void ensureDefaultCamera();
   showPreLiveDialog.value = true;
 };
@@ -516,9 +693,23 @@ const enterTrtcRoom = (roomId: string): Promise<number> => new Promise((resolve,
 
 const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string; coverUrl: string }) => {
   loading.value = true;
-  // TRTC 房间号用后端返回的 room_id；live_index_id 仅用于后端关播接口
-  const liveId = String(result.room_id || result.live_index_id);
-  pendingPreLiveId.value = String(result.live_index_id);
+  // 兜底：确保原生预览窗口已挂载（正常流程 handleStartLive / handleRestartLive 已置 true）
+  mixerActive.value = true;
+  // 对齐 H5 / web-obs-live：
+  //   TRTC 房间号 = live_index_id（后端/云端按它识别这路推流，用错会「当前未开播」）
+  //   IM 群组 ID = room_id
+  const trtcRoomId = result.live_index_id != null ? String(result.live_index_id) : '';
+  const imRoomId = String(result.room_id || result.live_index_id || '');
+  pendingPreLiveId.value = trtcRoomId;
+  console.log('[Niko] prepare live ids:', JSON.stringify({
+    liveIndexId: trtcRoomId,
+    imRoomId,
+  }));
+  if (!trtcRoomId) {
+    loading.value = false;
+    showMessage({ type: MessageToastType.Error, message: t('Failed to create live') });
+    return;
+  }
   liveParamsEditForm.value.liveName = result.liveTitle;
   liveParamsEditForm.value.coverUrl = result.coverUrl;
   try {
@@ -532,10 +723,11 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // please purchase roomkit first），kLive / kConference 均不可用，
     // 因此不再通过 TUIRoomEngine 建房，完全对齐 web-obs-live：
     // 原生 TRTC 以主播身份进房推流 + LiteChat 加入同 ID 的 IM 群（聊天室 / 在线观众）。
-    await enterTrtcRoom(liveId);
+    await enterTrtcRoom(trtcRoomId);
     // 进房成功后再赋值 roomId：LiveChatPanel 监听该值去登录 IM 并加群，
-    // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰
-    nikoRoomId.value = liveId;
+    // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰。
+    // 注意这里必须用后端 room_id（不是 TRTC 的 live_index_id）
+    nikoRoomId.value = imRoomId;
     // 开播前确保摄像头已加入混流，否则推出去的是黑屏
     await ensureDefaultCamera();
     // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
@@ -552,8 +744,19 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     } catch (publishErr: any) {
       console.warn('[Niko] mediaMixing startPublish failed:', publishErr?.message || publishErr);
     }
-    // 加入 IM 群由聊天面板在 roomId 变化时完成（对齐 web-obs-live 的 IM 监听）
+    // 显式加入 IM 聊天室：不能只依赖聊天面板的 roomId watch，
+    // 这里确认「点击开播」后真的进了群（后续消息/礼物都从该群下发）
+    try {
+      await joinLiveChat(imRoomId);
+      console.log('[Niko] IM chat joined:', imRoomId);
+    } catch (chatErr: any) {
+      console.warn('[Niko] joinLiveChat failed:', chatErr?.message || chatErr);
+    }
+    liveStopNoticePending = false;
     nikoIsLive.value = true;
+    liveStartedAt.value = Date.now();
+    peakAudienceCount.value = 0;
+    settleStats.value = null;
     loading.value = false;
     await openLocalMicrophone();
     startSystemAudioLoopbackSafely();
@@ -728,6 +931,18 @@ const onConfirmDialogAction = async (payload: ConfirmDialogActionPayload) => {
   }
 
   if (payload.scene === 'end-live') {
+    // 禁播 / 封禁 / 下播提示框：无论点「确定」还是直接关闭，都必须终止直播
+    if (liveStopDialogId && payload.dialogId === liveStopDialogId) {
+      liveStopDialogId = '';
+      ipcBridge.sendToConfirm(IPCMessageType.CLOSE_CONFIRM_DIALOG, {
+        scene: payload.scene,
+        dialogId: payload.dialogId,
+      });
+      if (!loading.value) {
+        await handleEndLive({ showErrorToast: false });
+      }
+      return;
+    }
     ipcBridge.sendToConfirm(IPCMessageType.CLOSE_CONFIRM_DIALOG, {
       scene: payload.scene,
       dialogId: payload.dialogId,
@@ -841,6 +1056,30 @@ const onApplyLiveTitle = (payload: ApplyLiveTitlePayload, from?: WindowType) => 
   pendingLiveSettingCoverUrl.value = '';
 };
 
+/** 秒数格式化为「xx分xx秒」（对齐 web-obs-live 结算层的展示方式） */
+const formatLiveDuration = (seconds: number): string => {
+  if (!seconds || seconds < 0) {
+    return '00:00';
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+};
+
+/** 后端 action 118 结算消息到达时覆盖本地估算值 */
+const applySettleStats = (stats: LiveSettleStats) => {
+  const raw = stats.raw || {};
+  const durationSeconds = Math.floor((Date.now() - liveStartedAt.value) / 1000);
+  settleStats.value = {
+    kTicket: String(raw.kticket ?? raw.k_ticket ?? raw.ticket_count ?? '0'),
+    liveDuration: stats.liveDuration || formatLiveDuration(durationSeconds),
+    audienceCount: Number(stats.audienceCount) || peakAudienceCount.value,
+    newFansCount: Number(stats.newFansCount) || 0,
+  };
+};
+
 const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promise<boolean> => {
   const { showErrorToast = true } = options;
   try {
@@ -898,6 +1137,25 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
     nikoRoomId.value = '';
     nikoAudienceCount.value = 0;
     nikoIsLive.value = false;
+    hideGiftOverlay();
+    // 关播后卸载 StreamMixer，销毁原生视频预览窗口。
+    // 该原生窗口永远盖在 DOM 上方，不销毁会导致「关播后画面还在、结算层被盖住」。
+    // 卸载时 WinLocalMixer 会自动 clearMediaSource + bindPreviewArea(0,null) + stopMediaMixingServer。
+    mixerActive.value = false;
+    await nextTick();
+    // 先展示本地统计的结算层；若后端已推送 action 118，则保留服务端数据
+    const durationSeconds = liveStartedAt.value
+      ? Math.floor((Date.now() - liveStartedAt.value) / 1000)
+      : 0;
+    if (!settleStats.value) {
+      settleStats.value = {
+        kTicket: '0',
+        liveDuration: formatLiveDuration(durationSeconds),
+        audienceCount: peakAudienceCount.value,
+        newFansCount: 0,
+      };
+    }
+    liveStartedAt.value = 0;
     stopSystemAudioLoopbackSafely();
     return true;
   } catch (error: any) {
@@ -912,6 +1170,43 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
   } finally {
     loading.value = false;
   }
+};
+
+/**
+ * 处理后端下发的系统事件（对齐 web-obs-live ChatRoom）：
+ * - warning：action 53 operate_type=0，仅警告
+ * - system：system_aide 普通系统提示
+ * - forbidden：action 53 operate_type=1 / system_aide 封禁文案，需要终止直播
+ * - ended：action 118 结算 / system_aide 断开直播，需要终止直播并展示结算
+ * Win 主窗口使用原生渲染，无法可靠承载窗内 MessageBox，因此统一走独立确认窗口。
+ */
+const showLiveNotice = (event: LiveImSystemEvent) => {
+  const reason = event?.reason || '';
+  if (event.kind === 'warning' || !event.stop) {
+    ipcBridge.sendToConfirm(IPCMessageType.SHOW_CONFIRM_DIALOG, {
+      scene: 'end-live',
+      dialogId: `live-warning-${Date.now()}`,
+      title: event.kind === 'warning' ? '警告' : '系统提示',
+      content: reason || '收到系统提示',
+      actions: [{ text: '知道了', value: 'cancel', type: TUIButtonActionType.Normal }],
+    });
+    return;
+  }
+
+  // 禁播 / 封禁 / 下播：必须在确认后终止直播，只弹一次
+  if (!isInLive.value || liveStopNoticePending) {
+    return;
+  }
+  liveStopNoticePending = true;
+  const dialogId = `live-stop-${Date.now()}`;
+  liveStopDialogId = dialogId;
+  ipcBridge.sendToConfirm(IPCMessageType.SHOW_CONFIRM_DIALOG, {
+    scene: 'end-live',
+    dialogId,
+    title: event.kind === 'ended' ? '直播已结束' : '封禁提示',
+    content: reason || '当前直播已被平台终止',
+    actions: [{ text: '确定', value: EndLiveActionValue.EndLive, type: TUIButtonActionType.Dangerous }],
+  });
 };
 
 /** Handles app quit request (e.g. Cmd+Q / close main window): always ask confirm before quit. */
@@ -1141,6 +1436,13 @@ onMounted(async () => {
   subscribeBattleEvent(BattleEvent.onBattleStarted, handleBattleStartedForCover);
   subscribeBattleEvent(BattleEvent.onBattleEnded, handleBattleEndedForCover);
 
+  // 后端结算消息（action 118）：覆盖本场统计数据并展示结算层
+  unsubscribeSettle = onLiveImSettle(applySettleStats);
+  // 下播 / 禁播 / 封禁 / 警告（对齐 web-obs-live）
+  unsubscribeSystem = onLiveImSystem(showLiveNotice);
+  // 礼物特效转发到原生视频之上的透明覆盖窗口
+  unsubscribeGift = onLiveImGift(handleLiveGift);
+
   // Setup event listeners
   setupEventListeners();
   ipcBridge.on(IPCMessageType.CONFIRM_DIALOG_ACTION, onConfirmDialogAction);
@@ -1160,11 +1462,17 @@ onMounted(async () => {
     const userInfo = JSON.parse(currentUserInfo);
     const { sdkAppId, userSig, userId } = userInfo;
 
-    // Use retry mechanism for login
-    await loginWithRetry(
-      { sdkAppId, userId, userSig },
-      { suppressErrorModal: true },
-    );
+    // 从主播列表进入直播间观看时可能已经登录了同一个 IM 账号（TUIKit 全局会话），
+    // 再次 login 会触发 multipleAccount 互踢，这里直接复用现有会话
+    if (loginUserInfo.value?.userId && String(loginUserInfo.value.userId) === String(userId)) {
+      console.log('[TUILiveKitWin] IM session already established, reuse it');
+    } else {
+      // Use retry mechanism for login
+      await loginWithRetry(
+        { sdkAppId, userId, userSig },
+        { suppressErrorModal: true },
+      );
+    }
     loginReady.value = true;
   } catch (e) {
     redirectToLogin();
@@ -1306,6 +1614,13 @@ onBeforeUnmount(() => {
     clearInterval(pkTimer);
     pkTimer = null;
   }
+  unsubscribeSettle?.();
+  unsubscribeSettle = null;
+  unsubscribeSystem?.();
+  unsubscribeSystem = null;
+  unsubscribeGift?.();
+  unsubscribeGift = null;
+  hideGiftOverlay();
   hasStartedLogoutRedirect = false;
   stopSystemAudioLoopbackSafely();
   if (currentForceLogoutDialogId.value) {
@@ -1349,31 +1664,42 @@ onBeforeUnmount(() => {
   .pk-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: rgba(0, 0, 0, 0.6);
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 20px;
-    padding: 6px 12px;
+    padding: 6px 14px;
+    backdrop-filter: blur(6px);
     .pk-side {
       flex: 0 0 auto;
-      min-width: 50px;
+      min-width: 46px;
       text-align: center;
       .pk-score {
-        color: #fff;
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 700;
+        font-variant-numeric: tabular-nums;
       }
+    }
+    .pk-left .pk-score {
+      color: #5fb8ff;
+      text-shadow: 0 0 8px rgba(95, 184, 255, 0.45);
+    }
+    .pk-right .pk-score {
+      color: #ff8b6c;
+      text-shadow: 0 0 8px rgba(255, 139, 108, 0.45);
     }
     .pk-progress {
       flex: 1;
-      height: 14px;
-      background: #2a3142;
-      border-radius: 7px;
+      height: 16px;
+      background: #ff6b6b;
+      border-radius: 8px;
       position: relative;
       overflow: hidden;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
       .pk-progress-inner {
         height: 100%;
-        background: linear-gradient(90deg, #ff6b6b, #ffa500);
-        border-radius: 7px;
+        background: linear-gradient(90deg, #3aa0ff, #6cc5ff);
+        border-radius: 8px;
         transition: width 0.5s ease;
       }
       .pk-countdown {
@@ -1384,13 +1710,149 @@ onBeforeUnmount(() => {
         color: #fff;
         font-size: 11px;
         font-weight: 600;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
       }
     }
   }
 }
-.pk-button {
+/* 连麦 / PK 工具按钮：与音乐按钮一致（图标在上、文字在下） */
+.niko-tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   min-width: 56px;
+  height: 56px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: $text-color1;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+
+  .niko-tool-icon {
+    width: 24px;
+    height: 24px;
+    color: inherit;
+  }
+
+  .niko-tool-label {
+    @include text-size-12;
+    line-height: 1;
+    color: inherit;
+    white-space: nowrap;
+  }
+
+  &:hover:not(:disabled) {
+    box-shadow: 0 0 10px 0 var(--bg-color-mask);
+
+    .niko-tool-icon,
+    .niko-tool-label {
+      color: $icon-hover-color;
+    }
+  }
+
+  &.is-pk-active {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.24), rgba(255, 165, 61, 0.24));
+    box-shadow: 0 0 12px rgba(255, 107, 107, 0.35);
+
+    .niko-tool-icon,
+    .niko-tool-label {
+      color: #ffb0a0;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+/* 关播结算层（对齐 web-obs-live 的 end-stats 面板） */
+.niko-settle-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.niko-settle-card {
+  width: 420px;
+  padding: 22px 24px 18px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #262f3f 0%, #1c2432 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  color: #fff;
+  text-align: center;
+}
+
+.niko-settle-header {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+.niko-settle-hero {
+  padding: 16px 0 18px;
+  border-radius: 12px;
+  background: rgba(255, 184, 61, 0.08);
+  border: 1px solid rgba(255, 184, 61, 0.18);
+  margin-bottom: 16px;
+
+  .niko-settle-hero-value {
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #ffb83d;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .niko-settle-hero-label {
+    margin-top: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+}
+
+.niko-settle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.niko-settle-item {
+  flex: 1;
+  min-width: 0;
+
+  & + .niko-settle-item {
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .niko-settle-item-value {
+    font-size: 18px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .niko-settle-item-label {
+    margin-top: 4px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+.niko-settle-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
 }
 
 .tui-livekit-win {
@@ -1398,7 +1860,9 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  --live-shell-bg: #1c2638;
+  /* 自己开播页统一黑色系 */
+  --live-shell-bg: #050506;
+  background-color: var(--live-shell-bg);
 
   .login-loading {
     flex: 1;
@@ -1411,22 +1875,26 @@ onBeforeUnmount(() => {
       opacity: 0.8;
     }
   }
-  --live-panel-bg: #232f44;
-  --live-panel-border: #3a4f6d;
-  --live-stage-bg: #0a1018;
-  --live-stage-border: rgba(146, 190, 255, 0.36);
-  --live-stage-highlight: rgba(171, 210, 255, 0.24);
+  --live-panel-bg: #101013;
+  --live-panel-border: #232329;
+  --live-stage-bg: #000000;
+  --live-stage-border: rgba(255, 255, 255, 0.14);
+  --live-stage-highlight: rgba(255, 255, 255, 0.1);
   --live-stage-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.48),
-    0 0 0 1px rgba(125, 170, 240, 0.18);
-  --live-empty-slot-bg: #0e1728;
-  --live-placeholder-text: rgba(255, 255, 255, 0.74);
+    0 14px 36px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  --live-empty-slot-bg: #0b0b0d;
+  --live-placeholder-text: rgba(255, 255, 255, 0.7);
 
   // Scoped dark-theme contrast tuning for Electron main view.
   --bg-color-topbar: var(--live-shell-bg);
   --bg-color-operate: var(--live-panel-bg);
   --bg-color-bubble-reciprocal: rgba(255, 255, 255, 0.08);
   --stroke-color-primary: var(--live-panel-border);
+  --uikit-color-gray-1: #0b0b0d;
+  --uikit-color-gray-2: #141417;
+  --uikit-color-gray-3: #1c1c20;
+  --uikit-color-gray-4: #242429;
 
   &.is-logout-transitioning {
     pointer-events: none;
@@ -1438,7 +1906,8 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: row;
     user-select: none;
-    padding: 0 12px 12px 12px;
+    padding: 10px 12px 12px 12px;
+    gap: 10px;
     background-color: var(--bg-color-topbar);
     @include scrollbar;
 
@@ -1449,33 +1918,38 @@ onBeforeUnmount(() => {
       height: 100%;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 10px;
       color: $text-color1;
 
       .main-left-top {
         flex: 1;
-        padding: 16px;
+        padding: 14px;
         background-color: var(--bg-color-operate);
         min-height: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 
         .main-left-top-title {
           display: flex;
           align-items: center;
-          height: 40px;
+          height: 36px;
           box-sizing: border-box;
           user-select: none;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
 
           .title-text {
             @include text-size-16;
             display: inline-flex;
             align-items: center;
             justify-content: start;
+            font-weight: 600;
           }
         }
 
         .main-left-top-content {
-          height: calc(100% - 56px);
+          height: calc(100% - 48px);
         }
       }
 
@@ -1484,8 +1958,11 @@ onBeforeUnmount(() => {
         flex-direction: column;
         justify-content: center;
         background-color: var(--bg-color-operate);
-        padding: 16px;
+        padding: 14px;
         flex-shrink: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 
         .main-left-bottom-header {
           display: flex;
@@ -1499,6 +1976,10 @@ onBeforeUnmount(() => {
             cursor: pointer;
             color: $text-color2;
             @include text-size-12;
+
+            &:hover {
+              color: $text-color1;
+            }
 
             .arrow-icon {
               transition: transform 0.2s ease;
@@ -1516,14 +1997,16 @@ onBeforeUnmount(() => {
 
         .main-left-bottom-title {
           @include text-size-16;
+          font-weight: 600;
         }
 
         .main-left-bottom-tools {
           @include dividing-line('top');
-          margin-top: 16px;
-          padding-top: 16px;
+          margin-top: 14px;
+          padding-top: 14px;
           display: flex;
-          gap: 6px;
+          gap: 8px;
+          align-items: stretch;
         }
       }
     }
@@ -1534,8 +2017,12 @@ onBeforeUnmount(() => {
       display: flex;
       flex-direction: column;
       height: 100%;
-      margin: 0 6px;
+      margin: 0;
       background-color: var(--bg-color-operate);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 
       .main-center-top {
         position: relative;
@@ -1543,8 +2030,8 @@ onBeforeUnmount(() => {
         justify-content: space-between;
         align-items: center;
         width: 100%;
-        height: 56px;
-        padding: 0 16px;
+        height: 54px;
+        padding: 0 18px;
         box-sizing: border-box;
         color: $text-color1;
 
@@ -1561,6 +2048,7 @@ onBeforeUnmount(() => {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            font-weight: 600;
           }
         }
 
@@ -1568,14 +2056,18 @@ onBeforeUnmount(() => {
           @include text-size-12;
           flex-shrink: 0;
           margin-left: 12px;
+          padding: 3px 10px;
+          border-radius: 12px;
+          background: rgba(43, 127, 255, 0.14);
+          color: #8cc4ff;
         }
 
         &::after {
           content: "";
           position: absolute;
           bottom: 0;
-          left: 16px;
-          right: 16px;
+          left: 18px;
+          right: 18px;
           height: 1px;
           background-color: var(--stroke-color-primary);
         }
@@ -1659,26 +2151,36 @@ onBeforeUnmount(() => {
       color: $text-color1;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 10px;
       min-width: 200px;
 
       .main-right-top {
         background-color: var(--bg-color-operate);
         color: $text-color1;
-        height: 30%;
-        padding: 16px;
+        height: 36%;
+        min-height: 160px;
+        padding: 14px;
         user-select: text;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
 
         .main-right-top-title {
           display: flex;
           align-items: center;
           color: $text-color1;
-          height: 40px;
+          height: 36px;
           box-sizing: border-box;
           user-select: none;
 
+          .card-title {
+            border-bottom: none;
+          }
+
           .title-text {
             @include text-size-16;
+            font-weight: 600;
           }
 
           .title-count {
@@ -1688,8 +2190,8 @@ onBeforeUnmount(() => {
         }
 
         :deep(.viewers-panel) {
-          --uikit-color-gray-3: rgba(92, 122, 255, 0.1);
-          --uikit-color-gray-4: rgba(92, 122, 255, 0.2);
+          --uikit-color-gray-3: rgba(255, 255, 255, 0.06);
+          --uikit-color-gray-4: rgba(255, 255, 255, 0.12);
 
           .viewer-item:hover {
             background: var(--uikit-color-gray-3);
@@ -1707,20 +2209,26 @@ onBeforeUnmount(() => {
 
       .main-right-bottom {
         flex: 1;
+        min-height: 0;
         background-color: var(--bg-color-operate);
         color: $text-color1;
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        padding: 16px;
+        padding: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 
         .main-right-bottom-header {
           display: flex;
           flex-direction: column;
+          padding: 14px 14px 0;
         }
 
         .message-list-container {
           flex: 1 1 auto;
+          min-height: 0;
           user-select: text;
         }
       }
@@ -1743,6 +2251,13 @@ onBeforeUnmount(() => {
   .card-title {
     @include text-size-16;
     @include dividing-line;
+  }
+
+  /* 用户信息卡片：原生视频窗口会盖住页面中间区域，卡片固定到右侧观众/聊天栏上方展示 */
+  :deep(.niko-user-card-mask) {
+    justify-content: flex-end;
+    padding-right: 18px;
+    background: rgba(0, 0, 0, 0.3);
   }
 }
 </style>
