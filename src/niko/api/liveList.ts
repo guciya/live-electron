@@ -37,6 +37,8 @@ export interface NikoLiveListItem {
   orientation: '' | 'landscape' | 'portrait';
   /** 在线观众头像（前 3 个，用于卡片头像叠层展示） */
   audienceAvatars: string[];
+  /** 所属组织/公会名称（无组织时为空） */
+  organizationName: string;
   playUrl: string;
 }
 
@@ -68,6 +70,12 @@ interface RawLiveListItem {
     audience_list?: RawAudienceItem[];
   };
   play_url?: string;
+  organization_info?: {
+    organization_name?: string;
+    name?: string;
+    org_name?: string;
+    [key: string]: any;
+  } | null;
 }
 
 interface NikoApiResponse<T = unknown> {
@@ -153,6 +161,13 @@ function normalize(item: RawLiveListItem): NikoLiveListItem | null {
     gender: typeof item.gender === 'number' ? item.gender : 0,
     orientation: orientation as '' | 'landscape' | 'portrait',
     audienceAvatars,
+    // 组织/公会信息：字段命名不固定，逐个兜底
+    organizationName: String(
+      item.organization_info?.organization_name
+      ?? item.organization_info?.name
+      ?? item.organization_info?.org_name
+      ?? '',
+    ),
     playUrl: item.play_url ?? '',
   };
 }

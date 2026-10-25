@@ -11,9 +11,192 @@ const {
 } = require('electron');
 const { exec, spawn } = require('child_process');
 const path = require('path');
+const zlib = require('zlib');
 const EventEmitter = require('events');
 
 const logPrefix = '[TUILiveKit.main]';
+
+// ==================== 托盘菜单图标（16x16 PNG，运行时绘制，免新增资源文件） ====================
+const TRAY_ICON_SIZE = 16;
+// 中性灰蓝色，深色/浅色系统菜单下都可见
+const TRAY_ICON_COLOR = [138, 143, 152];
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const pngCrcTable = (() => {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[n] = c;
+  }
+  return table;
+})();
+
+function pngCrc32(buf) {
+  let crc = -1;
+  for (let i = 0; i < buf.length; i += 1) {
+    crc = pngCrcTable[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBuf = Buffer.from(type, 'ascii');
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(data.length, 0);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(pngCrc32(Buffer.concat([typeBuf, data])), 0);
+  return Buffer.concat([lenBuf, typeBuf, data, crcBuf]);
+}
+
+function encodeTrayPng(rgba) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(TRAY_ICON_SIZE, 0);
+  ihdr.writeUInt32BE(TRAY_ICON_SIZE, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // RGBA
+  const stride = TRAY_ICON_SIZE * 4;
+  const raw = Buffer.alloc((stride + 1) * TRAY_ICON_SIZE);
+  for (let y = 0; y < TRAY_ICON_SIZE; y += 1) {
+    Buffer.from(rgba.buffer, rgba.byteOffset + y * stride, stride).copy(raw, y * (stride + 1) + 1);
+  }
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', zlib.deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function trayPx(img, x, y) {
+  const xi = Math.round(x);
+  const yi = Math.round(y);
+  if (xi < 0 || xi >= TRAY_ICON_SIZE || yi < 0 || yi >= TRAY_ICON_SIZE) {
+    return;
+  }
+  const i = (yi * TRAY_ICON_SIZE + xi) * 4;
+  img[i] = TRAY_ICON_COLOR[0];
+  img[i + 1] = TRAY_ICON_COLOR[1];
+  img[i + 2] = TRAY_ICON_COLOR[2];
+  img[i + 3] = 255;
+}
+
+function trayHLine(img, x0, x1, y) {
+  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x += 1) trayPx(img, x, y);
+}
+
+function trayVLine(img, y0, y1, x) {
+  for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y += 1) trayPx(img, x, y);
+}
+
+function trayRect(img, x0, y0, x1, y1) {
+  trayHLine(img, x0, x1, y0);
+  trayHLine(img, x0, x1, y1);
+  trayVLine(img, y0, y1, x0);
+  trayVLine(img, y0, y1, x1);
+}
+
+function trayFillRect(img, x0, y0, x1, y1) {
+  for (let y = y0; y <= y1; y += 1) trayHLine(img, x0, x1, y);
+}
+
+/** 圆环（可留角度缺口，用于重启图标） */
+function trayRing(img, cx, cy, r, thickness, gapAngles) {
+  for (let y = 0; y < TRAY_ICON_SIZE; y += 1) {
+    for (let x = 0; x < TRAY_ICON_SIZE; x += 1) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < r - thickness || d > r + thickness) {
+        continue;
+      }
+      if (gapAngles) {
+        const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+        if (ang >= gapAngles[0] && ang <= gapAngles[1]) {
+          continue;
+        }
+      }
+      trayPx(img, x, y);
+    }
+  }
+}
+
+/** 朝右实心三角箭头：cx 为底边 x，size 为长度 */
+function trayArrowRight(img, cx, cy, size) {
+  for (let x = 0; x <= size; x += 1) {
+    const half = size - x;
+    trayVLine(img, cy - half, cy + half, cx + x);
+  }
+}
+
+const trayIconBuilders = {
+  // 显示窗口：外框 + 标题栏横线
+  show(img) {
+    trayRect(img, 2, 3, 13, 13);
+    trayRect(img, 3, 4, 12, 12);
+    trayHLine(img, 2, 13, 6);
+  },
+  // 公会|家族：双人剪影
+  users(img) {
+    trayRing(img, 6, 6, 2.4, 1);
+    trayRing(img, 11.5, 7, 1.8, 0.9);
+    trayFillRect(img, 2, 11, 10, 13);
+    trayFillRect(img, 10, 11, 14, 12);
+  },
+  // 提现：钱包
+  wallet(img) {
+    trayRect(img, 1, 5, 14, 13);
+    trayRect(img, 2, 6, 13, 12);
+    trayFillRect(img, 9, 8, 14, 10);
+  },
+  // 家族入驻：房子
+  home(img) {
+    for (let i = 0; i <= 6; i += 1) {
+      trayPx(img, 8 - i, 3 + i);
+      trayPx(img, 8 + i, 3 + i);
+      trayPx(img, 8 - i, 4 + i);
+      trayPx(img, 8 + i, 4 + i);
+    }
+    trayRect(img, 4, 9, 12, 14);
+    trayFillRect(img, 7, 11, 9, 14);
+  },
+  // 公会入驻：楼宇
+  building(img) {
+    trayRect(img, 4, 2, 12, 14);
+    trayRect(img, 5, 3, 11, 13);
+    [5, 8].forEach((y) => {
+      trayPx(img, 7, y);
+      trayPx(img, 9, y);
+    });
+    trayFillRect(img, 7, 12, 9, 14);
+  },
+  // 重启：带缺口的圆环 + 箭头
+  restart(img) {
+    trayRing(img, 8, 8.5, 4.6, 1, [-95, -5]);
+    trayArrowRight(img, 8, 4, 3);
+  },
+  // 退出：门 + 向右箭头
+  exit(img) {
+    trayRect(img, 2, 2, 9, 13);
+    trayHLine(img, 6, 12, 7);
+    trayHLine(img, 6, 12, 8);
+    trayArrowRight(img, 11, 7.5, 2);
+  },
+};
+
+const trayIconCache = {};
+
+function trayIcon(name) {
+  if (!trayIconCache[name]) {
+    const { nativeImage } = require('electron');
+    const img = new Uint8Array(TRAY_ICON_SIZE * TRAY_ICON_SIZE * 4);
+    trayIconBuilders[name](img);
+    trayIconCache[name] = nativeImage.createFromBuffer(encodeTrayPng(img));
+  }
+  return trayIconCache[name];
+}
 
 let language = 'zh-CN';
 let lastChildWindowCommand = '';
@@ -1344,6 +1527,7 @@ function createTray() {
     const contextMenu = Menu.buildFromTemplate([
       {
         label: '显示 Niko 窗口',
+        icon: trayIcon('show'),
         click: () => {
           if (isWindowAlive(windowMap.main)) {
             windowMap.main.show();
@@ -1353,23 +1537,28 @@ function createTray() {
       },
       {
         label: '公会|家族',
+        icon: trayIcon('users'),
         click: () => notifyMainWindow('show-feature-pending', '公会|家族'),
       },
       {
         label: '提现',
+        icon: trayIcon('wallet'),
         click: () => notifyMainWindow('show-feature-pending', '提现'),
       },
       {
         label: '家族入驻',
+        icon: trayIcon('home'),
         click: () => notifyMainWindow('open-settle-page', '家族入驻'),
       },
       {
         label: '公会入驻',
+        icon: trayIcon('building'),
         click: () => notifyMainWindow('open-settle-page', '公会入驻'),
       },
       { type: 'separator' },
       {
         label: '重启 Niko',
+        icon: trayIcon('restart'),
         click: () => {
           // 重启应用：开发模式（electron . --dist）下 argv[1] 是应用路径，
           // 转成绝对路径，避免重启后因工作目录变化找不到应用入口
@@ -1384,6 +1573,7 @@ function createTray() {
       },
       {
         label: '退出 Niko',
+        icon: trayIcon('exit'),
         click: () => {
           isQuitting = true;
           app.quit();

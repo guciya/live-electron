@@ -51,6 +51,46 @@
             <span class="player-live-badge">直播中</span>
           </div>
 
+          <!-- 在线观众折叠组件：视频右上角头像叠层 + 人数，点击展开列表面板 -->
+          <div class="player-audience">
+            <button
+              class="player-audience-toggle"
+              type="button"
+              @click="audiencePanelVisible = !audiencePanelVisible"
+            >
+              <span class="player-audience-avatars">
+                <template v-for="(member, idx) in audiencePreview" :key="member.userId || idx">
+                  <img
+                    v-if="member.avatar"
+                    class="player-audience-avatar"
+                    :src="member.avatar"
+                    :style="{ zIndex: audiencePreview.length - idx }"
+                    alt=""
+                  />
+                  <span
+                    v-else
+                    class="player-audience-avatar player-audience-avatar-initial"
+                    :style="{ zIndex: audiencePreview.length - idx }"
+                  >{{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}</span>
+                </template>
+              </span>
+              <span class="player-audience-count">{{ audienceCountText }}人</span>
+            </button>
+            <div v-if="audiencePanelVisible" class="player-audience-panel" @click.stop>
+              <div class="player-audience-panel-title">在线观众（{{ audienceMembers.length }}）</div>
+              <div class="player-audience-list">
+                <div v-for="member in audienceMembers" :key="member.userId" class="player-audience-item">
+                  <img v-if="member.avatar" class="player-audience-item-avatar" :src="member.avatar" alt="" />
+                  <span v-else class="player-audience-item-avatar player-audience-item-initial">
+                    {{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}
+                  </span>
+                  <span class="player-audience-item-name">{{ member.nickname }}</span>
+                </div>
+                <div v-if="!audienceMembers.length" class="player-audience-empty">暂无在线观众</div>
+              </div>
+            </div>
+          </div>
+
           <div class="player-actions">
             <button v-if="muted" class="player-action-btn" type="button" @click="toggleSound">
               点击开启声音
@@ -63,6 +103,7 @@
             v-if="imReady"
             :room-id="roomId"
             :live-index-id="liveIndexId"
+            :welcome-name="anchorName"
             show-gift-button
             @open-gift="giftPanelVisible = true"
             @user-click="handleUserClick"
@@ -104,7 +145,9 @@ import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPl
 import {
   joinLiveChat,
   leaveLiveChat,
+  onLiveImMembers,
   onLiveImSystem,
+  type LiveImMember,
   type LiveImSystemEvent,
 } from '../niko/im/liveIm';
 import { getAudienceCardInfo, type AudienceCardInfo } from '../niko/api/live';
@@ -140,6 +183,17 @@ const giftPanelVisible = ref(false);
 const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
+
+// 在线观众折叠组件：群消息 audience_list 下发的成员列表（liveIm 内已做解析）
+const audienceMembers = ref<LiveImMember[]>([]);
+const audiencePanelVisible = ref(false);
+// 叠层最多展示 5 个头像，多出的只体现在人数上
+const audiencePreview = computed(() => audienceMembers.value.slice(0, 5));
+const audienceCountText = computed(() => (
+  audienceMembers.value.length > 0 ? String(audienceMembers.value.length) : viewerCount
+));
+
+let unsubscribeMembers: (() => void) | null = null;
 
 let playerHandle: StreamPlayerHandle | null = null;
 let unsubscribeSystem: (() => void) | null = null;
@@ -314,6 +368,9 @@ onMounted(() => {
   unsubscribeSystem = onLiveImSystem((event) => {
     void handleSystemEvent(event);
   });
+  unsubscribeMembers = onLiveImMembers((members) => {
+    audienceMembers.value = members;
+  });
   void startPlayback();
   void initChat();
 });
@@ -322,6 +379,8 @@ onBeforeUnmount(() => {
   destroyed = true;
   unsubscribeSystem?.();
   unsubscribeSystem = null;
+  unsubscribeMembers?.();
+  unsubscribeMembers = null;
   playerHandle?.destroy();
   playerHandle = null;
   // 退出直播间时离开 IM 群；保留 IM 登录态，去开播时直接复用同一会话
@@ -565,5 +624,143 @@ onBeforeUnmount(() => {
   &:hover {
     background-color: rgba(0, 0, 0, 0.75);
   }
+}
+
+/* ==================== 在线观众折叠组件（视频右上角） ==================== */
+.player-audience {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+}
+
+.player-audience-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 1.75rem;
+  padding: 0 0.625rem 0 0.375rem;
+  cursor: pointer;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.65);
+  }
+}
+
+.player-audience-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.player-audience-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+
+  & + .player-audience-avatar {
+    margin-left: -0.5rem;
+  }
+}
+
+.player-audience-avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--uikit-color-primary, #2b7fff);
+}
+
+.player-audience-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.player-audience-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 13rem;
+  max-height: 18rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: rgba(20, 21, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.625rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+}
+
+.player-audience-panel-title {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-audience-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.375rem 0;
+}
+
+.player-audience-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+}
+
+.player-audience-item-avatar {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.player-audience-item-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.player-audience-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-audience-empty {
+  padding: 1.25rem 0;
+  font-size: 0.75rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
 }
 </style>

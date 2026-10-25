@@ -99,6 +99,29 @@ const systemListeners = new Set<(event: LiveImSystemEvent) => void>();
 const JOIN_NOTICE_DEDUPE_MS = 10000;
 const recentJoinNotices = new Map<string, number>();
 
+/**
+ * 观众资料缓存：部分观众列表更新消息只带 user_id（无昵称/头像），
+ * 直接用会闪成 ID，这里用历史下发的昵称/头像补齐。
+ */
+const memberProfileCache = new Map<string, { nickname: string; avatar: string }>();
+
+function mergeMemberProfiles(list: LiveImMember[]): LiveImMember[] {
+  const merged = list.map((member) => {
+    const cached = memberProfileCache.get(member.userId);
+    // 昵称为空或与 userId 相同都视为「上游没给昵称的 ID 兜底」，优先用缓存
+    const hasRealName = !!member.nickname && member.nickname !== member.userId;
+    const nickname = !hasRealName && cached ? cached.nickname : member.nickname;
+    const avatar = member.avatar || cached?.avatar || '';
+    return { ...member, nickname, avatar };
+  });
+  merged.forEach((member) => {
+    if (member.userId && member.nickname && member.nickname !== member.userId) {
+      memberProfileCache.set(member.userId, { nickname: member.nickname, avatar: member.avatar });
+    }
+  });
+  return merged;
+}
+
 function shouldEmitJoinNotice(key: string): boolean {
   const now = Date.now();
   const last = recentJoinNotices.get(key) || 0;
@@ -223,11 +246,11 @@ function applyAudienceInfo(custom: any): boolean {
     ? audienceInfo.audience_list
     : [];
   audienceFromMessage = true;
-  emitMembers(list.map((item) => ({
+  emitMembers(mergeMemberProfiles(list.map((item) => ({
     userId: String(item.user_id ?? item.userId ?? ''),
     nickname: String(item.nickname || item.user_id || ''),
     avatar: resolveImageUrl(String(item.avatar || '')),
-  })));
+  }))));
   return true;
 }
 
@@ -588,6 +611,8 @@ export async function leaveLiveChat(): Promise<void> {
   audienceFromMessage = false;
   // 退出直播间后清空进房提示去重记录，下次进房能正常提示
   recentJoinNotices.clear();
+  // 观众资料缓存按房间生命周期清理，避免跨直播间复用
+  memberProfileCache.clear();
 }
 
 /**
@@ -626,7 +651,7 @@ export async function refreshMembers(): Promise<void> {
       nickname: String(item.nick || item.userID || ''),
       avatar: resolveImageUrl(String(item.avatar || '')),
     }));
-    emitMembers(members);
+    emitMembers(mergeMemberProfiles(members));
   } catch (error: any) {
     memberListUnsupported = true;
     console.log('[NikoIM] getGroupMemberList not supported for AVChatRoom, use join messages instead:', error?.code || error?.message || error);

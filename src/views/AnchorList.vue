@@ -22,11 +22,47 @@
             <span class="anchor-user-name anchor-user-name-shine">{{ userInfo.nickname || userInfo.userShowId }}</span>
           </div>
           <!-- 业务入口：公会|家族 / 提现 暂未开放；家族入驻 / 公会入驻 软件内打开入驻页 -->
-          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('公会|家族')">公会|家族</button>
-          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('提现')">提现</button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('家族入驻')">家族入驻</button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('公会入驻')">公会入驻</button>
-          <button class="anchor-text-btn" type="button" @click="handleLogout">退出登录</button>
+          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('公会|家族')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span>公会|家族</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('提现')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="6" width="20" height="14" rx="2" />
+              <path d="M2 10h20" />
+              <path d="M6 15h4" />
+            </svg>
+            <span>提现</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('家族入驻')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 10.5 12 3l9 7.5" />
+              <path d="M5 9.5V21h14V9.5" />
+              <path d="M10 21v-6h4v6" />
+            </svg>
+            <span>家族入驻</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('公会入驻')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4" y="3" width="16" height="18" rx="1" />
+              <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" />
+              <path d="M10 21v-3h4v3" />
+            </svg>
+            <span>公会入驻</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="handleLogout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>退出登录</span>
+          </button>
           <button class="anchor-start-live-btn" type="button" @click="handleStartLive">
             <IconLiveStart class="start-live-icon" />
             <span>去开播</span>
@@ -104,6 +140,16 @@
               </div>
               <div class="card-viewer-count">{{ item.viewerCount }} 人观看</div>
               <div class="card-enter-tip">进入直播间</div>
+              <!-- 右下角白色透明 Live 图标 -->
+              <span class="card-live-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+                  <path d="M7.76 16.24a6 6 0 0 1 0-8.49" />
+                  <path d="M16.24 7.76a6 6 0 0 1 0 8.49" />
+                  <path d="M4.93 19.07a10 10 0 0 1 0-14.14" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              </span>
             </div>
             <div class="card-info">
               <div class="card-avatar-wrap">
@@ -122,6 +168,7 @@
                   <span class="card-title-text">{{ item.title || '直播中' }}</span>
                   <span v-if="item.isCharge === 1" class="card-charge">付费</span>
                   <span v-if="item.pkStatus === 1 || item.pkStatus === 2" class="card-pk-tag">PK中</span>
+                  <span v-else-if="item.pkStatus === 3" class="card-cohost-tag">连麦中</span>
                 </div>
                 <div class="card-subtitle">
                   <span class="card-nickname">{{ item.nickname || '主播' }}</span>
@@ -131,6 +178,7 @@
                 <div class="card-meta">
                   <span v-if="item.anchorShowId" class="card-id">ID:{{ item.anchorShowId }}</span>
                   <span v-if="item.orientation" class="card-orient-tag">{{ item.orientation === 'landscape' ? '横屏' : '竖屏' }}</span>
+                  <span v-if="item.organizationName" class="card-org-tag">{{ item.organizationName }}</span>
                 </div>
               </div>
               <div v-if="item.audienceAvatars.length" class="card-audience-stack">
@@ -612,6 +660,9 @@ onBeforeUnmount(() => {
   }
 
   .anchor-text-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
     color: #ffffff;
@@ -619,6 +670,12 @@ onBeforeUnmount(() => {
     background: transparent;
     border: none;
     border-radius: 0.25rem;
+
+    svg {
+      width: 0.875rem;
+      height: 0.875rem;
+      flex: none;
+    }
 
     &:hover {
       color: var(--text-color-primary, #ffffff);
@@ -1067,6 +1124,47 @@ onBeforeUnmount(() => {
     color: #fff;
     border-radius: 2px;
     background: linear-gradient(90deg, #ff4d6a, #b58cff);
+  }
+
+  .card-cohost-tag {
+    flex: none;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 15px;
+    color: #fff;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #2b7fff, #7fd0ff);
+  }
+
+  .card-org-tag {
+    flex: none;
+    max-width: 6rem;
+    padding: 0 4px;
+    line-height: 14px;
+    border-radius: 2px;
+    color: #ffd591;
+    border: 1px solid rgba(255, 213, 145, 0.35);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 封面右下角白色透明 Live 图标 */
+  .card-live-icon {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 50%;
+    backdrop-filter: blur(2px);
+    pointer-events: none;
   }
 
   .card-charge {

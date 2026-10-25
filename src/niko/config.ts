@@ -16,7 +16,8 @@ export const NIKO_CONFIG = {
   // CMS 主播监控列表域名（独立固定 token 鉴权，仅 liveList.ts 使用）
   cmsBaseUrl: readEnv('VUE_APP_CMS_BASE_URL', 'https://test-cms.nikolive.cn'),
   // H5 业务页域名（家族入驻/公会入驻等软件内部跳转页面）
-  h5WebBase: readEnv('VUE_APP_H5_WEB_BASE', 'https://test-h5.nikolive.cn'),
+  // /os/ 入驻应用只部署在正式域 h5.nikolive.cn，测试域没有该页面（404），默认值必须用正式域
+  h5WebBase: readEnv('VUE_APP_H5_WEB_BASE', 'https://h5.nikolive.cn'),
   // TRTC 与 IM 共用的 SDKAppID，必须与登录接口下发的 sign 所属应用一致
   sdkAppId: Number(readEnv('VUE_APP_TRTC_SDK_APPID', '1600084758')) || 1600084758,
 };

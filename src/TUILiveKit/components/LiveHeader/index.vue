@@ -1,8 +1,17 @@
 <template>
   <header class="live-header tui-window-header">
     <div class="left">
-      <img class="logo-icon" src="../../../assets/niko-logo.png" alt="Niko直播" />
-      <span class="title">Niko直播</span>
+      <div class="logo-badge">
+        <img class="logo-icon" src="../../../assets/niko-logo.png" alt="Niko直播" />
+        <span class="title">Niko直播</span>
+      </div>
+      <div class="statistics">
+        <div class="statistics-container" v-for="(item, index) in statisticsInfoList" :key="item.text">
+          <span class="statistics-text">{{ item.text }}</span>
+          <span class="statistics-value">{{ item.value }}</span>
+          <i class="statistics-space" v-if="index < statisticsInfoList.length - 1"></i>
+        </div>
+      </div>
     </div>
     <div class="right">
       <button class="back-list-btn" type="button" @click="emit('backToList')">
@@ -11,13 +20,6 @@
         </svg>
         <span>返回列表</span>
       </button>
-      <div class="statistics">
-        <div class="statistics-container" v-for="(item, index) in statisticsInfoList" :key="item.text">
-          <span class="statistics-text">{{ item.text }}</span>
-          <span class="statistics-value">{{ item.value }}</span>
-          <i class="statistics-space" v-if="index < statisticsInfoList.length - 1"></i>
-        </div>
-      </div>
       <div
         class="language-switch"
         v-click-outside="closeLanguageMenu"
@@ -379,23 +381,37 @@ onBeforeUnmount(() => {
 
   .left {
     margin-left: 8px;
+    margin-top: 10px;
     display: inline-flex;
     align-items: center;
-    .tui-live-icon {
-      margin-left: 0;
-      margin-right: 0.25rem;
-      font-size: $font-live-header-left-tui-live-icon-size;
+    gap: 12px;
+
+    /* logo 胶囊卡片：与主播列表 anchor-header-left 样式一致 */
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      width: 105px;
+      padding-left: 11px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      box-sizing: border-box;
     }
-    .title {
-      font-weight: $font-live-header-left-title-weight;
-      font-size: $font-live-header-left-title-size;
-      padding-left: 0.6rem;
-      font-weight: bold;
-    }
+
     .logo-icon {
-      width: 1.625rem;
-      height: 1.5rem;
-      object-fit: contain;
+      width: 1.375rem;
+      height: 1.375rem;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .title {
+      padding-left: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
     }
   }
   .header-left {

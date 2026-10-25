@@ -15,6 +15,10 @@
           <span class="niko-chat-join-name" @click="handleUserClick(message)">{{ message.nickname }}</span>
           <span class="niko-chat-join-text">进入了直播间</span>
         </div>
+        <div v-else-if="message.kind === 'system'" class="niko-chat-line niko-chat-line--welcome">
+          <span class="niko-chat-tag niko-chat-tag--welcome">欢迎</span>
+          <span class="niko-chat-welcome-text">{{ message.text }}</span>
+        </div>
         <div v-else-if="message.kind === 'gift'" class="niko-chat-line niko-chat-line--gift">
           <span class="niko-chat-user" @click="handleUserClick(message)">
             <img v-if="roleIcon(message)" class="niko-chat-role-icon" :src="roleIcon(message)" alt="" />
@@ -124,6 +128,8 @@ const props = defineProps<{
   disabled?: boolean;
   /** 是否在发送按钮右侧展示「礼物」按钮 */
   showGiftButton?: boolean;
+  /** 进入直播间时展示的本地欢迎语主播名（仅自己可见，不发送） */
+  welcomeName?: string;
 }>();
 
 const emit = defineEmits<{
@@ -197,6 +203,38 @@ function handleUserClick(message: LiveImMessage) {
   });
 }
 
+/** 按当前时间段返回问候语：上午(6-11) / 中午(11-13) / 下午(13-18) / 晚上(其余) */
+function getTimePeriodGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 11) {
+    return '上午';
+  }
+  if (hour >= 11 && hour < 13) {
+    return '中午';
+  }
+  if (hour >= 13 && hour < 18) {
+    return '下午';
+  }
+  return '晚上';
+}
+
+/** 本地欢迎语：仅插入当前面板消息列表，不经过 IM / 后端发送，只有进入者自己可见 */
+function pushLocalWelcome() {
+  if (!props.welcomeName) {
+    return;
+  }
+  messages.value.push({
+    id: `local-welcome-${Date.now()}`,
+    kind: 'system',
+    fromUserId: '',
+    nickname: '',
+    avatar: '',
+    text: `${getTimePeriodGreeting()}好~ 欢迎来到 ${props.welcomeName} 的直播间！`,
+    time: Date.now(),
+  });
+  scrollToBottom();
+}
+
 async function handleSend() {
   const content = draft.value.trim();
   if (!content || props.disabled || sending.value || !props.liveIndexId) {
@@ -236,6 +274,8 @@ watch(
     try {
       await joinLiveChat(String(roomId));
       connected.value = isLiveChatConnected();
+      // 进房成功后注入本地欢迎语（仅自己可见，不走任何发送通道）
+      pushLocalWelcome();
     } catch (error: any) {
       console.warn('[NikoChat] joinLiveChat failed:', error?.message || error);
     }
@@ -357,6 +397,24 @@ onBeforeUnmount(() => {
   gap: 6px;
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
+}
+
+/* 本地欢迎语：薄荷绿高亮，仅自己可见 */
+.niko-chat-line--welcome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(62, 207, 142, 0.12);
+  border: 1px solid rgba(62, 207, 142, 0.25);
+}
+
+.niko-chat-tag--welcome {
+  background: rgba(62, 207, 142, 0.22);
+  color: #5ee0a8;
+}
+
+.niko-chat-welcome-text {
+  color: #8fe9c0;
 }
 
 .niko-chat-join-name {
