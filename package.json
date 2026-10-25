@@ -9,8 +9,12 @@
     "appId": "com.niko.live",
     "productName": "Niko直播",
     "directories": {
-      "buildResources": "build"
+      "buildResources": "build",
+      "output": "release"
     },
+    "files": [
+      "!dist/win-unpacked/**"
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [
@@ -56,12 +60,12 @@
     "electron": "electron .",
     "build:dev": "vue-cli-service build --mode development --dest dist-dev",
     "start:fast": "electron . --dist",
-    "build:test": "vue-cli-service build --mode test --dest dist",
-    "build:prod": "vue-cli-service build --mode production --dest dist",
+    "build:test": "vue-cli-service build --mode test --dest dist --no-clean",
+    "build:prod": "vue-cli-service build --mode production --dest dist --no-clean",
     "build:win64": "electron-builder --win --x64",
     "pack:win64": "npm run build && npm run build:win64",
-    "pack:test": "npm run build:test && electron-builder --win --x64 -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
-    "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.productName=Niko直播 -c.artifactName=NikoLive-Setup-${version}.${ext}",
+    "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
+    "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播 -c.artifactName=NikoLive-Setup-${version}.${ext}",
     "build:mac-x64": "electron-builder --mac --x64",
     "pack:mac-x64": "npm run build && npm run build:mac-x64",
     "upload-server": "npm --prefix ./upload-server run start",
