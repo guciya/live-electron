@@ -45,6 +45,8 @@ const giftOverlayRelativeBounds = {
   width: 0,
   height: 0,
 };
+/** 用户信息卡片是否正在覆盖窗口中展示（展示期间窗口全尺寸、可点击，礼物不再重定位窗口） */
+let overlayUserCardVisible = false;
 
 const liveKitEmitter = new EventEmitter();
 let isQuitting = false;
@@ -523,6 +525,9 @@ async function createWindow(width = 1366, height = 668) {
       nodeIntegrationInWorker: true,
       // 覆盖窗口从不获得焦点，关闭后台节流，保证礼物动画流畅
       backgroundThrottling: false,
+      // 标记窗口角色，preload 解析后暴露 window.__WINDOW_ROLE__，
+      // 让 Loading 启动页识别覆盖窗口、跳过登录跳转竞争（直接落 /gift-overlay 路由）
+      additionalArguments: ['--window-role=gift-overlay'],
     },
   });
   windowMap.giftOverlay.setIgnoreMouseEvents(true);
@@ -596,7 +601,9 @@ async function createWindow(width = 1366, height = 668) {
     windowMap.child.loadFile(bundleDir + '/index.html');
     windowMap.mainCover.loadFile(bundleDir + '/index.html');
     windowMap.confirm.loadFile(bundleDir + '/index.html');
-    windowMap.giftOverlay.loadFile(bundleDir + '/index.html', { hash: '/gift-overlay' });
+    // 与其他窗口保持一致的加载模式：先 loadFile，再由 did-finish-load 钩子设置 hash 路由。
+    // loadFile 的 hash 选项在该版本 Electron 上未可靠生效，曾导致覆盖窗口停在 Loading 页、礼物无法展示
+    windowMap.giftOverlay.loadFile(bundleDir + '/index.html');
   } else {
     windowMap.main.loadURL('http://localhost:8080');
     windowMap.child.loadURL('http://localhost:8080/#/tui-live-kit-child');
@@ -604,6 +611,16 @@ async function createWindow(width = 1366, height = 668) {
     windowMap.confirm.loadURL('http://localhost:8080/#/tui-live-kit-confirm');
     windowMap.giftOverlay.loadURL('http://localhost:8080/#/gift-overlay');
   }
+  // 覆盖窗口路由定位（与 child/cover/confirm 的 executeJavaScript 方式一致，已验证可靠）
+  windowMap.giftOverlay.webContents.on('did-finish-load', () => {
+    if (isWindowAlive(windowMap.giftOverlay)
+      && !windowMap.giftOverlay.webContents.getURL().includes('/gift-overlay')) {
+      windowMap.giftOverlay.webContents.executeJavaScript('window.location.hash = \'/gift-overlay\';');
+    }
+  });
+  windowMap.giftOverlay.webContents.on('did-fail-load', (_event, code, desc) => {
+    console.error('[giftOverlay] did-fail-load:', code, desc);
+  });
 }
 
 function bindIPCEvent() {
@@ -1028,7 +1045,7 @@ function bindIPCEvent() {
         });
       }
       // 礼物覆盖窗口跟随视频区域实时移动（最大化/布局变化时保持压住视频）
-      if (isWindowAlive(windowMap.giftOverlay) && windowMap.giftOverlay.isVisible()) {
+      if (isWindowAlive(windowMap.giftOverlay) && windowMap.giftOverlay.isVisible() && !overlayUserCardVisible) {
         giftOverlayRelativeBounds.x = coverWindowRelativeBounds.x;
         giftOverlayRelativeBounds.y = coverWindowRelativeBounds.y;
         giftOverlayRelativeBounds.width = coverWindowRelativeBounds.width;
@@ -1076,22 +1093,76 @@ function bindIPCEvent() {
     giftOverlayRelativeBounds.width = rel.width;
     giftOverlayRelativeBounds.height = rel.height;
 
-    const mainBounds = windowMap.main.getContentBounds();
-    windowMap.giftOverlay.setBounds({
-      x: rel.x + mainBounds.x,
-      y: rel.y + mainBounds.y,
-      width: rel.width,
-      height: rel.height,
-    });
-    // 原生视频窗口由 TRTC SDK 独立创建，普通 show 不一定能压住它，先置顶再显示
-    windowMap.giftOverlay.setAlwaysOnTop(true);
-    windowMap.giftOverlay.showInactive();
+    // 用户卡片展示期间窗口已扩展到全窗口尺寸，礼物仅播放内容、不再重定位窗口
+    if (!overlayUserCardVisible) {
+      const mainBounds = windowMap.main.getContentBounds();
+      windowMap.giftOverlay.setBounds({
+        x: rel.x + mainBounds.x,
+        y: rel.y + mainBounds.y,
+        width: rel.width,
+        height: rel.height,
+      });
+    }
+    // 原生视频窗口由 TRTC SDK 独立创建，普通 show 不一定能压住它：
+    // 置顶级别用 Windows 最高的 screen-saver，再 moveTop 确保盖在原生视频上方
+    windowMap.giftOverlay.setAlwaysOnTop(true, 'screen-saver');
+    windowMap.giftOverlay.show();
     windowMap.giftOverlay.moveTop();
+    console.log('[giftOverlay] play gift:', gift?.giftName || gift?.giftId,
+      'bounds:', JSON.stringify(rel), 'visible:', windowMap.giftOverlay.isVisible(),
+      'url:', windowMap.giftOverlay.webContents?.getURL?.());
     sendToWindow(windowMap.giftOverlay, 'gift-overlay-gift', { gift });
   });
 
   ipcMain.on('gift-overlay-hide', () => {
     if (isWindowAlive(windowMap.giftOverlay)) {
+      overlayUserCardVisible = false;
+      windowMap.giftOverlay.setIgnoreMouseEvents(true);
+      windowMap.giftOverlay.setAlwaysOnTop(false);
+      windowMap.giftOverlay.hide();
+    }
+  });
+
+  // ===== 用户信息卡片：DOM 卡片会被原生视频窗口压住，改在透明覆盖窗口中展示 =====
+  ipcMain.on('user-card-show', (event, payload) => {
+    if (!isWindowAlive(windowMap.giftOverlay) || !isWindowAlive(windowMap.main)) {
+      return;
+    }
+    overlayUserCardVisible = true;
+    // 卡片期间窗口扩展到主窗口整个内容区（卡片居中展示、遮罩可点击关闭）
+    const mainBounds = windowMap.main.getContentBounds();
+    windowMap.giftOverlay.setBounds({
+      x: mainBounds.x,
+      y: mainBounds.y,
+      width: mainBounds.width,
+      height: mainBounds.height,
+    });
+    windowMap.giftOverlay.setAlwaysOnTop(true, 'screen-saver');
+    // 关闭鼠标穿透，让卡片上的关闭按钮/遮罩可以点击
+    windowMap.giftOverlay.setIgnoreMouseEvents(false);
+    windowMap.giftOverlay.show();
+    windowMap.giftOverlay.moveTop();
+    console.log('[giftOverlay] show user card, visible:', windowMap.giftOverlay.isVisible(),
+      'url:', windowMap.giftOverlay.webContents?.getURL?.());
+    sendToWindow(windowMap.giftOverlay, 'user-card-show', payload || {});
+  });
+
+  ipcMain.on('user-card-hide', () => {
+    if (!isWindowAlive(windowMap.giftOverlay)) {
+      return;
+    }
+    overlayUserCardVisible = false;
+    windowMap.giftOverlay.setIgnoreMouseEvents(true);
+    // 恢复为视频区域尺寸，后续礼物继续在该区域播放
+    const mainBounds = isWindowAlive(windowMap.main) ? windowMap.main.getContentBounds() : null;
+    if (mainBounds && giftOverlayRelativeBounds.width > 0 && giftOverlayRelativeBounds.height > 0) {
+      windowMap.giftOverlay.setBounds({
+        x: giftOverlayRelativeBounds.x + mainBounds.x,
+        y: giftOverlayRelativeBounds.y + mainBounds.y,
+        width: giftOverlayRelativeBounds.width,
+        height: giftOverlayRelativeBounds.height,
+      });
+    } else {
       windowMap.giftOverlay.setAlwaysOnTop(false);
       windowMap.giftOverlay.hide();
     }
@@ -1212,6 +1283,59 @@ function initMainWindowPage() {
 
 // 系统托盘
 let appTray = null;
+// 软件内部页面窗口（家族入驻/公会入驻等 H5 业务页，不暴露 node 能力）
+let internalPageWindow = null;
+function openInternalPage(url, title) {
+  if (internalPageWindow && !internalPageWindow.isDestroyed()) {
+    if (title) {
+      internalPageWindow.setTitle(title);
+    }
+    internalPageWindow.loadURL(url);
+    internalPageWindow.show();
+    internalPageWindow.focus();
+    return;
+  }
+  internalPageWindow = new BrowserWindow({
+    width: 1080,
+    height: 760,
+    minWidth: 860,
+    minHeight: 600,
+    parent: windowMap.main || undefined,
+    title: title || 'Niko直播',
+    autoHideMenuBar: true,
+    backgroundColor: '#101013',
+    webPreferences: {
+      // 外部业务页：不注入项目 preload，关闭 node 能力
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  internalPageWindow.loadURL(url);
+  internalPageWindow.on('closed', () => {
+    internalPageWindow = null;
+  });
+}
+
+ipcMain.on('open-internal-url', (_event, payload) => {
+  const { url, title } = payload || {};
+  if (typeof url === 'string' && /^https?:\/\//.test(url)) {
+    openInternalPage(url, title);
+  }
+});
+
+/** 托盘菜单业务入口：先确保主窗口可见，再把动作转发给渲染进程处理 */
+function notifyMainWindow(channel, payload) {
+  const win = windowMap.main;
+  if (!isWindowAlive(win)) {
+    return;
+  }
+  if (!win.isVisible()) {
+    win.show();
+  }
+  win.focus();
+  win.webContents.send(channel, payload);
+}
+
 function createTray() {
   try {
     const iconPath = path.join(__dirname, 'favicon.ico');
@@ -1219,7 +1343,7 @@ function createTray() {
     appTray.setToolTip('Niko直播');
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: '显示主窗口',
+        label: '显示 Niko 窗口',
         click: () => {
           if (isWindowAlive(windowMap.main)) {
             windowMap.main.show();
@@ -1228,7 +1352,38 @@ function createTray() {
         },
       },
       {
-        label: '退出',
+        label: '公会|家族',
+        click: () => notifyMainWindow('show-feature-pending', '公会|家族'),
+      },
+      {
+        label: '提现',
+        click: () => notifyMainWindow('show-feature-pending', '提现'),
+      },
+      {
+        label: '家族入驻',
+        click: () => notifyMainWindow('open-settle-page', '家族入驻'),
+      },
+      {
+        label: '公会入驻',
+        click: () => notifyMainWindow('open-settle-page', '公会入驻'),
+      },
+      { type: 'separator' },
+      {
+        label: '重启 Niko',
+        click: () => {
+          // 重启应用：开发模式（electron . --dist）下 argv[1] 是应用路径，
+          // 转成绝对路径，避免重启后因工作目录变化找不到应用入口
+          const args = process.argv.slice(1);
+          if (!app.isPackaged && args.length > 0) {
+            args[0] = path.resolve(args[0]);
+          }
+          isQuitting = true;
+          app.relaunch({ args });
+          app.exit(0);
+        },
+      },
+      {
+        label: '退出 Niko',
         click: () => {
           isQuitting = true;
           app.quit();

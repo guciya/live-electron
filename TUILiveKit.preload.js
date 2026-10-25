@@ -56,6 +56,11 @@ ipcRenderer.on('port-to-confirm', (event) => {
 
 window.ipcRenderer = ipcRenderer;
 
+// 窗口角色标记（主进程通过 additionalArguments 传入，如 gift-overlay 覆盖窗口）：
+// 在页面 JS 执行前暴露，供 Loading 启动页识别窗口身份、决定是否参与登录跳转
+const windowRoleArg = process.argv.find((arg) => arg.startsWith('--window-role='));
+window.__WINDOW_ROLE__ = windowRoleArg ? windowRoleArg.split('=')[1] : '';
+
 window.path = path;
 window.ROOT_PATH = path.join(__dirname, '../');
 window.PUBLIC_PATH = path.join(__dirname);

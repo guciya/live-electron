@@ -5,6 +5,12 @@
       <span class="title">Niko直播</span>
     </div>
     <div class="right">
+      <button class="back-list-btn" type="button" @click="emit('backToList')">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>返回列表</span>
+      </button>
       <div class="statistics">
         <div class="statistics-container" v-for="(item, index) in statisticsInfoList" :key="item.text">
           <span class="statistics-text">{{ item.text }}</span>
@@ -129,6 +135,7 @@ const props = defineProps({
 
 const emit = defineEmits<{
   logout: [];
+  backToList: [];
 }>();
 
 const { t, language, setLanguage } = useUIKit();
@@ -416,6 +423,32 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  /* 「返回列表」：白色文字按钮，字号与 CPU/RAM 等统计文字一致 */
+  .back-list-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--text-color-primary, #ffffff);
+    font-size: inherit;
+    line-height: 1.25rem;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: background-color 0.2s ease;
+
+    svg {
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
   }
 
   .statistics {

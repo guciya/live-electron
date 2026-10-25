@@ -5,7 +5,7 @@
         <span class="login-loading-text">{{ t('Logging In') }}</span>
       </div>
       <template v-else>
-      <LiveHeader @logout="handleLogout" :is-showing-in-child-window="true"/>
+      <LiveHeader @logout="handleLogout" @back-to-list="handleBackToList" :is-showing-in-child-window="true"/>
       <div class="live-pusher-main">
         <div class="main-left">
           <div class="main-left-top">
@@ -55,7 +55,7 @@
               <button
                 class="niko-tool-btn"
                 type="button"
-                :class="{ 'is-pk-active': !!currentBattleInfo?.battleId }"
+                :class="{ 'is-pk-active': !!(currentBattleInfo?.battleId || demoPkActive) }"
                 :disabled="!isInLive || loading"
                 @click="handlePkClick"
               >
@@ -65,7 +65,7 @@
                   <path d="M8 16l6-6M10 19l6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
                   <path d="M4.2 16.2l3.6 3.6M16.2 16.2l3.6 3.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
                 </svg>
-                <span class="niko-tool-label">{{ currentBattleInfo?.battleId ? '结束PK' : 'PK' }}</span>
+                <span class="niko-tool-label">{{ (currentBattleInfo?.battleId || demoPkActive) ? '结束PK' : 'PK' }}</span>
               </button>
               <MusicButton :isShowingInChildWindow="true" />
             </div>
@@ -93,8 +93,8 @@
               {{ displayAudienceCount }} {{ t('People watching') }}
             </div>
           </div>
-          <div ref="mainCenterCenterRef" class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
-            <div v-if="currentBattleInfo?.battleId" class="pk-overlay">
+          <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
+            <div v-if="currentBattleInfo?.battleId || demoPkActive" class="pk-overlay">
               <div class="pk-bar">
                 <div class="pk-side pk-left">
                   <span class="pk-score">{{ battleScoreMap.get(loginUserInfo?.userId) || 0 }}</span>
@@ -108,13 +108,19 @@
                 </div>
               </div>
             </div>
+            <!-- 开播后隐藏原生预览（display:none 使预览元素尺寸归零，原生窗口画面随之消失，
+                 摄像头采集/混流/推流不受影响），同位置改用 canvas 渲染摄像头帧，
+                 画面变为普通 DOM，礼物特效和用户卡片才能盖在视频上方 -->
             <StreamMixer
               v-if="nativeId !== null && !isGoingToLoginPage && mixerActive"
+              v-show="!isInLive"
               :windowId="nativeId"
               @on-user-on-seat-info-changed="onUserOnSeatInfoChanged"
               @on-stream-layout-changed="onStreamLayoutChanged"
               @on-stream-layout-area-changed="onStreamLayoutAreaChanged"
             />
+            <SelfStreamPreview v-if="isInLive" :live-index-id="pendingPreLiveId" />
+            <GiftEffect v-if="isInLive" />
           </div>
           <div class="main-center-bottom">
             <div class="main-center-bottom-content">
@@ -191,7 +197,7 @@
           </div>
         </div>
         <LivePusherNotification />
-        <!-- 点击聊天室用户名称/等级弹出的用户信息卡片 -->
+        <!-- 用户信息卡片：开播后视频已是 DOM 画布，卡片可直接展示 -->
         <UserInfoCard
           :visible="userCardVisible"
           :info="userCardInfo"
@@ -232,8 +238,8 @@
               </div>
             </div>
             <div class="niko-settle-footer">
-              <TUIButton type="primary" @click="handleRestartLive">重新开播</TUIButton>
-              <TUIButton color="gray" @click="settleStats = null">关闭</TUIButton>
+              <button type="button" class="niko-settle-btn niko-settle-btn--primary" @click="handleRestartLive">重新开播</button>
+              <button type="button" class="niko-settle-btn niko-settle-btn--ghost" @click="handleCloseSettle">关闭</button>
             </div>
           </div>
         </div>
@@ -289,16 +295,17 @@ import LiveSettingButton from '../TUILiveKit/components/LiveSettingButton.vue';
 import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
-import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import LiveAudiencePanel from '../niko/components/LiveAudiencePanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
+import UserInfoCard from '../niko/components/UserInfoCard.vue';
+import GiftEffect from '../niko/components/GiftEffect.vue';
+import SelfStreamPreview from '../niko/components/SelfStreamPreview.vue';
 import {
   joinLiveChat,
   leaveLiveChat,
-  onLiveImGift,
+  onLiveImMessage,
   onLiveImSettle,
   onLiveImSystem,
-  type LiveImGift,
   type LiveImSystemEvent,
   type LiveSettleStats,
 } from '../niko/im/liveIm';
@@ -332,8 +339,8 @@ import useRoomEngine from '../TUILiveKit/utils/useRoomEngine';
 import { mapToRoomEngineLanguage } from '../TUILiveKit/utils/common';
 import { LIVE_NAME_MAX_UTF8_BYTES } from '../TUILiveKit/constants/tuiConstant';
 import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
-import { stopLive as nikoStopLive, getAudienceCardInfo } from '../niko/api/live';
-import type { AudienceCardInfo, PrepareLiveResult } from '../niko/api/live';
+import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk } from '../niko/api/live';
+import type { PrepareLiveResult } from '../niko/api/live';
 
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
@@ -391,7 +398,7 @@ const pkCountdown = ref(0);
 let pkTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeSettle: (() => void) | null = null;
 let unsubscribeSystem: (() => void) | null = null;
-let unsubscribeGift: (() => void) | null = null;
+let unsubscribeJoinCount: (() => void) | null = null;
 /** 禁播/封禁/下播提示弹窗的 dialogId，用于区分普通「结束直播」确认框 */
 let liveStopDialogId = '';
 let liveStopNoticePending = false;
@@ -418,8 +425,13 @@ watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
 });
 
 const handlePkClick = async () => {
-  if (currentBattleInfo.value?.battleId) {
-    // 结束 PK
+  if (currentBattleInfo.value?.battleId || demoPkActive.value) {
+    // 结束 PK（演示效果直接本地清除）
+    if (demoPkActive.value) {
+      demoPkActive.value = false;
+      pkCountdown.value = 0;
+      return;
+    }
     try {
       await exitBattle({ battleId: currentBattleInfo.value.battleId });
     } catch (e) {
@@ -427,11 +439,30 @@ const handlePkClick = async () => {
     }
     return;
   }
-  // 对齐 web-obs-live / H5：先查「正在开播的主播」列表再发邀请，
-  // 不再直接调用 TUIKit requestBattle（当前 SDKAppID 未开通 RoomKit，会报 100007）。
-  pkDialogTitle.value = 'PK';
-  showPkDialog.value = true;
+  if (!isInLive.value || loading.value) {
+    return;
+  }
+  // 不弹窗：直接查询在播主播并自动邀请第一位；
+  // 没有可邀请的主播时，本地触发 PK 血条效果展示
+  try {
+    const result: any = await getPkAnchorList('', 1, 20);
+    const list: any[] = Array.isArray(result) ? result : (result?.list ?? result?.data ?? []);
+    const selfId = String(loginUserInfo.value?.userId || '');
+    const target = list.find((item) => String(item.user_id ?? item.anchor_id) !== selfId);
+    if (target) {
+      await invitePk(target.user_id ?? target.anchor_id);
+      showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
+      return;
+    }
+  } catch (e) {
+    console.warn('[NikoPK] auto invite failed:', e);
+  }
+  demoPkActive.value = true;
+  pkCountdown.value = 300;
 };
+
+/** PK 演示效果开关：没有在播主播可邀请时本地展示 PK 血条 */
+const demoPkActive = ref(false);
 
 /** 连麦入口：同样走「查询开播主播」列表 */
 const openLinkMicDialog = () => {
@@ -447,6 +478,13 @@ const onPkInvited = (anchorId: string) => {
   showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
 };
 
+/** 关闭结算面板：恢复开播前的画布调试状态（重新挂载原生预览并预热摄像头） */
+const handleCloseSettle = () => {
+  settleStats.value = null;
+  mixerActive.value = true;
+  void ensureDefaultCamera();
+};
+
 /** 关闭结算面板后回到预开播弹窗，实现「重新开播」 */
 const handleRestartLive = () => {
   settleStats.value = null;
@@ -454,6 +492,19 @@ const handleRestartLive = () => {
   mixerActive.value = true;
   void ensureDefaultCamera();
   showPreLiveDialog.value = true;
+};
+
+/** 确认结束直播后是否跳转回主播列表（顶部「返回列表」按钮触发） */
+let navigateToListAfterEnd = false;
+
+/** 返回主播列表：直播中先走结束直播确认，确认结束后跳转；未开播直接跳转 */
+const handleBackToList = () => {
+  if (isInLive.value) {
+    navigateToListAfterEnd = true;
+    showEndLiveConfirmWindow();
+    return;
+  }
+  router.replace({ name: 'anchor-list' });
 };
 // 当前 SDKAppID 未开通直播房间套餐，使用 Conference 类型进房，手动维护直播状态
 const nikoIsLive = ref(false);
@@ -470,8 +521,10 @@ const pkDialogTitle = ref('PK');
 const currentPkId = computed(() => String((currentBattleInfo.value as any)?.pkId || ''));
 /** 本场开播时间，用于结算面板计算直播时长 */
 const liveStartedAt = ref(0);
-/** 本场峰值在线人数 */
+/** 本场峰值在线人数（来自观众列表快照） */
 const peakAudienceCount = ref(0);
+/** 本场累计进房人次（来自 IM 101 进房消息；观众列表 15s 轮询会漏掉短停留观众，进房消息更可靠） */
+const totalJoinCount = ref(0);
 /** 关播结算数据；非空时展示结算层 */
 const settleStats = ref<{
   kTicket: string;
@@ -483,40 +536,11 @@ const settleStats = ref<{
 const nikoRoomId = ref<string>('');
 // 在线人数来自 IM 群成员（TUIRoomEngine 房间不可用，TUIKit 的 audienceCount 恒为 0）
 const nikoAudienceCount = ref(0);
-/** 聊天室点击用户名称/等级弹出的用户信息卡片 */
+
+/** 用户信息卡片（DOM 展示：开播后视频为 canvas 画布，卡片可直接盖在上方） */
 const userCardVisible = ref(false);
 const userCardLoading = ref(false);
-const userCardInfo = ref<AudienceCardInfo | null>(null);
-
-/** 视频预览区域（用于定位透明礼物覆盖窗口） */
-const mainCenterCenterRef = ref<HTMLElement | null>(null);
-
-/**
- * 礼物特效必须显示在原生视频之上：
- * StreamMixer 通过 TRTC SDK 创建了独立原生窗口，DOM 层永远被它盖住，
- * 所以把礼物转发给主进程的透明覆盖窗口播放。
- */
-const handleLiveGift = (gift: LiveImGift) => {
-  if (!isInLive.value) {
-    return;
-  }
-  const el = mainCenterCenterRef.value;
-  if (!el) {
-    return;
-  }
-  const rect = el.getBoundingClientRect();
-  if (!rect.width || !rect.height) {
-    return;
-  }
-  window.ipcRenderer?.send('gift-overlay-play', {
-    bounds: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-    gift,
-  });
-};
-
-const hideGiftOverlay = () => {
-  window.ipcRenderer?.send('gift-overlay-hide');
-};
+const userCardInfo = ref<any>(null);
 
 /** 对齐 web-obs-live ChatRoom.handleUserClick：按用户 + 直播场次拉取个人信息卡片 */
 const handleUserClick = async (payload: { userId: string; isMystery: boolean }) => {
@@ -524,9 +548,9 @@ const handleUserClick = async (payload: { userId: string; isMystery: boolean }) 
   if (!audienceUserId) {
     return;
   }
-  userCardVisible.value = true;
-  userCardLoading.value = true;
   userCardInfo.value = { is_mystery: !!payload.isMystery, user_id: audienceUserId };
+  userCardLoading.value = true;
+  userCardVisible.value = true;
   try {
     const result = await getAudienceCardInfo({
       audienceUserId,
@@ -756,6 +780,7 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     nikoIsLive.value = true;
     liveStartedAt.value = Date.now();
     peakAudienceCount.value = 0;
+    totalJoinCount.value = 0;
     settleStats.value = null;
     loading.value = false;
     await openLocalMicrophone();
@@ -970,6 +995,11 @@ const onConfirmDialogAction = async (payload: ConfirmDialogActionPayload) => {
     if (!loading.value) {
       await handleEndLive();
     }
+    // 「返回列表」确认的结束直播：结束后跳回主播列表页
+    if (navigateToListAfterEnd) {
+      navigateToListAfterEnd = false;
+      router.replace({ name: 'anchor-list' });
+    }
     return;
   }
 
@@ -1068,6 +1098,9 @@ const formatLiveDuration = (seconds: number): string => {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 };
 
+/** 本地观看人数估算：峰值在线与累计进房人次取大者（短停留观众只会体现在进房计数里） */
+const localAudienceEstimate = () => Math.max(peakAudienceCount.value, totalJoinCount.value);
+
 /** 后端 action 118 结算消息到达时覆盖本地估算值 */
 const applySettleStats = (stats: LiveSettleStats) => {
   const raw = stats.raw || {};
@@ -1075,7 +1108,7 @@ const applySettleStats = (stats: LiveSettleStats) => {
   settleStats.value = {
     kTicket: String(raw.kticket ?? raw.k_ticket ?? raw.ticket_count ?? '0'),
     liveDuration: stats.liveDuration || formatLiveDuration(durationSeconds),
-    audienceCount: Number(stats.audienceCount) || peakAudienceCount.value,
+    audienceCount: Number(stats.audienceCount) || localAudienceEstimate(),
     newFansCount: Number(stats.newFansCount) || 0,
   };
 };
@@ -1137,7 +1170,7 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
     nikoRoomId.value = '';
     nikoAudienceCount.value = 0;
     nikoIsLive.value = false;
-    hideGiftOverlay();
+    userCardVisible.value = false;
     // 关播后卸载 StreamMixer，销毁原生视频预览窗口。
     // 该原生窗口永远盖在 DOM 上方，不销毁会导致「关播后画面还在、结算层被盖住」。
     // 卸载时 WinLocalMixer 会自动 clearMediaSource + bindPreviewArea(0,null) + stopMediaMixingServer。
@@ -1151,7 +1184,7 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
       settleStats.value = {
         kTicket: '0',
         liveDuration: formatLiveDuration(durationSeconds),
-        audienceCount: peakAudienceCount.value,
+        audienceCount: localAudienceEstimate(),
         newFansCount: 0,
       };
     }
@@ -1440,8 +1473,14 @@ onMounted(async () => {
   unsubscribeSettle = onLiveImSettle(applySettleStats);
   // 下播 / 禁播 / 封禁 / 警告（对齐 web-obs-live）
   unsubscribeSystem = onLiveImSystem(showLiveNotice);
-  // 礼物特效转发到原生视频之上的透明覆盖窗口
-  unsubscribeGift = onLiveImGift(handleLiveGift);
+  // 累计本场进房人次：结算页「观看人数」的本地估算源之一
+  // （观众列表 15s 轮询是快照，短停留观众会漏；进房消息每人必达）
+  unsubscribeJoinCount = onLiveImMessage((message) => {
+    if (isInLive.value && message?.kind === 'join') {
+      totalJoinCount.value += 1;
+    }
+  });
+  // 礼物特效由开播后挂载的 GiftEffect 组件自行订阅 IM 礼物消息并播放（DOM 层，直接盖在 canvas 画面上）
 
   // Setup event listeners
   setupEventListeners();
@@ -1618,9 +1657,8 @@ onBeforeUnmount(() => {
   unsubscribeSettle = null;
   unsubscribeSystem?.();
   unsubscribeSystem = null;
-  unsubscribeGift?.();
-  unsubscribeGift = null;
-  hideGiftOverlay();
+  unsubscribeJoinCount?.();
+  unsubscribeJoinCount = null;
   hasStartedLogoutRedirect = false;
   stopSystemAudioLoopbackSafely();
   if (currentForceLogoutDialogId.value) {
@@ -1770,7 +1808,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 关播结算层（对齐 web-obs-live 的 end-stats 面板） */
+/* 关播结算层：对齐 web-obs-live LiveBroadcastScreen 的 end-stats-mask 样式 */
 .niko-settle-mask {
   position: fixed;
   inset: 0;
@@ -1778,81 +1816,131 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(4px);
+  animation: niko-settle-fade-in 0.3s ease-out;
 }
 
 .niko-settle-card {
-  width: 420px;
-  padding: 22px 24px 18px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #262f3f 0%, #1c2432 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
   color: #fff;
   text-align: center;
+  animation: niko-settle-slide-up 0.4s ease-out;
 }
 
 .niko-settle-header {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 18px;
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  background: linear-gradient(90deg, #ff4d6a, #ff6b8a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .niko-settle-hero {
-  padding: 16px 0 18px;
-  border-radius: 12px;
-  background: rgba(255, 184, 61, 0.08);
-  border: 1px solid rgba(255, 184, 61, 0.18);
-  margin-bottom: 16px;
+  text-align: center;
+  margin-bottom: 30px;
 
   .niko-settle-hero-value {
-    font-size: 34px;
-    font-weight: 700;
+    font-size: 60px;
+    font-weight: bold;
     line-height: 1.1;
-    color: #ffb83d;
+    color: #ff4d6a;
+    margin-bottom: 5px;
     font-variant-numeric: tabular-nums;
   }
 
   .niko-settle-hero-label {
-    margin-top: 6px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.55);
+    font-size: 16px;
+    opacity: 0.8;
   }
 }
 
 .niko-settle-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  gap: 15px;
+  width: 100%;
+  margin-bottom: 30px;
 }
 
 .niko-settle-item {
   flex: 1;
   min-width: 0;
-
-  & + .niko-settle-item {
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-  }
+  padding: 15px 10px;
 
   .niko-settle-item-value {
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 5px;
     font-variant-numeric: tabular-nums;
   }
 
   .niko-settle-item-label {
-    margin-top: 4px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    opacity: 0.7;
   }
 }
 
 .niko-settle-footer {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.niko-settle-btn {
+  min-width: 180px;
+  height: 40px;
+  font-size: 16px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  transition: all 0.3s;
+
+  &:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
+}
+
+.niko-settle-btn--primary {
+  background: linear-gradient(90deg, #ff4d6a, #ff6b8a);
+}
+
+.niko-settle-btn--ghost {
+  min-width: 120px;
+  /* 与发送/开播按钮统一主题蓝 */
+  background: var(--uikit-color-primary, #2b7fff);
+}
+
+@keyframes niko-settle-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes niko-settle-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tui-livekit-win {
@@ -2251,13 +2339,6 @@ onBeforeUnmount(() => {
   .card-title {
     @include text-size-16;
     @include dividing-line;
-  }
-
-  /* 用户信息卡片：原生视频窗口会盖住页面中间区域，卡片固定到右侧观众/聊天栏上方展示 */
-  :deep(.niko-user-card-mask) {
-    justify-content: flex-end;
-    padding-right: 18px;
-    background: rgba(0, 0, 0, 0.3);
   }
 }
 </style>

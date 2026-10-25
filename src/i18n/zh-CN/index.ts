@@ -132,7 +132,7 @@ const demoResource = {
   'Online Live': '在线直播',
   'Layout Settings': '布局设置',
   'Landscape Template': '横屏模版',
-  'Video Source': '画面源',
+  'Video Source': '画面设置',
   'Dynamic Grid9 Layout': '动态宫格布局',
   'Fixed Grid9 Layout': '静态宫格布局',
   'Dynamic 1v6 Layout': '浮动小窗布局',

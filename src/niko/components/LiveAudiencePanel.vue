@@ -44,6 +44,16 @@ const emit = defineEmits<{ (event: 'count-change', count: number): void }>();
 
 const { t } = useUIKit();
 
+/** 当前登录用户 id：观众列表不展示主播自己 */
+const selfUserId = (() => {
+  try {
+    const stored = window.localStorage.getItem('TUILiveKit-userInfo');
+    return String(stored ? JSON.parse(stored)?.userId || '' : '');
+  } catch (error) {
+    return '';
+  }
+})();
+
 interface AudienceEntry {
   userId: string;
   nickname: string;
@@ -82,12 +92,18 @@ watch(
   { immediate: true },
 );
 
-// 开播后 pendingPreLiveId 才被赋值为 live_index_id，变化时立即拉一次在线观众
+// 开播后 pendingPreLiveId 才被赋值为 live_index_id，变化时立即拉一次在线观众；
+// 关播/退出直播间时 id 被清空，同步清空列表，下次开播重新拉取
 watch(
   () => props.liveIndexId,
   (liveIndexId) => {
     if (liveIndexId) {
       void loadAudience();
+    } else {
+      apiMembers.value = [];
+      imMembers.value = [];
+      apiLoaded.value = false;
+      connecting.value = true;
     }
   },
 );
@@ -97,10 +113,14 @@ function onAvatarError(userId: string) {
   brokenAvatars.value = new Set(brokenAvatars.value);
 }
 
-/** 接口字段归一化：只保留头像与名称 */
+/** 接口字段归一化：只保留头像与名称；过滤主播自己 */
 function normalize(item: LiveAudienceItem): AudienceEntry | null {
   const userId = String(item.user_id ?? item.userId ?? '');
-  if (!userId) {
+  if (!userId || userId === selfUserId) {
+    return null;
+  }
+  // 房管/超管/主播身份（如「直播聊天室管理员」系统账号）不是真实观众，不展示
+  if (item.is_manager || item.is_super || item.is_anchor) {
     return null;
   }
   return {
@@ -141,13 +161,13 @@ async function loadAudience() {
   }
 }
 
-/** IM 观众列表兜底：按 userId 去重、过滤空 id */
+/** IM 观众列表兜底：按 userId 去重、过滤空 id 与主播自己 */
 function applyImMembers(list: LiveImMember[]) {
   const seen = new Set<string>();
   const next: LiveImMember[] = [];
   list.forEach((item) => {
     const userId = String(item.userId || '');
-    if (!userId || seen.has(userId)) {
+    if (!userId || seen.has(userId) || userId === selfUserId) {
       return;
     }
     seen.add(userId);

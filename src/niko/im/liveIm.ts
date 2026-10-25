@@ -109,6 +109,25 @@ function shouldEmitJoinNotice(key: string): boolean {
   return true;
 }
 
+/** 当前登录用户身份：用于过滤「自己进入直播间」的提示（主播不需要看到自己进场） */
+function isSelfIdentity(userId: string, nickname: string): boolean {
+  try {
+    const stored = window.localStorage.getItem('TUILiveKit-userInfo');
+    const info = stored ? JSON.parse(stored) : {};
+    const selfId = String(info?.userId || '');
+    const selfName = String(info?.userName || info?.nickname || info?.name || '');
+    if (selfId && userId && selfId === String(userId)) {
+      return true;
+    }
+    if (selfName && nickname && selfName === String(nickname)) {
+      return true;
+    }
+  } catch (error) {
+    // 读取失败不过滤，保持原行为
+  }
+  return false;
+}
+
 function getEngine(): any {
   return TUIChatEngine as any;
 }
@@ -218,6 +237,10 @@ function handleJoinNotice(custom: any, raw: any): void {
   const audienceInfo = joinInfo?.show_audience_info || custom?.message_data?.audience_info;
   const nickname = String(audienceInfo?.nickname || audienceInfo?.user_id || '');
   if (!nickname) {
+    return;
+  }
+  // 自己进入直播间不展示提示（观众列表与聊天室都不需要看到自己进场）
+  if (isSelfIdentity(String(audienceInfo?.user_id || ''), nickname)) {
     return;
   }
   // 自己进群时 action 101 与 TIM 群系统通知（type=5）会各推一条，按人去重避免重复提示
@@ -476,8 +499,8 @@ function bindListeners(chat: any): void {
     );
     console.log('[NikoIM] group system notice:', type, nickname);
     // 5=新成员入群 6=成员退群（TIMGroupSystemNoticeType）
-    // 入群提示与 action 101 的 join_audience 去重，避免同一个人提示两次
-    if (type === 5 && nickname && shouldEmitJoinNotice(nickname)) {
+    // 入群提示与 action 101 的 join_audience 去重，避免同一个人提示两次；自己不提示
+    if (type === 5 && nickname && !isSelfIdentity('', nickname) && shouldEmitJoinNotice(nickname)) {
       emitMessage({
         id: `system-${Date.now()}-${Math.random()}`,
         kind: 'join',

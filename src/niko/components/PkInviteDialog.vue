@@ -155,7 +155,7 @@ watch(
 
 .niko-pk-dialog {
   width: 460px;
-  max-height: 72vh;
+  max-height: 86vh;
   display: flex;
   flex-direction: column;
   padding: 18px 18px 14px;

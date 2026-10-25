@@ -9,16 +9,23 @@
 
         <div class="anchor-header-right">
           <div v-if="userInfo" class="anchor-user">
-            <img
-              v-if="userAvatar"
-              class="anchor-user-avatar"
-              :src="userAvatar"
-              alt=""
-              @error="onUserAvatarError"
-            />
-            <span v-else class="anchor-user-avatar anchor-user-avatar-empty">{{ userInitial }}</span>
-            <span class="anchor-user-name">{{ userInfo.nickname || userInfo.userShowId }}</span>
+            <span class="anchor-user-avatar-ring">
+              <img
+                v-if="userAvatar"
+                class="anchor-user-avatar"
+                :src="userAvatar"
+                alt=""
+                @error="onUserAvatarError"
+              />
+              <span v-else class="anchor-user-avatar anchor-user-avatar-empty">{{ userInitial }}</span>
+            </span>
+            <span class="anchor-user-name anchor-user-name-shine">{{ userInfo.nickname || userInfo.userShowId }}</span>
           </div>
+          <!-- 业务入口：公会|家族 / 提现 暂未开放；家族入驻 / 公会入驻 软件内打开入驻页 -->
+          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('公会|家族')">公会|家族</button>
+          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('提现')">提现</button>
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('家族入驻')">家族入驻</button>
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('公会入驻')">公会入驻</button>
           <button class="anchor-text-btn" type="button" @click="handleLogout">退出登录</button>
           <button class="anchor-start-live-btn" type="button" @click="handleStartLive">
             <IconLiveStart class="start-live-icon" />
@@ -42,6 +49,7 @@
       <main class="anchor-body">
         <div class="anchor-body-title">
           <div class="title-left">
+            <span class="title-live-dot"></span>
             <span class="title-text">主播列表</span>
             <span class="title-count">{{ total }} 位主播正在直播</span>
           </div>
@@ -98,25 +106,59 @@
               <div class="card-enter-tip">进入直播间</div>
             </div>
             <div class="card-info">
-              <img
-                v-if="item.avatar"
-                class="card-avatar"
-                :src="resolveImageUrl(item.avatar)"
-                alt=""
-                @error="onCardAvatarError"
-              />
-              <div v-else class="card-avatar card-avatar-empty" />
+              <div class="card-avatar-wrap">
+                <img
+                  v-if="item.avatar"
+                  class="card-avatar"
+                  :src="resolveImageUrl(item.avatar)"
+                  alt=""
+                  @error="onCardAvatarError"
+                />
+                <div v-else class="card-avatar card-avatar-empty" />
+                <span class="card-live-tag">LIVE</span>
+              </div>
               <div class="card-text">
-                <div class="card-title">{{ item.title || '直播中' }}</div>
+                <div class="card-title">
+                  <span class="card-title-text">{{ item.title || '直播中' }}</span>
+                  <span v-if="item.isCharge === 1" class="card-charge">付费</span>
+                  <span v-if="item.pkStatus === 1 || item.pkStatus === 2" class="card-pk-tag">PK中</span>
+                </div>
                 <div class="card-subtitle">
                   <span class="card-nickname">{{ item.nickname || '主播' }}</span>
-                  <span v-if="item.isCharge === 1" class="card-charge">付费</span>
+                  <span v-if="item.gender === 1" class="card-gender card-gender-male">♂</span>
+                  <span v-else-if="item.gender === 2" class="card-gender card-gender-female">♀</span>
                 </div>
+                <div class="card-meta">
+                  <span v-if="item.anchorShowId" class="card-id">ID:{{ item.anchorShowId }}</span>
+                  <span v-if="item.orientation" class="card-orient-tag">{{ item.orientation === 'landscape' ? '横屏' : '竖屏' }}</span>
+                </div>
+              </div>
+              <div v-if="item.audienceAvatars.length" class="card-audience-stack">
+                <img
+                  v-for="(avatar, idx) in item.audienceAvatars"
+                  :key="idx"
+                  class="card-audience-avatar"
+                  :src="resolveImageUrl(avatar)"
+                  :style="{ zIndex: item.audienceAvatars.length - idx }"
+                  alt=""
+                />
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      <!-- 退出登录确认弹窗 -->
+      <div v-if="showLogoutConfirm" class="logout-confirm-mask" @click.self="cancelLogout">
+        <div class="logout-confirm-dialog">
+          <div class="logout-confirm-title">退出登录</div>
+          <div class="logout-confirm-text">确定要退出当前账号吗？</div>
+          <div class="logout-confirm-actions">
+            <button class="logout-confirm-btn logout-confirm-cancel" type="button" @click="cancelLogout">取消</button>
+            <button class="logout-confirm-btn logout-confirm-ok" type="button" @click="confirmLogout">确认退出</button>
+          </div>
+        </div>
+      </div>
     </div>
   </UIKitProvider>
 </template>
@@ -132,8 +174,9 @@ import MinimizeIcon from '../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../TUILiveKit/common/icons/CloseIcon.vue';
 import { isMacPlatform } from '../TUILiveKit/utils/platform';
+import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
+import { NIKO_CONFIG, resolveImageUrl } from '../niko/config';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
-import { resolveImageUrl } from '../niko/config';
 import { fetchLiveFocusMonitorList, fetchLiveMonitorList, type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
@@ -175,11 +218,14 @@ function mergeLiveList(main: NikoLiveListItem[], focus: NikoLiveListItem[]): Nik
 
 /**
  * 加载主播列表。
- * 页面首次进入只请求一次；点击刷新按钮传 force=true 强制重新请求。
+ * 页面首次进入只请求一次；点击刷新按钮传 force=true 强制重新请求；
+ * silent=true 为无感刷新（后台定时同步），不展示 loading 也不打断页面。
  */
-async function loadList(force = false) {
-  loading.value = true;
-  apiError.value = '';
+async function loadList(force = false, silent = false) {
+  if (!silent) {
+    loading.value = true;
+    apiError.value = '';
+  }
   try {
     // 同时拉取「在播主播」和「关注主播」两个 CMS 列表，按 liveIndexId 去重后合并展示
     const [mainResult, focusResult] = await Promise.allSettled([
@@ -209,14 +255,24 @@ async function loadList(force = false) {
       }
     });
   } catch (error) {
+    // 无感刷新失败保留当前列表，只打日志，避免列表被清空闪动
+    if (silent) {
+      console.warn('[AnchorList] silent refresh failed:', error);
+      return;
+    }
     apiError.value = error instanceof Error ? error.message : String(error);
     liveList.value = [];
     total.value = 0;
     console.error('[AnchorList] fetchLiveMonitorList failed:', error);
   } finally {
-    loading.value = false;
+    if (!silent) {
+      loading.value = false;
+    }
   }
 }
+
+// 无感刷新定时器句柄
+let silentTimer: number | null = null;
 
 function handleRefresh() {
   void loadList(true);
@@ -316,7 +372,19 @@ function handleStartLive() {
   router.push({ name: isMacPlatform() ? 'tui-livekit-mac' : 'tui-live-kit-main' });
 }
 
-async function handleLogout() {
+// 退出登录二次确认：点击「退出登录」先弹窗，确认后才执行登出
+const showLogoutConfirm = ref(false);
+
+function handleLogout() {
+  showLogoutConfirm.value = true;
+}
+
+function cancelLogout() {
+  showLogoutConfirm.value = false;
+}
+
+async function confirmLogout() {
+  showLogoutConfirm.value = false;
   // 退出登录时同步登出 IM，避免切换账号后直播间复用旧账号会话导致互踢
   try {
     await logoutIm();
@@ -327,6 +395,18 @@ async function handleLogout() {
   window.localStorage.removeItem(USER_INFO_STORAGE_KEY);
   window.ipcRenderer.send('user-logout');
   router.replace({ name: 'login' });
+}
+
+// 家族入驻 / 公会入驻：同一个入驻页，软件内部窗口打开
+const SETTLE_URL = `${NIKO_CONFIG.h5WebBase}/os/#/settle`;
+
+function openSettlePage(title: string) {
+  window.ipcRenderer?.send('open-internal-url', { url: SETTLE_URL, title });
+}
+
+// 公会|家族 / 提现：对齐 H5 个人页口径，暂未开放
+function handlePendingEntry(label: string) {
+  showMessage({ type: MessageToastType.Info, message: `${label}功能暂未开放，敬请期待` });
 }
 
 function onUserAvatarError() {
@@ -358,9 +438,17 @@ function onClose() {
 
 onMounted(() => {
   void loadList();
+  // 无感刷新：每 2000 秒后台同步一次在播数据，不展示 loading、不打断预览
+  silentTimer = window.setInterval(() => {
+    void loadList(true, true);
+  }, 2000 * 1000);
 });
 
 onBeforeUnmount(() => {
+  if (silentTimer !== null) {
+    window.clearInterval(silentTimer);
+    silentTimer = null;
+  }
   previewObserver?.disconnect();
   previewHandles.forEach((handle) => handle.destroy());
   previewHandles.clear();
@@ -397,17 +485,28 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
     margin-left: 8px;
+    height: 30px;
+    width: 105px;
+    padding-left: 11px;
+    margin-top: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    box-sizing: border-box;
 
     .logo-icon {
-      width: 1.625rem;
-      height: 1.5rem;
-      object-fit: contain;
+      width: 1.375rem;
+      height: 1.375rem;
+      object-fit: cover;
+      border-radius: 50%;
     }
 
     .logo-title {
-      padding-left: 0.6rem;
-      font-size: 1.125rem;
-      font-weight: bold;
+      padding-left: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
     }
   }
 
@@ -415,6 +514,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    margin-top: 10px;
     -webkit-app-region: no-drag;
   }
 
@@ -425,9 +525,42 @@ onBeforeUnmount(() => {
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
 
+    .anchor-user-avatar-ring {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 50%;
+
+      /* 360 度旋转外光圈 */
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, #2b7fff, #7fd0ff, #b58cff, #2b7fff);
+        animation: anchor-avatar-ring-spin 2.4s linear infinite;
+      }
+
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 2px;
+        border-radius: 50%;
+        background: var(--bg-color-topbar, #141518);
+      }
+
+      .anchor-user-avatar {
+        position: relative;
+        z-index: 1;
+      }
+    }
+
     .anchor-user-avatar {
-      width: 1.5rem;
-      height: 1.5rem;
+      width: 1.375rem;
+      height: 1.375rem;
       border-radius: 50%;
       object-fit: cover;
       background-color: rgba(255, 255, 255, 0.12);
@@ -449,12 +582,39 @@ onBeforeUnmount(() => {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    /* 昵称流光闪动 */
+    .anchor-user-name-shine {
+      font-weight: 600;
+      background: linear-gradient(90deg, #ffffff 0%, #ffffff 40%, #7fd0ff 50%, #ffffff 60%, #ffffff 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: anchor-name-shine 2.4s linear infinite;
+    }
+  }
+
+  @keyframes anchor-avatar-ring-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes anchor-name-shine {
+    0% {
+      background-position: 100% 0;
+    }
+
+    100% {
+      background-position: -100% 0;
+    }
   }
 
   .anchor-text-btn {
     padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
-    color: var(--text-color-secondary, rgba(255, 255, 255, 0.65));
+    color: #ffffff;
     cursor: pointer;
     background: transparent;
     border: none;
@@ -476,13 +636,14 @@ onBeforeUnmount(() => {
     font-weight: 600;
     color: #fff;
     cursor: pointer;
-    background-color: var(--button-color-primary-default, #1c66e5);
+    /* 去掉按钮底色，白字展示 */
+    background-color: transparent;
     border: none;
     border-radius: 0.375rem;
-    transition: opacity 0.2s ease;
+    transition: background-color 0.2s ease;
 
     &:hover {
-      opacity: 0.9;
+      background-color: rgba(255, 255, 255, 0.1);
     }
 
     .start-live-icon {
@@ -541,18 +702,49 @@ onBeforeUnmount(() => {
 
   .title-left {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.5rem;
   }
 
+  /* 直播状态呼吸小圆点 */
+  .title-live-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #ff4d6a;
+    box-shadow: 0 0 6px rgba(255, 77, 106, 0.8);
+    animation: title-live-dot-breath 1.6s ease-in-out infinite;
+  }
+
   .title-text {
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: 0.0625rem;
+    background: linear-gradient(90deg, #ffffff, #9ec5ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
   .title-count {
+    padding: 0.125rem 0.625rem;
     font-size: 0.75rem;
-    color: var(--text-color-secondary, rgba(255, 255, 255, 0.65));
+    color: #9ec5ff;
+    background: rgba(43, 127, 255, 0.12);
+    border: 1px solid rgba(43, 127, 255, 0.25);
+    border-radius: 999px;
+  }
+
+  @keyframes title-live-dot-breath {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 0.5;
+      transform: scale(0.8);
+    }
   }
 
   .refresh-btn {
@@ -750,28 +942,63 @@ onBeforeUnmount(() => {
     padding: 10px 12px;
   }
 
+  .card-avatar-wrap {
+    position: relative;
+    flex: none;
+  }
+
   .card-avatar {
     flex: none;
-    width: 36px;
-    height: 36px;
+    display: block;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     object-fit: cover;
     background-color: rgba(255, 255, 255, 0.12);
+    border: 2px solid rgba(255, 77, 106, 0.7);
+    box-sizing: border-box;
   }
 
   .card-avatar-empty {
     display: block;
   }
 
+  /* 头像右下角 LIVE 小标 */
+  .card-live-tag {
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 4px;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 12px;
+    color: #fff;
+    letter-spacing: 0.5px;
+    background: linear-gradient(90deg, #ff4d6a, #ff7849);
+    border-radius: 6px;
+  }
+
   .card-text {
     min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .card-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 0.875rem;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+
+    .card-title-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   .card-subtitle {
@@ -788,6 +1015,60 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
 
+  .card-gender {
+    flex: none;
+    font-size: 10px;
+    font-weight: 700;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+  }
+
+  .card-gender-male {
+    color: #fff;
+    background: #3ba1ff;
+  }
+
+  .card-gender-female {
+    color: #fff;
+    background: #ff6b9d;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-color-secondary, rgba(255, 255, 255, 0.45));
+  }
+
+  .card-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-orient-tag {
+    flex: none;
+    padding: 0 4px;
+    line-height: 14px;
+    border-radius: 2px;
+    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .card-pk-tag {
+    flex: none;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 15px;
+    color: #fff;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #ff4d6a, #b58cff);
+  }
+
   .card-charge {
     flex: none;
     padding: 0 5px;
@@ -796,6 +1077,117 @@ onBeforeUnmount(() => {
     color: #fff;
     border-radius: 2px;
     background-color: var(--button-color-primary-default, #1c66e5);
+  }
+
+  /* 在线观众头像叠层 */
+  .card-audience-stack {
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding-left: 4px;
+  }
+
+  .card-audience-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--bg-color-operate, #22252b);
+    box-sizing: border-box;
+
+    & + .card-audience-avatar {
+      margin-left: -8px;
+    }
+  }
+}
+
+/* ==================== 退出登录确认弹窗 ==================== */
+.logout-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  animation: logout-mask-fade-in 0.2s ease;
+}
+
+.logout-confirm-dialog {
+  width: 320px;
+  padding: 24px;
+  background: var(--bg-color-dialog, #22252b);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: logout-dialog-slide-up 0.25s ease;
+}
+
+.logout-confirm-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+}
+
+.logout-confirm-text {
+  margin-top: 10px;
+  font-size: 0.8125rem;
+  color: var(--text-color-secondary, rgba(255, 255, 255, 0.65));
+  text-align: center;
+}
+
+.logout-confirm-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.logout-confirm-btn {
+  flex: 1;
+  height: 34px;
+  font-size: 0.8125rem;
+  border: none;
+  border-radius: 17px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 0.85;
+  }
+}
+
+.logout-confirm-cancel {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.logout-confirm-ok {
+  color: #ffffff;
+  font-weight: 600;
+  background: var(--uikit-color-primary, #2b7fff);
+}
+
+@keyframes logout-mask-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes logout-dialog-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 </style>

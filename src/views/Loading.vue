@@ -29,6 +29,15 @@ async function init(userInfo: Record<string, any>) {
 }
 
 onMounted(() => {
+  // 礼物/用户卡片覆盖窗口：不参与登录态检查与跳转，直接落到自己的路由。
+  // 否则 Loading 的登录跳转与主进程的 hash 设置形成时序竞争，
+  // 覆盖窗口会停在登录页，导致礼物特效和用户卡片永远渲染不出来。
+  if ((window as any).__WINDOW_ROLE__ === 'gift-overlay') {
+    if (window.location.hash !== '#/gift-overlay') {
+      window.location.hash = '/gift-overlay';
+    }
+    return;
+  }
   const storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
   let userInfo;
   if (!storedUserInfo) {

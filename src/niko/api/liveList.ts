@@ -31,7 +31,18 @@ export interface NikoLiveListItem {
   /** 0=未PK 1=PK中 2=PK连麦中 3=观众连麦中 */
   pkStatus: number;
   viewerCount: number;
+  /** 主播性别 1=男 2=女 */
+  gender: number;
+  /** 画面方向：landscape=横屏 portrait=竖屏，未知为空 */
+  orientation: '' | 'landscape' | 'portrait';
+  /** 在线观众头像（前 3 个，用于卡片头像叠层展示） */
+  audienceAvatars: string[];
   playUrl: string;
+}
+
+interface RawAudienceItem {
+  avatar?: string;
+  is_online?: number | boolean;
 }
 
 interface RawLiveListItem {
@@ -49,9 +60,12 @@ interface RawLiveListItem {
   avatar?: string;
   is_charge?: number | boolean;
   pk_status?: number;
-  audience_list?: unknown[];
+  gender?: number;
+  audience_list?: RawAudienceItem[];
   live_info?: {
-    audience_list?: unknown[];
+    width?: number;
+    height?: number;
+    audience_list?: RawAudienceItem[];
   };
   play_url?: string;
 }
@@ -109,7 +123,20 @@ function normalize(item: RawLiveListItem): NikoLiveListItem | null {
     return null;
   }
   // CMS 接口把观众列表放在 live_info.audience_list，兼容顶层写法
-  const audience = item.live_info?.audience_list ?? item.audience_list;
+  const audience: RawAudienceItem[] = Array.isArray(item.live_info?.audience_list)
+    ? item.live_info!.audience_list!
+    : Array.isArray(item.audience_list)
+      ? item.audience_list!
+      : [];
+  // 画面方向：live_info.width/height，宽大于高为横屏
+  const width = Number(item.live_info?.width) || 0;
+  const height = Number(item.live_info?.height) || 0;
+  const orientation = width > 0 && height > 0 ? (width > height ? 'landscape' : 'portrait') : '';
+  // 在线观众头像叠层：只取 is_online 的观众，最多 3 个
+  const audienceAvatars = audience
+    .filter((a) => !!a && Number(a.is_online) === 1 && !!a.avatar)
+    .slice(0, 3)
+    .map((a) => String(a.avatar));
   return {
     liveIndexId,
     roomId,
@@ -122,7 +149,10 @@ function normalize(item: RawLiveListItem): NikoLiveListItem | null {
     avatar: item.avatar ?? '',
     isCharge: Number(item.is_charge) === 1 ? 1 : 0,
     pkStatus: typeof item.pk_status === 'number' ? item.pk_status : 0,
-    viewerCount: Array.isArray(audience) ? audience.length : 0,
+    viewerCount: audience.length,
+    gender: typeof item.gender === 'number' ? item.gender : 0,
+    orientation: orientation as '' | 'landscape' | 'portrait',
+    audienceAvatars,
     playUrl: item.play_url ?? '',
   };
 }

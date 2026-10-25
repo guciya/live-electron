@@ -5,8 +5,9 @@
       <div class="niko-chat-notice-body">{{ LIVE_NOTICE_TEXT }}</div>
     </div>
     <div ref="listRef" class="niko-chat-list">
-      <div v-if="messages.length === 0" class="niko-chat-empty">
-        {{ disabled ? t('Live not started') : (connected ? t('No messages yet') : t('Connecting')) }}
+      <!-- 开播已连接时不展示空态文案，保持聊天区干净 -->
+      <div v-if="messages.length === 0 && (disabled || !connected)" class="niko-chat-empty">
+        {{ disabled ? t('Live not started') : t('Connecting') }}
       </div>
       <template v-for="message in messages" :key="message.id">
         <div v-if="message.kind === 'join'" class="niko-chat-line niko-chat-line--join">
@@ -226,10 +227,12 @@ onMounted(() => {
 watch(
   () => props.roomId,
   async (roomId) => {
+    // 关播/退出直播间时 roomId 清空，同步清空消息列表
+    messages.value = [];
     if (!roomId) {
+      connected.value = false;
       return;
     }
-    messages.value = [];
     try {
       await joinLiveChat(String(roomId));
       connected.value = isLiveChatConnected();
@@ -276,6 +279,7 @@ onBeforeUnmount(() => {
 .niko-chat-notice-body {
   /* 完整展示合规提醒，不再内部截断滚动 */
   white-space: normal;
+  font-weight: 600;
   /* 文字从左到右循环闪动（流光扫过效果） */
   background: linear-gradient(90deg, #8fc1ff 0%, #8fc1ff 42%, #ffffff 50%, #8fc1ff 58%, #8fc1ff 100%);
   background-size: 200% 100%;
