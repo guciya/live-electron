@@ -13,7 +13,18 @@
       "output": "release"
     },
     "files": [
-      "!dist/win-unpacked/**"
+      "!dist/win-unpacked/**",
+      "!dist-dev/**",
+      "!release/**",
+      "!release-test/**",
+      "!release-test3/**",
+      "!release-test4/**"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/trtc-electron-sdk/build/Release",
+        "to": "."
+      }
     ],
     "win": {
       "icon": "build/icon.ico",
@@ -64,7 +75,7 @@
     "build:prod": "vue-cli-service build --mode production --dest dist --no-clean",
     "build:win64": "electron-builder --win --x64",
     "pack:win64": "npm run build && npm run build:win64",
-    "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
+    "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release-test -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
     "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播 -c.artifactName=NikoLive-Setup-${version}.${ext}",
     "build:mac-x64": "electron-builder --mac --x64",
     "pack:mac-x64": "npm run build && npm run build:mac-x64",

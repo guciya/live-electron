@@ -2,6 +2,9 @@
 node_modules
 
 /release
+/release-test
+/release-test3
+/release-test4
 /dist
 /dist-dev
 

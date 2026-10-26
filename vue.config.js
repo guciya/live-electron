@@ -4,7 +4,10 @@ const os = require('os');
 console.log('process.env.NODE_ENV:', process.env.NODE_ENV);
 console.log('process.env.VUE_APP_RUNTIME_SCENE:', process.env.VUE_APP_RUNTIME_SCENE);
 
-const isProduction = process.env.NODE_ENV === 'production';
+// 生产语义 = 非 development（含 production / test 模式打包）。
+// native-ext-loader 的 rewritePath 和 devtool 都依赖它：
+// test 打包若走 dev 路径（node_modules 相对路径），安装后渲染进程将找不到 .node 导致白屏
+const isProduction = process.env.NODE_ENV !== 'development';
 const platform = os.platform();
 
 module.exports = defineConfig({
@@ -16,11 +19,11 @@ module.exports = defineConfig({
   configureWebpack: {
     // eval-cheap-module-source-map 比 inline-source-map 快得多，且调试体验基本不变
     devtool: isProduction ? 'source-map' : 'eval-cheap-module-source-map',
-    // 仅生产构建使用 webpack 持久化缓存。
-    // 开发构建配合 transpileDependencies: false 时，vue-loader 写入的 SFC 缓存缺少
+    // 仅 NODE_ENV=production 的正式构建使用持久化缓存。
+    // 开发/test 构建配合 transpileDependencies: false 时，vue-loader 写入的 SFC 缓存缺少
     // buildMeta，下一次增量构建会直接崩溃（Cannot read properties of undefined）。
-    // 开发环境改用内存缓存：dev server 的 watch 会话内依然是增量编译。
-    cache: isProduction
+    // 开发/test 改用内存缓存：dev server 的 watch 会话内依然是增量编译。
+    cache: process.env.NODE_ENV === 'production'
       ? {
         type: 'filesystem',
         buildDependencies: { config: [__filename] },
