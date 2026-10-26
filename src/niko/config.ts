@@ -16,7 +16,7 @@ export const NIKO_CONFIG = {
   // CMS 主播监控列表域名（独立固定 token 鉴权，仅 liveList.ts 使用）
   cmsBaseUrl: readEnv('VUE_APP_CMS_BASE_URL', 'https://test-cms.nikolive.cn'),
   // CMS 主播监控列表鉴权 token（测试/正式环境各自独立）
-  cmsAuthToken: readEnv('VUE_APP_CMS_AUTH_TOKEN', 'ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6STFOaUo5LmV5SnBZWFFpT2pFM09USTVNak0wTlRBc0ltVjRjQ0k2TVRjNU16VXlPREkxTUN3aWJXRnVZV2RsY2w5cFpDSTZNVEI5Lmh3SVdQUG9NSVA1SXViSEd5QnhQeHZUT1VrMXBtQzRsVFRYVnpxVzVUc1U='),
+  cmsAuthToken: readEnv('VUE_APP_CMS_AUTH_TOKEN', 'ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6STFOaUo5LmV5SnBZWFFpT2pFM09UTXdNRGs1TVRNc0ltVjRjQ0k2TVRjNU16WXhORGN4TXl3aWJXRnVZV2RsY2w5cFpDSTZNVEI5Lkh0Nktob2dFTjVSYmszQkxrZzZScElSZkhaOEN4Q2dBc0p6Y0NmcWdKODg='),
   // H5 业务页域名（家族入驻/公会入驻等软件内部跳转页面）
   // /os/ 入驻应用只部署在正式域 h5.nikolive.cn，测试域没有该页面（404），默认值必须用正式域
   h5WebBase: readEnv('VUE_APP_H5_WEB_BASE', 'https://h5.nikolive.cn'),
