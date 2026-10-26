@@ -267,3 +267,56 @@ export function getAudienceList(params: {
     audiencesType: params.audiencesType ?? 1,
   }) as unknown as Promise<any>;
 }
+
+/* ========== 主播中心 ========== */
+
+export interface AnchorCenterData {
+  user_id: number;
+  user_show_id: number | string;
+  nickname: string;
+  avatar: string;
+  age?: number;
+  gender?: number;
+  introduction?: string;
+  organization_id?: number;
+  max_withdraw?: string;
+  withdraw?: number;
+  is_withdraw_auth?: boolean;
+  live_statistics: {
+    revenue: number;
+    live_duration: number;
+    audience_count: number;
+    consume_audience_count: number;
+    new_fans_count: number;
+  };
+  anchor_level_info: {
+    current_level_info: {
+      level_id: number;
+      level_name: string;
+      experience: number;
+      level_icon?: string;
+      level_gif_icon?: string;
+    };
+    next_level_info?: {
+      level_id: number;
+      level_name: string;
+      experience: number;
+      level_icon?: string;
+      level_gif_icon?: string;
+    };
+    level_experience?: number;
+    diff_experience?: number;
+  };
+  organization_info?: {
+    id: number;
+    show_id: string;
+    name: string;
+    organization_mode?: number;
+    is_creator?: boolean;
+  };
+}
+
+/** 主播中心首页数据 */
+export function getAnchorCenter(): Promise<AnchorCenterData> {
+  return request.post('/live/anchorCenter') as unknown as Promise<AnchorCenterData>;
+}

@@ -51,7 +51,7 @@
                   <span class="level-badge level-badge--niko">Niko 主播</span>
                 </div>
                 <div class="user-niko-id">
-                  Niko号：<span class="niko-id-text">{{ userInfo?.userShowId || '-' }}</span>
+                  Niko号：<span class="niko-id-text">{{ userShowId || '-' }}</span>
                   <button class="copy-btn" type="button" @click="copyNikoId" title="复制">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="9" y="9" width="13" height="13" rx="2" />
@@ -65,12 +65,12 @@
             <div class="banner-right">
               <div class="banner-stat">
                 <span class="banner-stat-label">粉丝总数</span>
-                <span class="banner-stat-value">{{ formatNumber(mockStats.newFollow) }}</span>
+                <span class="banner-stat-value">{{ formatNumber(stats.newFollow) }}</span>
               </div>
               <div class="banner-stat-divider"></div>
               <div class="banner-stat">
                 <span class="banner-stat-label">累计收入</span>
-                <span class="banner-stat-value banner-stat-value--gold">{{ formatNumber(mockEarnings.todayIncome) }}</span>
+                <span class="banner-stat-value banner-stat-value--gold">{{ formatNumber(earnings.todayIncome) }}</span>
               </div>
               <button class="banner-start-btn" type="button" @click="handleStartLive">
                 <svg viewBox="0 0 24 24" fill="currentColor">
@@ -95,12 +95,12 @@
           </div>
           <div class="earnings-row">
             <div class="earnings-item">
-              <div class="earnings-value">{{ formatNumber(mockEarnings.todayIncome) }}</div>
+              <div class="earnings-value">{{ formatNumber(earnings.todayIncome) }}</div>
               <div class="earnings-label">今日收入 (K币)</div>
             </div>
             <div class="earnings-divider"></div>
             <div class="earnings-item">
-              <div class="earnings-value">¥ {{ mockEarnings.withdrawable.toFixed(2) }}</div>
+              <div class="earnings-value">¥ {{ earnings.withdrawable.toFixed(2) }}</div>
               <div class="earnings-label">单日可提现 (元)</div>
             </div>
           </div>
@@ -133,7 +133,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">直播时长</div>
-                <div class="stat-value">{{ formatDuration(mockStats.duration) }}</div>
+                <div class="stat-value">{{ formatDuration(stats.duration) }}</div>
               </div>
             </div>
             <div class="stat-item">
@@ -145,7 +145,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">观众峰值</div>
-                <div class="stat-value">{{ formatNumber(mockStats.viewers) }}</div>
+                <div class="stat-value">{{ formatNumber(stats.viewers) }}</div>
               </div>
             </div>
             <div class="stat-item">
@@ -159,7 +159,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">送礼人数</div>
-                <div class="stat-value">{{ formatNumber(mockStats.giftCount) }}</div>
+                <div class="stat-value">{{ formatNumber(stats.giftCount) }}</div>
               </div>
             </div>
             <div class="stat-item">
@@ -173,7 +173,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">新增关注</div>
-                <div class="stat-value">{{ formatNumber(mockStats.newFollow) }}</div>
+                <div class="stat-value">{{ formatNumber(stats.newFollow) }}</div>
               </div>
             </div>
           </div>
@@ -292,6 +292,7 @@ import CloseIcon from '../TUILiveKit/common/icons/CloseIcon.vue';
 import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
 import { resolveImageUrl } from '../niko/config';
 import { useAuthStore } from '../niko/store/auth';
+import { getAnchorCenter, type AnchorCenterData } from '../niko/api/live';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -308,42 +309,78 @@ function onClose() {
   window.ipcRenderer?.send('window-close');
 }
 
-// 用户信息（与 AnchorList 一致：从 authStore 取）
-const userInfo = computed(() => authStore.userInfo);
+// 主播中心真实数据
+const anchorData = ref<AnchorCenterData | null>(null);
+const anchorLoading = ref(false);
+async function loadAnchorCenter() {
+  anchorLoading.value = true;
+  try {
+    const data = await getAnchorCenter();
+    anchorData.value = data;
+  } catch (e) {
+    console.warn('loadAnchorCenter failed', e);
+  } finally {
+    anchorLoading.value = false;
+  }
+}
+
+// 用户信息（优先用接口返回，fallback 到 authStore）
+const userInfo = computed(() => anchorData.value ?? authStore.userInfo);
 const userAvatar = computed(() => {
-  if (!userInfo.value?.avatar) return '';
-  return resolveImageUrl(userInfo.value.avatar);
+  const raw = anchorData.value?.avatar || authStore.userInfo?.avatar;
+  if (!raw) return '';
+  return resolveImageUrl(raw);
 });
 const userInitial = computed(() => {
-  const name = userInfo.value?.nickname || userInfo.value?.userShowId || 'A';
+  const name = anchorData.value?.nickname || authStore.userInfo?.nickname || String(anchorData.value?.user_show_id || 'A');
   return name.charAt(0).toUpperCase();
 });
-const userLevel = ref<number | null>(null); // 暂无接口，先留空
+const userShowId = computed(() => anchorData.value?.user_show_id ?? authStore.userInfo?.userShowId ?? '');
+
+// 等级（从接口取）
+const anchorLevelInfo = computed(() => anchorData.value?.anchor_level_info);
+const userLevel = computed(() => anchorLevelInfo.value?.current_level_info?.level_name || null);
+const levelIcon = computed(() => {
+  const icon = anchorLevelInfo.value?.current_level_info?.level_icon;
+  return icon ? resolveImageUrl(icon) : '';
+});
+const levelProgress = computed(() => {
+  if (!anchorLevelInfo.value) return 0;
+  const cur = anchorLevelInfo.value.current_level_info.experience || 0;
+  const next = anchorLevelInfo.value.next_level_info?.experience || cur;
+  if (next <= cur) return 100;
+  return Math.min(100, Math.round((anchorLevelInfo.value.level_experience || cur) / next * 100));
+});
+
+// 收益数据
+const earnings = computed(() => ({
+  todayIncome: anchorData.value?.live_statistics?.revenue ?? 0,
+  withdrawable: Number(anchorData.value?.max_withdraw ?? anchorData.value?.withdraw ?? 0) / 1000, // 接口 K 币转元（假设 1000:1）
+}));
+
+// 直播数据
+const stats = computed(() => {
+  const s = anchorData.value?.live_statistics;
+  return {
+    duration: s?.live_duration ?? 0,
+    viewers: s?.audience_count ?? 0,
+    giftCount: s?.consume_audience_count ?? 0,
+    newFollow: s?.new_fans_count ?? 0,
+  };
+});
 
 function onAvatarError() {
   // 头像加载失败不做额外处理，template 会 fallback 到 initial
 }
 
 function copyNikoId() {
-  const id = userInfo.value?.userShowId;
+  const id = userShowId.value;
   if (!id) return;
   navigator.clipboard.writeText(id).then(
     () => showMessage({ type: MessageToastType.Success, message: 'Niko号已复制' }),
     () => showMessage({ type: MessageToastType.Error, message: '复制失败，请手动选择' }),
   );
 }
-
-// Mock 数据（后续接真实接口替换）
-const mockEarnings = ref({
-  todayIncome: 0,
-  withdrawable: 0,
-});
-const mockStats = ref({
-  duration: 0, // 秒
-  viewers: 0,
-  giftCount: 0,
-  newFollow: 0,
-});
 
 function formatNumber(n: number) {
   if (!n && n !== 0) return '0';
@@ -392,6 +429,7 @@ onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then((v) => {
     isMaximized.value = Boolean(v);
   }).catch(() => undefined);
+  loadAnchorCenter();
 });
 
 onBeforeUnmount(() => {
