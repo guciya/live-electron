@@ -35,6 +35,9 @@ module.exports = defineConfig({
         vue: path.resolve(__dirname, './node_modules/vue'),
         'trtc-electron-sdk': path.resolve(__dirname, './node_modules/trtc-electron-sdk'),
       },
+      // webpack 5 默认会检查 package.json exports，test 模式下因 mode=development
+      // 与 NODE_ENV=test 不一致导致 conditionNames 匹配异常，显式指定避免 "Package path not exported"
+      conditionNames: ['import', 'require', 'default'],
     },
     module: {
       rules: [

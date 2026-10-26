@@ -24,6 +24,7 @@ import { useAuthStore } from './niko/store/auth'
 import { USER_INFO_STORAGE_KEY } from './TUILiveKit/utils/userInfoStorage'
 import { showMessage, MessageToastType } from './TUILiveKit/base-component/MessageToast'
 import { NIKO_CONFIG } from './niko/config'
+import './niko/utils/time'
 
 // 托盘菜单业务入口：「公会|家族 / 提现」暂未开放提示；「家族入驻 / 公会入驻」内部窗口打开入驻页
 // （URL 由渲染进程按环境拼接，主进程不感知环境域名）
