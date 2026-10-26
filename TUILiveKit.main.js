@@ -567,11 +567,11 @@ let crashDumpsDir = '';
 try {
   // electron 低版本
   crashFilePath = path.join(app.getPath('temp'), app.getName() + ' Crashes');
-  console.log('————————crash path:', crashFilePath);
+  console.log('------ crash path:', crashFilePath);
 
   // electron 高版本
   crashDumpsDir = app.getPath('crashDumps');
-  console.log('————————crashDumpsDir:', crashDumpsDir);
+  console.log('------ crashDumpsDir:', crashDumpsDir);
 } catch (e) {
   console.error('Get crash dump folder failed', e);
 }
@@ -623,14 +623,21 @@ function windowOpenHandler(details) {
 async function createWindow(width = 1366, height = 668) {
   await checkAndApplyDeviceAccessPrivilege();
 
+  // 主窗口图标：用 nativeImage 多尺寸 PNG 构建，避免 PowerShell 生成的 ICO 颜色丢失
+  const { nativeImage: _ni } = require('electron');
+  const _mainIcon = _ni.createFromPath(path.join(__dirname, 'build', 'icon-round-32x32.png'));
+  try { _mainIcon.addRepresentation({ scaleFactor: 2, file: path.join(__dirname, 'build', 'icon-round-48x48.png') }); } catch (_) {}
+  try { _mainIcon.addRepresentation({ scaleFactor: 1, file: path.join(__dirname, 'build', 'icon-round-32x32.png') }); } catch (_) {}
+  try { _mainIcon.addRepresentation({ scaleFactor: 0.5, file: path.join(__dirname, 'build', 'icon-round-16x16.png') }); } catch (_) {}
+
   windowMap.main = new BrowserWindow({
-    width: 1200 || width,
-    height: 750 || height,
+    width: 1620 || width,
+    height: 1100 || height,
     minWidth: 1200,
     minHeight: 650,
     frame: false,
     acceptFirstMouse: true,
-    icon: path.join(__dirname, 'favicon.ico'),
+    icon: _mainIcon,
     webPreferences: {
       preload: path.join(__dirname, 'TUILiveKit.preload.js'),
       nodeIntegration: true,
@@ -777,17 +784,32 @@ async function createWindow(width = 1366, height = 668) {
 
   // --dist 参数（npm run start:fast）跳过 dev server，直接加载已构建的 dist-dev，
   // 避免每次启动都等 webpack 编译；代码有改动时先执行 npm run build:dev
-  const useDistBundle = app.isPackaged || process.argv.includes('--dist');
-  const bundleDir = process.argv.includes('--dist') ? 'dist-dev' : 'dist';
+  const fs = require('fs');
+  const useDistArg = process.argv.includes('--dist');
+  let useDistBundle = app.isPackaged || useDistArg;
+  let bundleDir = useDistArg ? 'dist-dev' : 'dist';
+
+  // 开发环境下如果指定了 --dist 但目录不存在，自动 fallback 到 dev server
+  if (!app.isPackaged && useDistBundle) {
+    const indexPath = path.join(__dirname, bundleDir, 'index.html');
+    if (!fs.existsSync(indexPath)) {
+      console.warn(`${logPrefix} ${bundleDir}/index.html not found, falling back to dev server. Run "npm run build:dev" first if you want to use --dist.`);
+      useDistBundle = false;
+    }
+  }
+
   if (useDistBundle) {
-    windowMap.main.loadFile(bundleDir + '/index.html');
-    windowMap.child.loadFile(bundleDir + '/index.html');
-    windowMap.mainCover.loadFile(bundleDir + '/index.html');
-    windowMap.confirm.loadFile(bundleDir + '/index.html');
+    const indexPath = path.join(__dirname, bundleDir, 'index.html');
+    console.log(`${logPrefix} loading file: ${indexPath}`);
+    windowMap.main.loadFile(indexPath);
+    windowMap.child.loadFile(indexPath);
+    windowMap.mainCover.loadFile(indexPath);
+    windowMap.confirm.loadFile(indexPath);
     // 与其他窗口保持一致的加载模式：先 loadFile，再由 did-finish-load 钩子设置 hash 路由。
     // loadFile 的 hash 选项在该版本 Electron 上未可靠生效，曾导致覆盖窗口停在 Loading 页、礼物无法展示
-    windowMap.giftOverlay.loadFile(bundleDir + '/index.html');
+    windowMap.giftOverlay.loadFile(indexPath);
   } else {
+    console.log(`${logPrefix} loading dev server: http://localhost:8080`);
     windowMap.main.loadURL('http://localhost:8080');
     windowMap.child.loadURL('http://localhost:8080/#/tui-live-kit-child');
     windowMap.mainCover.loadURL('http://localhost:8080/#/tui-live-kit-cover');
@@ -1466,8 +1488,10 @@ function initMainWindowPage() {
 
 // 系统托盘
 let appTray = null;
-// 软件内部页面窗口（家族入驻/公会入驻等 H5 业务页，不暴露 node 能力）
+// 软件内部页面窗口（家族入驻/公会入驻/组织管理等 H5 业务页，不暴露 node 能力）
 let internalPageWindow = null;
+// 模拟 Chrome 最新版 UA（Electron 默认 UA 带 "Electron/" 字样，部分 H5 站点检测后返回空壳）
+const CHROME_LIKE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 function openInternalPage(url, title) {
   if (internalPageWindow && !internalPageWindow.isDestroyed()) {
     if (title) {
@@ -1479,21 +1503,30 @@ function openInternalPage(url, title) {
     return;
   }
   internalPageWindow = new BrowserWindow({
-    width: 1080,
-    height: 760,
-    minWidth: 860,
-    minHeight: 600,
+    width: 440,
+    height: 956,
+    minWidth: 440,
+    minHeight: 956,
+    maxWidth: 440,
+    maxHeight: 956,
+    resizable: false,
     parent: windowMap.main || undefined,
     title: title || 'Niko直播',
     autoHideMenuBar: true,
-    backgroundColor: '#101013',
+    backgroundColor: '#ffffff',
     webPreferences: {
       // 外部业务页：不注入项目 preload，关闭 node 能力
       nodeIntegration: false,
       contextIsolation: true,
+      // 与主窗口共享同一个 cookie jar，使登录态互通
+      // 默认 partition 为空字符串，走 session.defaultSession
     },
   });
+  internalPageWindow.webContents.setUserAgent(CHROME_LIKE_UA);
   internalPageWindow.loadURL(url);
+  internalPageWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    console.error('[internalPage] did-fail-load:', code, desc, 'url:', url);
+  });
   internalPageWindow.on('closed', () => {
     internalPageWindow = null;
   });
@@ -1503,6 +1536,97 @@ ipcMain.on('open-internal-url', (_event, payload) => {
   const { url, title } = payload || {};
   if (typeof url === 'string' && /^https?:\/\//.test(url)) {
     openInternalPage(url, title);
+  }
+});
+
+// ==================== 手机外形游戏窗口 ====================
+let gameMobileWindow = null;
+function openGameMobile(url, title) {
+  if (!url || !/^https?:\/\//.test(url)) {
+    console.warn('[gameMobile] invalid url:', url);
+    return;
+  }
+  // iPhone 13 标准比例 390×844，外加外壳圆角视觉
+  if (gameMobileWindow && !gameMobileWindow.isDestroyed()) {
+    gameMobileWindow.setTitle(title || '手机游戏');
+    const shellPath = path.join(__dirname, 'public', 'game-phone.html');
+    gameMobileWindow.loadFile(shellPath, {
+      query: { url, title: title || '手机游戏' },
+    });
+    gameMobileWindow.show();
+    gameMobileWindow.focus();
+    return;
+  }
+  gameMobileWindow = new BrowserWindow({
+    width: 410,
+    height: 870,
+    minWidth: 360,
+    minHeight: 640,
+    resizable: true,
+    maximizable: true,
+    fullscreenable: false,
+    frame: false,
+    title: title || '手机游戏',
+    autoHideMenuBar: true,
+    backgroundColor: '#000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'TUILiveKit.game.preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+  gameMobileWindow.webContents.setUserAgent(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+  );
+  const shellPath = path.join(__dirname, 'public', 'game-phone.html');
+  gameMobileWindow.loadFile(shellPath, {
+    query: { url, title: title || '手机游戏' },
+  });
+  gameMobileWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    console.error('[gameMobile] did-fail-load:', code, desc);
+  });
+  gameMobileWindow.on('closed', () => {
+    gameMobileWindow = null;
+  });
+}
+
+ipcMain.on('open-game-mobile', (_event, payload) => {
+  const { url, title } = payload || {};
+  openGameMobile(url, title);
+});
+
+/** 退出直播间时关闭游戏窗口 */
+ipcMain.on('close-game-mobile', () => {
+  if (gameMobileWindow && !gameMobileWindow.isDestroyed()) {
+    gameMobileWindow.close();
+  }
+  gameMobileWindow = null;
+});
+
+/** 游戏窗口自身的窗口控制（来自 TUILiveKit.game.preload.js） */
+ipcMain.on('game-window-minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (isWindowAlive(win)) {
+    win.minimize();
+  }
+});
+
+ipcMain.on('game-window-toggle-maximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!isWindowAlive(win)) {
+    return;
+  }
+  if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+});
+
+ipcMain.on('game-window-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (isWindowAlive(win)) {
+    win.close();
   }
 });
 
@@ -1521,8 +1645,18 @@ function notifyMainWindow(channel, payload) {
 
 function createTray() {
   try {
+    // 圆形托盘图标（16/32/48 多尺寸，适配 Windows 高 DPI 缩放）
+    const { nativeImage } = require('electron');
+    const trayIconPath = path.join(__dirname, 'build', 'icon-round-32x32.png');
+    const trayIconLargePath = path.join(__dirname, 'build', 'icon-round-48x48.png');
+    const trayIconSmallPath = path.join(__dirname, 'build', 'icon-round-16x16.png');
+    const trayImg = nativeImage.createFromPath(trayIconPath);
+    try { trayImg.addRepresentation({ scaleFactor: 2, file: trayIconLargePath }); } catch (_) {}
+    try { trayImg.addRepresentation({ scaleFactor: 1, file: trayIconPath }); } catch (_) {}
+    try { trayImg.addRepresentation({ scaleFactor: 0.5, file: trayIconSmallPath }); } catch (_) {}
+
     const iconPath = path.join(__dirname, 'favicon.ico');
-    appTray = new Tray(iconPath);
+    appTray = new Tray(trayImg);
     appTray.setToolTip('Niko直播');
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -1538,7 +1672,7 @@ function createTray() {
       {
         label: '公会|家族',
         icon: trayIcon('users'),
-        click: () => notifyMainWindow('show-feature-pending', '公会|家族'),
+        click: () => openInternalPage('https://h5.nikolive.cn/organization', '公会|家族'),
       },
       {
         label: '提现',

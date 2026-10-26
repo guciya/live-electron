@@ -21,8 +21,16 @@
             </span>
             <span class="anchor-user-name anchor-user-name-shine">{{ userInfo.nickname || userInfo.userShowId }}</span>
           </div>
-          <!-- 业务入口：公会|家族 / 提现 暂未开放；家族入驻 / 公会入驻 软件内打开入驻页 -->
-          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('公会|家族')">
+          <!-- 业务入口：主播中心 打开主播中心页；公会|家族 打开组织页；提现 暂未开放；家族入驻 / 公会入驻 软件内打开入驻页 -->
+          <button class="anchor-text-btn" type="button" @click="goAnchorCenter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M3 10h18" />
+              <circle cx="12" cy="16" r="2" />
+            </svg>
+            <span>主播中心</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="openOrganizationPage()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
@@ -212,8 +220,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type ComponentPublicInstance, type Ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { IconLive, IconLiveStart, UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
@@ -230,6 +238,7 @@ import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPl
 import { useAuthStore } from '../niko/store/auth';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const { logout: logoutIm } = useLoginState();
 
@@ -445,6 +454,18 @@ async function confirmLogout() {
   router.replace({ name: 'login' });
 }
 
+// 公会|家族：打开组织页（软件内部窗口）
+const ORGANIZATION_URL = `${NIKO_CONFIG.h5WebBase}/organization`;
+
+function openOrganizationPage() {
+  window.ipcRenderer?.send('open-internal-url', { url: ORGANIZATION_URL, title: '公会|家族' });
+}
+
+/** 跳转到主播中心页面 */
+function goAnchorCenter() {
+  router.push({ name: 'anchor-center' });
+}
+
 // 家族入驻 / 公会入驻：同一个入驻页，软件内部窗口打开
 const SETTLE_URL = `${NIKO_CONFIG.h5WebBase}/os/#/settle`;
 
@@ -484,13 +505,46 @@ function onClose() {
   window.ipcRenderer.send('on-close-window', null);
 }
 
+/** 静默刷新进行中标记：2 秒间隔较密，避免上一次请求没返回时重复叠加 */
+let silentRefreshing = false;
+async function refreshSilently() {
+  if (silentRefreshing) {
+    return;
+  }
+  silentRefreshing = true;
+  try {
+    await loadList(true, true);
+  } finally {
+    silentRefreshing = false;
+  }
+}
+
 onMounted(() => {
   void loadList();
-  // 无感刷新：每 2000 秒后台同步一次在播数据，不展示 loading、不打断预览
+  // 挂载后立刻强制静默拉一次：无论是首次进入还是从直播间/其他页面返回，
+  // 列表数据都马上是最新的，不用等第一次 2 秒轮询
+  void refreshSilently();
+  // 无感刷新：每 2 秒后台同步一次在播数据，不展示 loading、不打断预览
   silentTimer = window.setInterval(() => {
-    void loadList(true, true);
-  }, 2000 * 1000);
+    void refreshSilently();
+  }, 2 * 1000);
 });
+
+// keep-alive 场景下返回列表（组件未销毁、只被重新激活）也要立即刷新
+onActivated(() => {
+  void refreshSilently();
+});
+
+// 路由 watch：从直播间/其他页面返回主播列表时立即静默刷新（不等待）
+// 覆盖场景：router.replace('anchor-list') / router.push('anchor-list')
+watch(
+  () => route.name,
+  (name) => {
+    if (name === 'anchor-list') {
+      void refreshSilently();
+    }
+  },
+);
 
 onBeforeUnmount(() => {
   if (silentTimer !== null) {

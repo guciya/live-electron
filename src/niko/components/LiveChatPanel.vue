@@ -4,6 +4,30 @@
       <div class="niko-chat-notice-title">平台提醒</div>
       <div class="niko-chat-notice-body">{{ LIVE_NOTICE_TEXT }}</div>
     </div>
+    <!-- 动态通知：欢迎语跑马灯，从右向左循环滚动 -->
+    <div v-if="welcomeText" class="niko-chat-marquee">
+      <svg
+        class="niko-chat-marquee-icon"
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M11 5 6 9H3v6h3l5 4z" />
+        <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      </svg>
+      <div class="niko-chat-marquee-view">
+        <div class="niko-chat-marquee-track">
+          <span class="niko-chat-marquee-text">{{ welcomeText }}</span>
+          <span class="niko-chat-marquee-text" aria-hidden="true">{{ welcomeText }}</span>
+        </div>
+      </div>
+    </div>
     <div ref="listRef" class="niko-chat-list">
       <!-- 开播已连接时不展示空态文案，保持聊天区干净 -->
       <div v-if="messages.length === 0 && (disabled || !connected)" class="niko-chat-empty">
@@ -14,10 +38,6 @@
           <span class="niko-chat-tag">来了</span>
           <span class="niko-chat-join-name" @click="handleUserClick(message)">{{ message.nickname }}</span>
           <span class="niko-chat-join-text">进入了直播间</span>
-        </div>
-        <div v-else-if="message.kind === 'system'" class="niko-chat-line niko-chat-line--welcome">
-          <span class="niko-chat-tag niko-chat-tag--welcome">欢迎</span>
-          <span class="niko-chat-welcome-text">{{ message.text }}</span>
         </div>
         <div v-else-if="message.kind === 'gift'" class="niko-chat-line niko-chat-line--gift">
           <span class="niko-chat-user" @click="handleUserClick(message)">
@@ -91,12 +111,30 @@
           <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
         </svg>
       </button>
+      <button
+        v-if="showGiftButton"
+        class="niko-chat-game"
+        type="button"
+        title="游戏"
+        aria-label="游戏"
+        :disabled="disabled"
+        @click="emit('open-game')"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <!-- 游戏手柄图标 -->
+          <rect x="2" y="6" width="20" height="12" rx="6" />
+          <line x1="7" y1="12" x2="9" y2="12" />
+          <line x1="8" y1="11" x2="8" y2="13" />
+          <circle cx="15" cy="11" r="0.6" fill="currentColor" />
+          <circle cx="17" cy="13" r="0.6" fill="currentColor" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { sendLiveMessage } from '../api/live';
 import { resolveImageUrl } from '../config';
@@ -134,6 +172,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-gift'): void;
+  (e: 'open-game'): void;
   (e: 'user-click', payload: { userId: string; isMystery: boolean }): void;
 }>();
 
@@ -218,22 +257,13 @@ function getTimePeriodGreeting(): string {
   return '晚上';
 }
 
-/** 本地欢迎语：仅插入当前面板消息列表，不经过 IM / 后端发送，只有进入者自己可见 */
-function pushLocalWelcome() {
+/** 跑马灯滚动内容：进房时的时间问候 + 主播昵称 */
+const welcomeText = computed(() => {
   if (!props.welcomeName) {
-    return;
+    return '';
   }
-  messages.value.push({
-    id: `local-welcome-${Date.now()}`,
-    kind: 'system',
-    fromUserId: '',
-    nickname: '',
-    avatar: '',
-    text: `${getTimePeriodGreeting()}好~ 欢迎来到 ${props.welcomeName} 的直播间！`,
-    time: Date.now(),
-  });
-  scrollToBottom();
-}
+  return `${getTimePeriodGreeting()}好~ 欢迎来到 ${props.welcomeName} 的直播间！`;
+});
 
 async function handleSend() {
   const content = draft.value.trim();
@@ -274,8 +304,6 @@ watch(
     try {
       await joinLiveChat(String(roomId));
       connected.value = isLiveChatConnected();
-      // 进房成功后注入本地欢迎语（仅自己可见，不走任何发送通道）
-      pushLocalWelcome();
     } catch (error: any) {
       console.warn('[NikoChat] joinLiveChat failed:', error?.message || error);
     }
@@ -294,6 +322,57 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   width: 100%;
+}
+
+/* 动态通知跑马灯：欢迎语从右向左循环滚动 */
+.niko-chat-marquee {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin: 8px 8px 0;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255, 138, 60, 0.22), rgba(255, 92, 138, 0.18));
+  border: 1px solid rgba(255, 138, 60, 0.32);
+  color: #ffd9b8;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.niko-chat-marquee-icon {
+  flex: 0 0 auto;
+  color: #ffb27a;
+}
+
+.niko-chat-marquee-view {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.niko-chat-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  /* 两份相同文本首尾相接，滚动到 -50% 时无缝衔接 */
+  animation: niko-chat-marquee 14s linear infinite;
+  will-change: transform;
+}
+
+.niko-chat-marquee-text {
+  display: inline-block;
+  padding-right: 64px;
+  line-height: 28px;
+}
+
+@keyframes niko-chat-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 .niko-chat-notice {
@@ -535,6 +614,34 @@ onBeforeUnmount(() => {
 }
 
 .niko-chat-gift:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.niko-chat-game {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  /* 与发送/礼物按钮同色（主题蓝） */
+  background: var(--uikit-color-primary, #2b7fff);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(43, 127, 255, 0.35);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.niko-chat-game:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.niko-chat-game:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -27,8 +27,12 @@ function upgradeToHttps(url: string): string {
 export interface StreamPlayerOptions {
   /** 静音播放：列表预览必须静音，播放页可传 false */
   muted?: boolean;
-  /** 拉流失败回调 */
+  /** 拉流失败回调，detail 为可读错误描述（如 'network-error' / 'network-timeout'） */
   onError?: (detail: string) => void;
+  /** video 元素原生 error 回调（flv.js 未覆盖到的场景） */
+  onVideoError?: (error: MediaError | null) => void;
+  /** video 元素 stalled 回调（缓冲停滞，超过阈值通常意味着流已断） */
+  onStalled?: () => void;
 }
 
 export interface StreamPlayerHandle {
@@ -40,7 +44,7 @@ export async function createStreamPlayer(
   rawUrl: string,
   options: StreamPlayerOptions = {},
 ): Promise<StreamPlayerHandle> {
-  const { muted = false, onError } = options;
+  const { muted = false, onError, onVideoError, onStalled } = options;
 
   let player: FlvjsPlayer | null = null;
   let destroyed = false;
@@ -81,6 +85,24 @@ export async function createStreamPlayer(
     videoEl.load();
   }
 
+  // 全局 video 元素事件兜底（flv.js ERROR 没覆盖到的场景）
+  if (onVideoError) {
+    videoEl.addEventListener('error', () => {
+      if (destroyed) {
+        return;
+      }
+      onVideoError(videoEl.error);
+    });
+  }
+  if (onStalled) {
+    videoEl.addEventListener('stalled', () => {
+      if (destroyed) {
+        return;
+      }
+      onStalled();
+    });
+  }
+
   let url = rawUrl;
   if (url.startsWith('rtmp://') || url.startsWith('rtmps://')) {
     url = rtmpToFlv(url);
@@ -96,13 +118,19 @@ export async function createStreamPlayer(
         stashInitialSize: 128,
       },
     );
-    player.on(flvjs.Events.ERROR, (_type: number, _detail: string, info: unknown) => {
+    // flv.js ERROR 事件签名：(type, detail, info)
+    // - type: ErrorTypes (NetworkError / MediaError / OtherError)
+    // - detail: ErrorDetails ('network-error' / 'network-timeout' / 'mse-flv-format-error' / ...)
+    // - info: 额外信息对象（常为 {} 或 undefined）
+    player.on(flvjs.Events.ERROR, (type: number, detail: string, info: unknown) => {
       if (destroyed) {
         return;
       }
-      const reason = typeof info === 'string'
-        ? info
-        : ((info as { msg?: string })?.msg ?? JSON.stringify(info ?? ''));
+      // 把 type + detail + info 拼成可读字符串，方便上层做正则匹配
+      const typeName = ['network', 'media', 'format', 'others'][type] ?? String(type);
+      const infoStr = typeof info === 'string' ? info : JSON.stringify(info ?? '');
+      const reason = `[${typeName}] ${detail} ${infoStr}`.trim();
+      console.warn('[niko/flvPlayer] ERROR:', reason);
       onError?.(reason);
     });
     player.attachMediaElement(videoEl);

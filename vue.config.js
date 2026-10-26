@@ -51,5 +51,19 @@ module.exports = defineConfig({
         },
       ],
     },
+    // Suppress known non-actionable warnings so the console stays readable.
+    stats: {
+      warningsFilter: [
+        // TUILiveKit/ipc/index.ts reexports — types are in types.ts but webpack
+        // only resolves enum value exports under transpileDependencies: false.
+        // Safe to ignore, runtime behavior is unaffected.
+        /export '.*' (reexported as '.*') was not found in '\.\/types'/,
+        // Vue 3.3+ compiler macro warnings — defineProps/defineEmits/withDefaults
+        // no longer need to be imported from 'vue', but existing imports are harmless.
+        /`defineProps` is a compiler macro/,
+        /`defineEmits` is a compiler macro/,
+        /`withDefaults` is a compiler macro/,
+      ],
+    },
   }
 })

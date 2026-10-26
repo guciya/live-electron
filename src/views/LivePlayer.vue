@@ -51,50 +51,72 @@
             <span class="player-live-badge">直播中</span>
           </div>
 
-          <!-- 在线观众折叠组件：视频右上角头像叠层 + 人数，点击展开列表面板 -->
-          <div class="player-audience">
+          <!-- 在线观众折叠组件 + 声音开关（视频右上角，同一行） -->
+          <div class="player-top-right">
+            <!-- 声音开关：点击切换静音/开启，图标随状态变化 -->
             <button
-              class="player-audience-toggle"
+              class="player-sound-btn"
               type="button"
-              @click="audiencePanelVisible = !audiencePanelVisible"
+              :title="muted ? '开启声音' : '关闭声音'"
+              :aria-label="muted ? '开启声音' : '关闭声音'"
+              @click="toggleSound"
             >
-              <span class="player-audience-avatars">
-                <template v-for="(member, idx) in audiencePreview" :key="member.userId || idx">
-                  <img
-                    v-if="member.avatar"
-                    class="player-audience-avatar"
-                    :src="member.avatar"
-                    :style="{ zIndex: audiencePreview.length - idx }"
-                    alt=""
-                  />
-                  <span
-                    v-else
-                    class="player-audience-avatar player-audience-avatar-initial"
-                    :style="{ zIndex: audiencePreview.length - idx }"
-                  >{{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}</span>
-                </template>
-              </span>
-              <span class="player-audience-count">{{ audienceCountText }}人</span>
+              <!-- 有声状态 -->
+              <template v-if="!muted">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              </template>
+              <!-- 静音状态 -->
+              <template v-else>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              </template>
             </button>
-            <div v-if="audiencePanelVisible" class="player-audience-panel" @click.stop>
-              <div class="player-audience-panel-title">在线观众（{{ audienceMembers.length }}）</div>
-              <div class="player-audience-list">
-                <div v-for="member in audienceMembers" :key="member.userId" class="player-audience-item">
-                  <img v-if="member.avatar" class="player-audience-item-avatar" :src="member.avatar" alt="" />
-                  <span v-else class="player-audience-item-avatar player-audience-item-initial">
-                    {{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}
-                  </span>
-                  <span class="player-audience-item-name">{{ member.nickname }}</span>
+
+            <div class="player-audience">
+              <button
+                class="player-audience-toggle"
+                type="button"
+                @click="audiencePanelVisible = !audiencePanelVisible"
+              >
+                <span class="player-audience-avatars">
+                  <template v-for="(member, idx) in audiencePreview" :key="member.userId || idx">
+                    <img
+                      v-if="member.avatar"
+                      class="player-audience-avatar"
+                      :src="member.avatar"
+                      :style="{ zIndex: audiencePreview.length - idx }"
+                      alt=""
+                    />
+                    <span
+                      v-else
+                      class="player-audience-avatar player-audience-avatar-initial"
+                      :style="{ zIndex: audiencePreview.length - idx }"
+                    >{{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}</span>
+                  </template>
+                </span>
+                <span class="player-audience-count">{{ audienceCountText }}人</span>
+              </button>
+              <div v-if="audiencePanelVisible" class="player-audience-panel" @click.stop>
+                <div class="player-audience-panel-title">在线观众（{{ audienceMembers.length }}）</div>
+                <div class="player-audience-list">
+                  <div v-for="member in audienceMembers" :key="member.userId" class="player-audience-item">
+                    <img v-if="member.avatar" class="player-audience-item-avatar" :src="member.avatar" alt="" />
+                    <span v-else class="player-audience-item-avatar player-audience-item-initial">
+                      {{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}
+                    </span>
+                    <span class="player-audience-item-name">{{ member.nickname }}</span>
+                  </div>
+                  <div v-if="!audienceMembers.length" class="player-audience-empty">暂无在线观众</div>
                 </div>
-                <div v-if="!audienceMembers.length" class="player-audience-empty">暂无在线观众</div>
               </div>
             </div>
-          </div>
-
-          <div class="player-actions">
-            <button v-if="muted" class="player-action-btn" type="button" @click="toggleSound">
-              点击开启声音
-            </button>
           </div>
         </div>
 
@@ -106,6 +128,7 @@
             :welcome-name="anchorName"
             show-gift-button
             @open-gift="giftPanelVisible = true"
+            @open-game="gamePanelVisible = true"
             @user-click="handleUserClick"
           />
           <div v-else class="player-side-hint">{{ chatHint }}</div>
@@ -116,6 +139,11 @@
         :visible="giftPanelVisible"
         :live-index-id="liveIndexId"
         @close="giftPanelVisible = false"
+      />
+
+      <GamePanel
+        :visible="gamePanelVisible"
+        @close="gamePanelVisible = false"
       />
 
       <UserInfoCard
@@ -151,9 +179,11 @@ import {
   type LiveImSystemEvent,
 } from '../niko/im/liveIm';
 import { getAudienceCardInfo, type AudienceCardInfo } from '../niko/api/live';
+import { fetchLiveFocusMonitorList, fetchLiveMonitorList } from '../niko/api/liveList';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import GiftPanel from '../niko/components/GiftPanel.vue';
+import GamePanel from '../niko/components/GamePanel.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 
 const route = useRoute();
@@ -180,6 +210,7 @@ const initial = computed(() => (anchorName || 'N').slice(0, 1).toUpperCase());
 const imReady = ref(false);
 const chatHint = ref('聊天连接中...');
 const giftPanelVisible = ref(false);
+const gamePanelVisible = ref(false);
 const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
@@ -198,6 +229,189 @@ let unsubscribeMembers: (() => void) | null = null;
 let playerHandle: StreamPlayerHandle | null = null;
 let unsubscribeSystem: (() => void) | null = null;
 let destroyed = false;
+
+/** 拉流错误连续计数：网络抖动 vs 真停播 */
+let streamErrorCount = 0;
+let streamErrorTimer: number | null = null;
+
+/** 播放停滞兜底：直播流只要超过 1 秒没有新视频帧（currentTime 不推进），
+ *  就等于流已断。CDN 在主播关播时常常「静默保活」——不报错也不断开连接，
+ *  所以必须靠这个兜底，且阈值要短，否则观众要等很久才退出。 */
+const STALL_TIMEOUT_MS = 1 * 1000;
+let stallTimer: number | null = null;
+let lastVideoTime = 0;
+/** 是否真正开始过播放：避免首次缓冲阶段被误判成断流 */
+let hasPlayedOnce = false;
+
+/** 重置停滞计时器：每次收到新视频帧时调用 */
+function resetStallTimer() {
+  if (stallTimer !== null) {
+    window.clearTimeout(stallTimer);
+    stallTimer = null;
+  }
+  // 还没真正出过画面（首帧缓冲中）不启用停滞判定
+  if (!hasPlayedOnce) {
+    return;
+  }
+  stallTimer = window.setTimeout(() => {
+    if (destroyed) {
+      return;
+    }
+    // 阈值内 currentTime 没任何推进 = 流已死
+    if (videoEl.value && videoEl.value.currentTime === lastVideoTime) {
+      console.warn('[LivePlayer] stall timeout: no new frames in', STALL_TIMEOUT_MS, 'ms, treating as stream ended');
+      void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+    } else {
+      // 还在推进，说明是我误判了，重开计时器
+      resetStallTimer();
+    }
+  }, STALL_TIMEOUT_MS);
+}
+
+/** 等待指定毫秒（给弹框设置最长等待时间，避免 await 永久挂起） */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+/** 服务端权威下播判定：每 2 秒查一次在播列表（liveMonitorList / liveFocusMonitorList），
+ *  主播关播后房间会从列表里消失，连续 2 次消失即判定下播并退出。
+ *  不依赖 flv.js 的错误事件 —— 实测 CDN 在主播关播时会静默保活连接，不报任何错。 */
+const LIVE_STATUS_POLL_MS = 2 * 1000;
+const LIVE_STATUS_PAGE_SIZE = 50;
+let liveStatusTimer: number | null = null;
+let missingFromListCount = 0;
+
+function stopLiveStatusPoll() {
+  if (liveStatusTimer !== null) {
+    window.clearInterval(liveStatusTimer);
+    liveStatusTimer = null;
+  }
+}
+
+async function pollLiveStatus() {
+  if (destroyed || !roomId) {
+    return;
+  }
+  try {
+    const [main, focus] = await Promise.all([
+      fetchLiveMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true }),
+      fetchLiveFocusMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true }),
+    ]);
+    if (destroyed) {
+      return;
+    }
+    const rooms = [...main.list, ...focus.list];
+    const exists = rooms.some(
+      (item) => item.roomId === roomId || (liveIndexId !== '' && item.liveIndexId === liveIndexId),
+    );
+    // 只有两个接口都返回了不足一页的完整列表时，才能确定「不在列表里 == 已下播」
+    const complete = main.list.length < LIVE_STATUS_PAGE_SIZE && focus.list.length < LIVE_STATUS_PAGE_SIZE;
+    if (exists || !complete) {
+      missingFromListCount = 0;
+      return;
+    }
+    missingFromListCount += 1;
+    console.warn('[LivePlayer] room not in live list, count:', missingFromListCount);
+    if (missingFromListCount >= 2) {
+      stopLiveStatusPoll();
+      void exitRoom('直播已结束', '主播已结束直播', true);
+    }
+  } catch {
+    // 接口异常不作为下播依据
+    missingFromListCount = 0;
+  }
+}
+
+function startLiveStatusPoll() {
+  stopLiveStatusPoll();
+  void pollLiveStatus();
+  liveStatusTimer = window.setInterval(() => {
+    void pollLiveStatus();
+  }, LIVE_STATUS_POLL_MS);
+}
+
+/**
+ * 退出直播间的统一入口。
+ * 关键：弹框不能阻塞跳转 —— 弹窗宿主随页面卸载时 TUIMessageBox 的 Promise 可能永不
+ * resolve，之前就是因此卡在直播间。这里用 race 限制最长等待，再强制跳转，并用 hash 兜底。
+ * silent=true 时不弹框直接退出（拉流中断/关播检测这类不需要用户确认的场景）。
+ */
+async function exitRoom(title: string, message: string, silent = false) {
+  if (destroyed) {
+    return;
+  }
+  destroyed = true;
+  stopLiveStatusPoll();
+  // 退出直播间时关闭本次打开的游戏窗口
+  try {
+    window.ipcRenderer?.send('close-game-mobile', null);
+  } catch {
+    // 忽略 IPC 异常
+  }
+  // 离开 IM 群（异步，不阻塞退出流程）
+  void leaveLiveChat();
+  // 销毁播放器与停滞计时器
+  playerHandle?.destroy();
+  playerHandle = null;
+  if (stallTimer !== null) {
+    window.clearTimeout(stallTimer);
+    stallTimer = null;
+  }
+  if (!silent) {
+    try {
+      await Promise.race([
+        TUIMessageBox({ title, message, confirmButtonText: '确定' }).catch(() => undefined),
+        delay(1500),
+      ]);
+    } catch {
+      // 用户关闭弹窗也一样退出
+    }
+  }
+  try {
+    await router.replace({ name: 'anchor-list' });
+  } catch (error) {
+    console.warn('[LivePlayer] router.replace failed:', error);
+  }
+  // 兜底：路由跳转未生效时直接改 hash，保证一定退回主播列表
+  if (router.currentRoute.value.name !== 'anchor-list') {
+    window.location.hash = '#/anchor-list';
+  }
+}
+
+/**
+ * 拉流错误处理：flv.js ERROR 事件现在传来的 detail 格式为
+ * "[network] network-error {...}" / "[network] network-timeout {...}" 等。
+ * Network / Media 类错误直接退出（停播时 CDN 会返回明确错误），
+ * 其他格式错误等累计 3 次再退（给网络抖动留余地）。
+ */
+function handleStreamError(detail: string) {
+  if (destroyed) {
+    return;
+  }
+  const lower = String(detail).toLowerCase();
+  // Network / Media / 404 / stream-not-found 都是「真的停播」
+  const isTerminal = /\[network\]|\[media\]|network-error|network-timeout|media-error|media-format-error|stream.*not.*found|stream.*ended|live.*ended|notfound|404|loaderror/i.test(lower);
+  errorText.value = '直播已结束或拉流失败';
+  console.warn('[LivePlayer] stream error:', detail, '(terminal?', isTerminal, ')');
+
+  if (isTerminal) {
+    void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+    return;
+  }
+  // 非明确错误：累计 3 次才退出，避免网络抖动误判
+  streamErrorCount++;
+  if (streamErrorTimer) {
+    clearTimeout(streamErrorTimer);
+  }
+  streamErrorTimer = window.setTimeout(() => {
+    streamErrorCount = 0;
+  }, 3000);
+  if (streamErrorCount >= 3) {
+    void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+  }
+}
 
 /**
  * 观看直播间需要 IM 登录 + 加入直播群：
@@ -271,7 +485,7 @@ async function handleSystemEvent(event: LiveImSystemEvent) {
         message: event.reason,
         confirmButtonText: '确定',
       });
-    } catch (error) {
+    } catch {
       // 用户关闭弹窗
     }
     return;
@@ -283,7 +497,7 @@ async function handleSystemEvent(event: LiveImSystemEvent) {
         message: event.reason || '主播收到平台警告',
         confirmButtonText: '确定',
       });
-    } catch (error) {
+    } catch {
       // 用户关闭弹窗
     }
     return;
@@ -293,14 +507,8 @@ async function handleSystemEvent(event: LiveImSystemEvent) {
   }
   const title = event.kind === 'ended' ? '直播已结束' : '封禁提示';
   const message = event.reason || (event.kind === 'ended' ? '主播已结束直播' : '直播间已被封禁');
-  try {
-    await TUIMessageBox({ title, message, confirmButtonText: '确定' });
-  } catch (error) {
-    // 用户关闭弹窗
-  }
-  destroyed = true;
-  void leaveLiveChat();
-  router.replace({ name: 'anchor-list' });
+  // 复用 exitRoom：弹框 + 离群 + 路由
+  void exitRoom(title, message);
 }
 
 function toggleSound() {
@@ -308,9 +516,12 @@ function toggleSound() {
   if (!el) {
     return;
   }
-  el.muted = false;
-  void el.play().catch(() => undefined);
-  muted.value = false;
+  el.muted = !el.muted;
+  // 开启声音时重新 play()，否则某些浏览器不会出声
+  if (!el.muted) {
+    void el.play().catch(() => undefined);
+  }
+  muted.value = el.muted;
 }
 
 function handleBack() {
@@ -326,25 +537,123 @@ async function startPlayback() {
     errorText.value = '直播地址无效，请返回列表重新进入';
     return;
   }
+
+  // 每次 timeupdate 都说明有新帧，重置停滞计时器
+  const onTimeUpdate = () => {
+    if (destroyed) {
+      return;
+    }
+    lastVideoTime = el.currentTime;
+    resetStallTimer();
+  };
+  el.addEventListener('timeupdate', onTimeUpdate);
+
+  // 直播流结束（MSE 主动 endOfStream）→ 立即退出
+  const onEnded = () => {
+    if (destroyed) {
+      return;
+    }
+    console.warn('[LivePlayer] video ended, treating as stream ended');
+    void exitRoom('直播已结束', '主播已结束直播', true);
+  };
+  el.addEventListener('ended', onEnded);
+
+  // 缓冲等待（waiting）：直播流断开时比 stalled 更早触发
+  let waitingTimer: number | null = null;
+  const clearWaitingTimer = () => {
+    if (waitingTimer !== null) {
+      window.clearTimeout(waitingTimer);
+      waitingTimer = null;
+    }
+  };
+  const onWaiting = () => {
+    if (destroyed || !hasPlayedOnce) {
+      return;
+    }
+    clearWaitingTimer();
+    const startTime = el.currentTime;
+    waitingTimer = window.setTimeout(() => {
+      waitingTimer = null;
+      if (destroyed) {
+        return;
+      }
+      // 1 秒内还没恢复播放（currentTime 仍未推进）→ 判定断流
+      if (el.currentTime === startTime) {
+        console.warn('[LivePlayer] waiting timeout: 1s no progress, treating as stream ended');
+        void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+      }
+    }, 1 * 1000);
+  };
+  const onPlaying = () => {
+    hasPlayedOnce = true;
+    clearWaitingTimer();
+  };
+  el.addEventListener('waiting', onWaiting);
+  el.addEventListener('playing', onPlaying);
+
+  const cleanupVideoListeners = () => {
+    el.removeEventListener('timeupdate', onTimeUpdate);
+    el.removeEventListener('ended', onEnded);
+    el.removeEventListener('waiting', onWaiting);
+    el.removeEventListener('playing', onPlaying);
+    clearWaitingTimer();
+  };
+
   try {
     const handle = await createStreamPlayer(el, playUrl, {
       muted: false,
-      onError: (detail) => {
-        console.warn('[LivePlayer] stream error:', detail);
+      onError: handleStreamError,
+      onVideoError: (err) => {
+        if (destroyed) {
+          return;
+        }
+        const code = err?.code ?? 'unknown';
+        console.warn('[LivePlayer] video element error, code:', code);
         errorText.value = '直播已结束或拉流失败';
+        // MEDIA_ERR_SRC_NOT_SUPPORTED / NETWORK_ERR 都是真的停播
+        if (code === 4 || code === 2 || code === 1) {
+          void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+        }
+      },
+      onStalled: () => {
+        if (destroyed) {
+          return;
+        }
+        console.warn('[LivePlayer] video stalled');
+        errorText.value = '直播已结束或拉流失败';
+        // stalled 后 1 秒内没恢复则退出
+        const stalledTimer = window.setTimeout(() => {
+          if (!destroyed) {
+            void exitRoom('直播已结束', '主播已结束直播或网络连接中断', true);
+          }
+        }, 1 * 1000);
+        // 恢复播放时取消这个 timer
+        const onStalledRecovered = () => {
+          window.clearTimeout(stalledTimer);
+          el.removeEventListener('playing', onStalledRecovered);
+        };
+        el.addEventListener('playing', onStalledRecovered);
       },
     });
     // 播放器初始化期间页面已退出时立即回收
     if (destroyed) {
       handle.destroy();
+      cleanupVideoListeners();
       return;
     }
     playerHandle = handle;
     // 自动播放被拦截时会自动静音，这里同步按钮状态
     muted.value = el.muted;
+    // 启动停滞兜底计时器
+    lastVideoTime = el.currentTime;
+    resetStallTimer();
+    console.log('[LivePlayer] stall watchdog started, timeout:', STALL_TIMEOUT_MS, 'ms');
   } catch (error) {
     console.error('[LivePlayer] play failed:', error);
     errorText.value = '直播播放失败';
+    cleanupVideoListeners();
+    // 初始化就失败（URL 无效 / 404）直接退出
+    void exitRoom('直播已结束', '主播已结束直播或直播地址无效', true);
   }
 }
 
@@ -373,10 +682,29 @@ onMounted(() => {
   });
   void startPlayback();
   void initChat();
+  // 每 2 秒对比在播列表，主播关播后 2~4 秒内必定退出（不依赖拉流错误事件）
+  startLiveStatusPoll();
 });
 
 onBeforeUnmount(() => {
   destroyed = true;
+  stopLiveStatusPoll();
+  // 离开直播间（含手动点返回）时关闭本次打开的游戏窗口
+  try {
+    window.ipcRenderer?.send('close-game-mobile', null);
+  } catch {
+    // 忽略 IPC 异常
+  }
+  if (streamErrorTimer) {
+    clearTimeout(streamErrorTimer);
+    streamErrorTimer = null;
+  }
+  streamErrorCount = 0;
+  if (stallTimer !== null) {
+    window.clearTimeout(stallTimer);
+    stallTimer = null;
+  }
+  lastVideoTime = 0;
   unsubscribeSystem?.();
   unsubscribeSystem = null;
   unsubscribeMembers?.();
@@ -602,36 +930,45 @@ onBeforeUnmount(() => {
   }
 }
 
-.player-actions {
+/* ==================== 视频右上角容器（声音 + 在线观众） ==================== */
+.player-top-right {
   position: absolute;
-  right: 1rem;
-  bottom: 1rem;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.player-action-btn {
+.player-sound-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
   height: 2rem;
-  padding: 0 0.875rem;
-  font-size: 0.75rem;
+  padding: 0;
   color: #fff;
   cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 1rem;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  transition: background-color 0.2s ease, transform 0.12s ease;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.75);
+    background-color: rgba(0, 0, 0, 0.65);
+  }
+
+  &:active {
+    transform: scale(0.92);
   }
 }
 
-/* ==================== 在线观众折叠组件（视频右上角） ==================== */
+/* ==================== 在线观众折叠组件 ==================== */
 .player-audience {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 20;
+  position: relative;
 }
 
 .player-audience-toggle {

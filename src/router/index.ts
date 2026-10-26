@@ -16,6 +16,51 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import(/* webpackChunkName: "AnchorList" */ '../views/AnchorList.vue')
   },
   {
+    path: '/anchor-center',
+    name: 'anchor-center',
+    component: () => import(/* webpackChunkName: "AnchorCenter" */ '../views/AnchorCenter.vue')
+  },
+  {
+    path: '/anchor/data-more',
+    name: 'anchor-data-more',
+    component: () => import(/* webpackChunkName: "AnchorDataMore" */ '../views/anchor-sub/AnchorDataMore.vue')
+  },
+  {
+    path: '/anchor/task-center',
+    name: 'anchor-task-center',
+    component: () => import(/* webpackChunkName: "AnchorTaskCenter" */ '../views/anchor-sub/AnchorTaskCenter.vue')
+  },
+  {
+    path: '/anchor/contribution-rank',
+    name: 'anchor-contribution-rank',
+    component: () => import(/* webpackChunkName: "AnchorContributionRank" */ '../views/anchor-sub/AnchorContributionRank.vue')
+  },
+  {
+    path: '/anchor/level',
+    name: 'anchor-level',
+    component: () => import(/* webpackChunkName: "AnchorLevel" */ '../views/anchor-sub/AnchorLevel.vue')
+  },
+  {
+    path: '/anchor/live-settings',
+    name: 'anchor-live-settings',
+    component: () => import(/* webpackChunkName: "AnchorLiveSettings" */ '../views/anchor-sub/AnchorLiveSettings.vue')
+  },
+  {
+    path: '/anchor/paid-list',
+    name: 'anchor-paid-list',
+    component: () => import(/* webpackChunkName: "AnchorPaidList" */ '../views/anchor-sub/AnchorPaidList.vue')
+  },
+  {
+    path: '/anchor/admin-list',
+    name: 'anchor-admin-list',
+    component: () => import(/* webpackChunkName: "AnchorAdminList" */ '../views/anchor-sub/AnchorAdminList.vue')
+  },
+  {
+    path: '/anchor/notice',
+    name: 'anchor-notice',
+    component: () => import(/* webpackChunkName: "AnchorNotice" */ '../views/anchor-sub/AnchorNotice.vue')
+  },
+  {
     path: '/live-player',
     name: 'live-player',
     component: () => import(/* webpackChunkName: "LivePlayer" */ '../views/LivePlayer.vue')
@@ -77,7 +122,20 @@ router.beforeEach((to) => {
   if (isMacPlatform() && to.name === 'tui-live-kit-main') {
     return { name: 'tui-livekit-mac' };
   }
-  if (to.name === 'tui-live-kit-main' || to.name === 'anchor-list' || to.name === 'live-player') {
+  if (
+    to.name === 'tui-live-kit-main' ||
+    to.name === 'anchor-list' ||
+    to.name === 'anchor-center' ||
+    to.name === 'anchor-data-more' ||
+    to.name === 'anchor-task-center' ||
+    to.name === 'anchor-contribution-rank' ||
+    to.name === 'anchor-level' ||
+    to.name === 'anchor-live-settings' ||
+    to.name === 'anchor-paid-list' ||
+    to.name === 'anchor-admin-list' ||
+    to.name === 'anchor-notice' ||
+    to.name === 'live-player'
+  ) {
     let storedUserInfo: string | null = null;
     try {
       storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);

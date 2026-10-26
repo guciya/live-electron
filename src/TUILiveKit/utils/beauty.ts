@@ -70,8 +70,8 @@ const { platform } = process;
 // fields are empty, `isBeautyLicenseConfigured()` returns false and the camera
 // dialog surfaces a "please enable the Tencent Effect SDK" hint.
 export const XmagicLicense = {
-  licenseURL: '',
-  licenseKey: '',
+  licenseURL: 'https://1323471676.trtcube-license.cn/license/v2/1323471676_1/v_cube.license',
+  licenseKey: '5d941866aee3d9516754d363c9ab7e89',
 };
 
 /**

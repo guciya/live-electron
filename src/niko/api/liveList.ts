@@ -11,7 +11,7 @@ import { NIKO_CONFIG } from '../config';
  * 域名按环境切换（VUE_APP_CMS_BASE_URL，见 .env.test / .env.production）。
  */
 const CMS_BASE_URL = NIKO_CONFIG.cmsBaseUrl;
-const CMS_AUTH_TOKEN = 'ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6STFOaUo5LmV5SnBZWFFpT2pFM09USTVNak0wTlRBc0ltVjRjQ0k2TVRjNU16VXlPREkxTUN3aWJXRnVZV2RsY2w5cFpDSTZNVEI5Lmh3SVdQUG9NSVA1SXViSEd5QnhQeHZUT1VrMXBtQzRsVFRYVnpxVzVUc1U=';
+const CMS_AUTH_TOKEN = NIKO_CONFIG.cmsAuthToken;
 
 export interface NikoLiveListItem {
   /** 后端 live_index_id，主播开播时作为 TRTC 房间号 */
