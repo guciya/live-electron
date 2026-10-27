@@ -70,14 +70,6 @@
             <span class="button">{{ !isLoggingIn ? t('Log In') : t('Logging In')}}</span>
           </button>
         </div>
-
-        <GeetestCaptcha
-          ref="captchaRef"
-          :captcha-id="GEETEST_CAPTCHA_ID"
-          product="bind"
-          @success="onCaptchaSuccess"
-          @error="onCaptchaError"
-        />
       </div>
     </div>
     </div>
@@ -101,8 +93,6 @@ import { USER_INFO_STORAGE_KEY } from '../../TUILiveKit/utils/userInfoStorage';
 import { NIKO_CONFIG } from '../../niko/config';
 import { useAuthStore } from '../../niko/store/auth';
 import { codeLogin, sendVerifyCode } from '../../niko/api/user';
-import GeetestCaptcha from '../../niko/components/GeetestCaptcha.vue';
-import type { GeetestValidateData } from '../../niko/types/geetest';
 import loginBgVideo from '../../assets/niko-live-video.mp4';
 
 const { t } = useUIKit();
@@ -117,10 +107,6 @@ const sending = ref(false);
 
 const countdown = ref(0);
 let countdownTimer: number | null = null;
-
-// 极验验证码
-const captchaRef = ref<InstanceType<typeof GeetestCaptcha> | null>(null);
-const GEETEST_CAPTCHA_ID = '343d223d6ad402391bdce9b6795f4cb8';
 
 const canSend = computed(() => /^1[3-9]\d{9}$/.test(mobile.value));
 
