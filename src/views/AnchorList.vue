@@ -71,10 +71,6 @@
             </svg>
             <span>退出登录</span>
           </button>
-          <button class="anchor-start-live-btn" type="button" @click="handleStartLive">
-            <IconLiveStart class="start-live-icon" />
-            <span>去开播</span>
-          </button>
           <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="9.5" cy="7.5" r="3.5" />
@@ -221,6 +217,12 @@
           </div>
         </div>
       </main>
+
+      <!-- 悬浮圆形开播按钮：页面底部居中 -->
+      <button class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
+        <IconLiveStart class="anchor-fab-icon" />
+        <span>开播</span>
+      </button>
 
       <!-- 退出登录确认弹窗 -->
       <div v-if="showLogoutConfirm" class="logout-confirm-mask" @click.self="cancelLogout">
@@ -556,6 +558,7 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .anchor-list-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -564,6 +567,46 @@ onBeforeUnmount(() => {
   color: var(--text-color-primary, #ffffff);
   background-color: var(--bg-color-topbar, #141518);
   box-sizing: border-box;
+}
+
+/* 悬浮圆形开播按钮 */
+.anchor-fab-start {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  width: 3.75rem;
+  height: 3.75rem;
+  padding: 0;
+  color: #fff;
+  cursor: pointer;
+  background-image: linear-gradient(135deg, #ff7aa2, #ff3d71);
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 8px 20px rgba(255, 61, 113, 0.4);
+  transform: translateX(-50%);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    box-shadow: 0 10px 26px rgba(255, 61, 113, 0.55);
+    transform: translateX(-50%) translateY(-2px);
+  }
+
+  .anchor-fab-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  span {
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1;
+  }
 }
 
 .anchor-header {

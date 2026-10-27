@@ -258,9 +258,9 @@ onUnmounted(stopRushTimer);
   height: 1rem;
   font-size: 0.625rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.6);
   cursor: default;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 50%;
 }
 
@@ -268,7 +268,7 @@ onUnmounted(stopRushTimer);
   padding: 0;
   font-size: 0.875rem;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   background: none;
   border: none;
@@ -290,16 +290,22 @@ onUnmounted(stopRushTimer);
   padding: 0.1875rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.28);
-  border: none;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.75rem;
   transition: background-color 0.15s ease, color 0.15s ease;
 
+  &:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
   &.active {
-    color: #8a3a00;
-    background-image: linear-gradient(180deg, #ffe27a, #ffc73d);
+    color: #fff;
+    background-image: linear-gradient(90deg, #ff7aa2, #ff3d71);
+    border-color: transparent;
   }
 }
 
@@ -316,7 +322,7 @@ onUnmounted(stopRushTimer);
   gap: 0.25rem;
   margin-bottom: 0.5rem;
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .rank-rush-refresh {
@@ -326,8 +332,8 @@ onUnmounted(stopRushTimer);
   width: 0.875rem;
   height: 0.875rem;
   font-size: 0.625rem;
-  color: #fff;
-  background-color: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
 }
 
@@ -348,7 +354,7 @@ onUnmounted(stopRushTimer);
   height: 3.5rem;
   object-fit: cover;
   border-radius: 50%;
-  border: 2px solid rgba(255, 226, 122, 0.9);
+  border: 2px solid rgba(255, 122, 162, 0.85);
 }
 
 .rank-rush-avatar-empty {
@@ -357,7 +363,7 @@ onUnmounted(stopRushTimer);
   justify-content: center;
   font-size: 1.125rem;
   font-weight: 700;
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .rank-rush-name {
@@ -369,8 +375,8 @@ onUnmounted(stopRushTimer);
   padding: 0 0.375rem;
   font-size: 0.625rem;
   line-height: 1rem;
-  color: #fff;
-  background-color: rgba(0, 0, 0, 0.28);
+  color: #ff9bb8;
+  background-color: rgba(255, 61, 113, 0.16);
   border-radius: 0.5rem;
 }
 
@@ -405,15 +411,15 @@ onUnmounted(stopRushTimer);
   margin-bottom: -0.75rem;
   overflow: hidden;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  background-color: rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .rank-podium-item-1 .rank-podium-avatar {
   width: 3.75rem;
   height: 3.75rem;
   margin-bottom: -0.875rem;
-  border-color: #ffe27a;
+  border-color: #ffd479;
 }
 
 .rank-podium-avatar-img {
@@ -426,7 +432,7 @@ onUnmounted(stopRushTimer);
   display: block;
   width: 100%;
   height: 100%;
-  background-color: rgba(255, 255, 255, 0.55);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .rank-podium-pillar {
@@ -436,11 +442,16 @@ onUnmounted(stopRushTimer);
   justify-content: flex-start;
   width: 100%;
   padding-top: 0.875rem;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12));
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+  border-radius: 0.5rem 0.5rem 0 0;
 
   .rank-podium-item-1 & {
     height: 5.5rem;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.18));
+    background-image: linear-gradient(180deg, rgba(255, 61, 113, 0.22), rgba(255, 61, 113, 0.05));
+    border-color: rgba(255, 61, 113, 0.28);
+    border-bottom: none;
   }
 
   .rank-podium-item-2 &,
@@ -453,6 +464,7 @@ onUnmounted(stopRushTimer);
   width: 100%;
   padding: 0 0.25rem;
   font-size: 0.625rem;
+  color: rgba(255, 255, 255, 0.8);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
@@ -463,15 +475,18 @@ onUnmounted(stopRushTimer);
   margin-bottom: 0.125rem;
   font-size: 0.625rem;
   font-weight: 700;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .rank-podium-number {
   font-size: 1.5rem;
   font-weight: 800;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.rank-podium-item-1 .rank-podium-number {
+  color: #ffd479;
 }
 
 /* 4 名以后 */
@@ -502,8 +517,8 @@ onUnmounted(stopRushTimer);
   height: 1.125rem;
   font-size: 0.625rem;
   font-weight: 700;
-  color: #7a3c00;
-  background-color: #ffd666;
+  color: rgba(255, 255, 255, 0.65);
+  background-color: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
 }
 
@@ -515,7 +530,8 @@ onUnmounted(stopRushTimer);
   min-width: 0;
   height: 100%;
   padding: 0 0.625rem;
-  background-color: rgba(255, 255, 255, 0.92);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 0.75rem;
 }
 
@@ -525,7 +541,7 @@ onUnmounted(stopRushTimer);
   height: 1.5rem;
   overflow: hidden;
   border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .rank-row-avatar-img {
@@ -538,14 +554,14 @@ onUnmounted(stopRushTimer);
   display: block;
   width: 100%;
   height: 100%;
-  background-color: rgba(190, 190, 200, 0.45);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .rank-row-name {
   flex: 1;
   min-width: 0;
   font-size: 0.75rem;
-  color: #6b6b76;
+  color: rgba(255, 255, 255, 0.8);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -557,7 +573,7 @@ onUnmounted(stopRushTimer);
   align-items: center;
   gap: 0.125rem;
   font-size: 0.6875rem;
-  color: #8a8a96;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .rank-row-fire {
@@ -571,8 +587,8 @@ onUnmounted(stopRushTimer);
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.875rem;
-  background-color: rgba(255, 255, 255, 0.16);
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rank-footer-badge {
@@ -585,8 +601,8 @@ onUnmounted(stopRushTimer);
   padding: 0 0.25rem;
   font-size: 0.5625rem;
   font-weight: 700;
-  color: #7a3c00;
-  background-color: #ffd666;
+  color: #ffd479;
+  background-color: rgba(255, 196, 84, 0.14);
   border-radius: 0.625rem;
 }
 
@@ -596,7 +612,7 @@ onUnmounted(stopRushTimer);
   height: 1.625rem;
   object-fit: cover;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .rank-footer-avatar-empty {
@@ -605,7 +621,7 @@ onUnmounted(stopRushTimer);
   justify-content: center;
   font-size: 0.6875rem;
   font-weight: 700;
-  background-color: rgba(255, 255, 255, 0.24);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .rank-footer-name {
@@ -626,7 +642,7 @@ onUnmounted(stopRushTimer);
   line-height: 1.375rem;
   color: #fff;
   cursor: pointer;
-  background-image: linear-gradient(90deg, #ff8a3d, #ff5a2e);
+  background-image: linear-gradient(90deg, #ff7aa2, #ff3d71);
   border: none;
   border-radius: 0.6875rem;
 
