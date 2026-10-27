@@ -161,7 +161,6 @@ import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { UIKitProvider, TUIMessageBox } from '@tencentcloud/uikit-base-component-vue3';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
-import { TUILogin } from '@tencentcloud/tui-core-lite';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
 import MaximizeIcon from '../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../TUILiveKit/common/icons/MinimizeIcon.vue';
@@ -200,7 +199,7 @@ const liveIndexId = String(route.query.liveId || '');
 // play_url 带签名参数，通过 history.state 传递（H5 项目同样做法）
 const playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
 
-const { login, loginUserInfo } = useLoginState();
+const { login } = useLoginState();
 
 const videoEl: Ref<HTMLVideoElement | null> = ref(null);
 const errorText = ref('');
@@ -426,15 +425,15 @@ async function initChat() {
   }
   try {
     const { sdkAppId, userId, userSig } = JSON.parse(stored);
-    // loginUserInfo 可能是旧会话残留，必须同时确认 chat 实例存在
-    if (!loginUserInfo.value?.userId || !TUILogin.getContext()?.chat) {
-      await login({
-        sdkAppId: Number(sdkAppId),
-        userId: String(userId),
-        userSig: String(userSig),
-      });
-      console.log('[LivePlayer] TUIKit IM login success:', userId);
-    }
+    // 无条件执行 login：chat 实例存在 ≠ 已登录
+    // TUIChatEngine-Lite import 时就会创建 chat 对象，但没 login 的话 joinGroup 会报 code:2024
+    // useLoginState().login 内部有幂等保护，已登录且同 userId 时直接返回，不会互踢
+    await login({
+      sdkAppId: Number(sdkAppId),
+      userId: String(userId),
+      userSig: String(userSig),
+    });
+    console.log('[LivePlayer] TUIKit IM login success:', userId);
     await joinLiveChat(roomId);
     console.log('[LivePlayer] live chat ready, roomId:', roomId);
     imReady.value = true;
