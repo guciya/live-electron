@@ -20,29 +20,18 @@ export interface NikoLoginResult {
   refresh_token?: string;
 }
 
-/** 极验验证参数（发送短信验证码必传） */
-export interface GeetestParams {
-  logNumber: string;
-  captchaOutput: string;
-  passToken: string;
-  genTime: string;
-}
-
-/** 发送短信验证码（需先通过极验图形验证码） */
-export function sendVerifyCode(params: { mobile: string } & GeetestParams): Promise<void> {
-  return request.post('/api/sms/anchorWebLoginVerifyCode', {
+/** 发送短信验证码（不再需要极验，直接传手机号） */
+export function sendVerifyCode(params: { mobile: string }): Promise<void> {
+  return request.post('/api/sms/loginVerifyCode', {
     mobile: params.mobile,
-    logNumber: params.logNumber,
-    captchaOutput: params.captchaOutput,
-    passToken: params.passToken,
-    genTime: params.genTime,
   }) as unknown as Promise<void>;
 }
 
-/** 手机号 + 验证码登录 */
+/** 手机号 + 验证码登录（platform 写死 h5） */
 export function codeLogin(mobile: string, verifyCode: string): Promise<NikoLoginResult> {
   return request.post('/api/account/h5VerifyCodeLogin', {
     mobile,
     verifyCode,
+    platform: 'h5',
   }) as unknown as Promise<NikoLoginResult>;
 }

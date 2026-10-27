@@ -135,20 +135,22 @@ function startCountdown() {
   }, 1000);
 }
 
-/** 极验验证通过后，调用发短信验证码接口 */
-async function onCaptchaSuccess(data: GeetestValidateData) {
+/** 直接发短信验证码（接口不再需要极验参数） */
+async function handleSendCode() {
+  if (countdown.value > 0 || sending.value) {
+    return;
+  }
   if (!canSend.value) {
+    TUIMessageBox({
+      title: t('Note'),
+      message: t('Please enter a valid mobile number'),
+      confirmButtonText: t('Sure'),
+    });
     return;
   }
   sending.value = true;
   try {
-    await sendVerifyCode({
-      mobile: mobile.value,
-      logNumber: data.lot_number,
-      captchaOutput: data.captcha_output,
-      passToken: data.pass_token,
-      genTime: data.gen_time,
-    });
+    await sendVerifyCode({ mobile: mobile.value.trim() });
     TUIMessageBox({
       title: t('Note'),
       message: t('Code sent'),
@@ -162,30 +164,9 @@ async function onCaptchaSuccess(data: GeetestValidateData) {
       message: error?.message || t('get SMS code failed!'),
       confirmButtonText: t('Sure'),
     });
-    captchaRef.value?.resetCaptcha();
   } finally {
     sending.value = false;
   }
-}
-
-function onCaptchaError(e: unknown) {
-  logger.warn('[Login] geetest error:', e);
-}
-
-/** 点击「获取验证码」：先校验手机号，再弹出极验图形验证码 */
-function handleSendCode() {
-  if (countdown.value > 0 || sending.value) {
-    return;
-  }
-  if (!canSend.value) {
-    TUIMessageBox({
-      title: t('Note'),
-      message: t('Please enter a valid mobile number'),
-      confirmButtonText: t('Sure'),
-    });
-    return;
-  }
-  captchaRef.value?.showCaptcha();
 }
 
 async function handleLogin() {

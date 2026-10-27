@@ -40,6 +40,8 @@ export interface NikoLiveListItem {
   /** 所属组织/公会名称（无组织时为空） */
   organizationName: string;
   playUrl: string;
+  /** 是否为置顶主播（来自 top_anchor_live_info） */
+  isTop?: boolean;
 }
 
 interface RawAudienceItem {
@@ -162,7 +164,7 @@ function buildFlvUrl(playInfo?: RawLiveListItem['play_info']): string {
   return `${host}/live/${playInfo.stream}.${ext}${qs}`;
 }
 
-export function normalize(item: RawLiveListItem): NikoLiveListItem | null {
+export function normalize(item: RawLiveListItem, isTop = false): NikoLiveListItem | null {
   const liveIndexId = String(item.live_index_id ?? '');
   const roomId = String(item.room_id ?? item.chat_room_id ?? item.im_group_id ?? item.group_id ?? '');
   if (!liveIndexId) {
@@ -209,6 +211,7 @@ export function normalize(item: RawLiveListItem): NikoLiveListItem | null {
     // 优先用旧 CMS 接口给的 play_url（已拼好签名）；
     // 没有时用 recommendLiveList 的 play_info 组装 HTTP-FLV 地址
     playUrl: item.play_url ?? buildFlvUrl(item.play_info),
+    isTop,
   };
 }
 
@@ -217,10 +220,15 @@ interface ListResponse {
   data?: RawLiveListItem[];
   items?: RawLiveListItem[];
   records?: RawLiveListItem[];
-  /** recommendLiveList 业务接口的列表字段 */
-  anchor_live_list?: RawLiveListItem[];
-  /** recommendLiveList 的推荐/置顶列表（暂未使用，预留） */
+  /** recommendLiveList 业务接口的置顶主播（单个对象） */
+  top_anchor_live_info?: {
+    is_current_top?: boolean;
+    anchor_info?: RawLiveListItem;
+  };
+  /** recommendLiveList 的推荐列表 */
   recommend_anchor_live_list?: RawLiveListItem[];
+  /** recommendLiveList 主列表 */
+  anchor_live_list?: RawLiveListItem[];
   total_data?: number;
   total?: number;
   count?: number;
@@ -228,11 +236,41 @@ interface ListResponse {
 
 export function toList(data: unknown): { list: NikoLiveListItem[]; total: number } {
   const payload = (data ?? {}) as ListResponse;
-  const raw = Array.isArray(payload)
-    ? payload
-    : payload.anchor_live_list ?? payload.recommend_anchor_live_list ?? payload.list ?? payload.data ?? payload.items ?? payload.records ?? [];
-  const list = (Array.isArray(raw) ? raw : [])
-    .map(normalize)
+  if (Array.isArray(payload)) {
+    const list = payload.map((item) => normalize(item)).filter((item): item is NikoLiveListItem => !!item);
+    return { list, total: list.length };
+  }
+
+  // 三个来源合并：置顶 → 推荐 → 主列表，按 liveIndexId 去重
+  // 用 { item, isTop } 追踪每个来源，保证置顶标记正确传递
+  const seen = new Set<string>();
+  const merged: { item: RawLiveListItem; isTop: boolean }[] = [];
+  const push = (item: RawLiveListItem | null | undefined, isTop = false) => {
+    const id = String(item?.live_index_id ?? '');
+    if (item && id && !seen.has(id)) {
+      seen.add(id);
+      merged.push({ item, isTop });
+    }
+  };
+  // 置顶主播（anchor_info 里嵌在 top_anchor_live_info 下）
+  push(payload.top_anchor_live_info?.anchor_info, true);
+  // 推荐列表
+  for (const item of payload.recommend_anchor_live_list ?? []) {
+    push(item, false);
+  }
+  // 主列表
+  for (const item of payload.anchor_live_list ?? []) {
+    push(item, false);
+  }
+  // CMS 旧接口兜底
+  if (merged.length === 0) {
+    for (const item of payload.list ?? payload.data ?? payload.items ?? payload.records ?? []) {
+      push(item, false);
+    }
+  }
+
+  const list = merged
+    .map(({ item, isTop }) => normalize(item, isTop))
     .filter((item): item is NikoLiveListItem => !!item);
   return { list, total: payload.total_data ?? payload.total ?? payload.count ?? list.length };
 }

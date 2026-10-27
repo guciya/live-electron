@@ -130,8 +130,11 @@
             v-for="item in liveList"
             :key="item.liveIndexId"
             class="anchor-card"
+            :class="{ 'is-top': item.isTop }"
             @click="handleCardClick(item)"
           >
+            <!-- 置顶主播左上角金色 TOP 角标 -->
+            <span v-if="item.isTop" class="card-top-badge">TOP</span>
             <div class="card-cover">
               <video
                 v-if="item.playUrl"
@@ -945,6 +948,7 @@ onBeforeUnmount(() => {
 }
 
 .anchor-card {
+  position: relative;
   overflow: hidden;
   cursor: pointer;
   border-radius: 0.5rem;
@@ -958,6 +962,30 @@ onBeforeUnmount(() => {
     .card-enter-tip {
       opacity: 1;
     }
+  }
+
+  /* 置顶主播：金色边框光圈 */
+  &.is-top {
+    box-shadow: 0 0 0 1px rgba(255, 200, 80, 0.45), 0 0 14px rgba(255, 180, 50, 0.25);
+
+    &:hover {
+      box-shadow: 0 0 0 1px rgba(255, 210, 100, 0.6), 0 0 22px rgba(255, 180, 50, 0.35);
+    }
+  }
+
+  .card-top-badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #1a1205;
+    background: linear-gradient(90deg, #ffd666, #ff9f1a);
+    border-bottom-right-radius: 8px;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   }
 
   .card-cover {
