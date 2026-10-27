@@ -25,7 +25,7 @@
  * 3. 开播后 CDN 转推启动需要时间，这里轮询列表接口直到拿到自己的 play_url。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { fetchLiveMonitorList } from '../api/liveList';
+import { fetchRecommendLiveList } from '../api/live';
 import { createStreamPlayer, type StreamPlayerHandle } from '../utils/flvPlayer';
 
 const props = defineProps<{
@@ -67,7 +67,7 @@ async function startPlay(playUrl: string) {
 
 /** 从在播列表里找自己的 play_url */
 async function findSelfPlayUrl(): Promise<string> {
-  const monitor = await fetchLiveMonitorList(1, 50, { force: true }).catch(() => null);
+  const monitor = await fetchRecommendLiveList(1, 50, { force: true }).catch(() => null);
   const id = String(props.liveIndexId);
   const found = monitor?.list.find((item) => item.liveIndexId === id);
   return found?.playUrl || '';

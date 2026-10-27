@@ -179,7 +179,7 @@ import {
   type LiveImSystemEvent,
 } from '../niko/im/liveIm';
 import { getAudienceCardInfo, type AudienceCardInfo } from '../niko/api/live';
-import { fetchLiveMonitorList } from '../niko/api/liveList';
+import { fetchRecommendLiveList } from '../niko/api/live';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import GiftPanel from '../niko/components/GiftPanel.vue';
@@ -275,7 +275,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-/** 服务端权威下播判定：每 2 秒查一次在播列表（liveMonitorList），
+/** 服务端权威下播判定：每 2 秒查一次在播列表（recommendLiveList，业务域），
  *  主播关播后房间会从列表里消失，连续 2 次消失即判定下播并退出。
  *  不依赖 flv.js 的错误事件 —— 实测 CDN 在主播关播时会静默保活连接，不报任何错。 */
 const LIVE_STATUS_POLL_MS = 2 * 1000;
@@ -295,7 +295,7 @@ async function pollLiveStatus() {
     return;
   }
   try {
-    const result = await fetchLiveMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true });
+    const result = await fetchRecommendLiveList(1, LIVE_STATUS_PAGE_SIZE, { force: true });
     if (destroyed) {
       return;
     }
@@ -309,7 +309,7 @@ async function pollLiveStatus() {
       return;
     }
     missingFromListCount += 1;
-    console.warn('[LivePlayer] room not in live list, count:', missingFromListCount);
+    console.warn('[LivePlayer] room not in recommendLiveList, count:', missingFromListCount);
     if (missingFromListCount >= 2) {
       stopLiveStatusPoll();
       void exitRoom('直播已结束', '主播已结束直播', true);
