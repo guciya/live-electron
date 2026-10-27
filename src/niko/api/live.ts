@@ -1,4 +1,5 @@
 import { request } from '../request';
+import { toList, type NikoLiveListItem } from './liveList';
 
 export interface LiveCategory {
   id: string | number;
@@ -319,4 +320,58 @@ export interface AnchorCenterData {
 /** 主播中心首页数据 */
 export function getAnchorCenter(): Promise<AnchorCenterData> {
   return request.post('/live/anchorCenter') as unknown as Promise<AnchorCenterData>;
+}
+
+// ==================== 主播列表 ====================
+
+export interface RecommendLiveListResult {
+  list: NikoLiveListItem[];
+  total: number;
+}
+
+// 请求去重：2 秒无感刷新 + 路由切换重复挂载时复用同一 Promise / 缓存结果
+let recommendPending: Promise<RecommendLiveListResult> | null = null;
+let recommendCached: RecommendLiveListResult | null = null;
+let recommendRawLogged = false;
+
+/**
+ * 推荐在播主播列表（/live/recommendLiveList）。
+ * 属业务域接口（VUE_APP_API_BASE_URL + 登录 Token），与 CMS 的 liveMonitorList 不同：
+ * 鉴权走 request 公共实例，不能放到 liveList.ts 的 cmsRequest 里。
+ * 外层结构未知，统一交给 liveList.ts 的 toList 兼容（list/data/items/records）。
+ */
+export async function fetchRecommendLiveList(
+  page = 1,
+  pageSize = 20,
+  options: { force?: boolean } = {},
+): Promise<RecommendLiveListResult> {
+  if (!options.force) {
+    if (recommendPending) {
+      return recommendPending;
+    }
+    if (recommendCached) {
+      return recommendCached;
+    }
+  }
+
+  console.log('[RecommendLiveList] POST /live/recommendLiveList', { page, pageSize, force: !!options.force });
+  const task = (request.post('/live/recommendLiveList', { page, pageSize }) as unknown as Promise<unknown>)
+    .then((data) => {
+      // 只打印一次原始结构，便于字段对不上时快速定位
+      if (!recommendRawLogged) {
+        recommendRawLogged = true;
+        console.log('[RecommendLiveList] raw response:', data);
+      }
+      return toList(data);
+    });
+  recommendPending = task;
+  try {
+    const result = await task;
+    recommendCached = result;
+    return result;
+  } finally {
+    if (recommendPending === task) {
+      recommendPending = null;
+    }
+  }
 }

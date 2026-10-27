@@ -233,7 +233,8 @@ import { isMacPlatform } from '../TUILiveKit/utils/platform';
 import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
 import { NIKO_CONFIG, resolveImageUrl } from '../niko/config';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
-import { fetchLiveFocusMonitorList, fetchLiveMonitorList, type NikoLiveListItem } from '../niko/api/liveList';
+import { fetchRecommendLiveList } from '../niko/api/live';
+import { type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
 
@@ -257,24 +258,7 @@ const userAvatar = computed(() => {
 const userInitial = computed(() => (userInfo.value?.nickname || userInfo.value?.userShowId || 'N').slice(0, 1).toUpperCase());
 
 /**
- * 合并两个 CMS 列表（liveMonitorList + liveFocusMonitorList）。
- * 同一场直播在两边都可能返回，按 liveIndexId 去重，保留先出现的项。
- */
-function mergeLiveList(main: NikoLiveListItem[], focus: NikoLiveListItem[]): NikoLiveListItem[] {
-  const seen = new Set<string>();
-  const merged: NikoLiveListItem[] = [];
-  [...main, ...focus].forEach((item) => {
-    if (!item.liveIndexId || seen.has(item.liveIndexId)) {
-      return;
-    }
-    seen.add(item.liveIndexId);
-    merged.push(item);
-  });
-  return merged;
-}
-
-/**
- * 加载主播列表。
+ * 加载主播列表（数据源：/live/recommendLiveList，业务域 + 登录 Token）。
  * 页面首次进入只请求一次；点击刷新按钮传 force=true 强制重新请求；
  * silent=true 为无感刷新（后台定时同步），不展示 loading 也不打断页面。
  */
@@ -284,28 +268,11 @@ async function loadList(force = false, silent = false) {
     apiError.value = '';
   }
   try {
-    // 同时拉取「在播主播」和「关注主播」两个 CMS 列表，按 liveIndexId 去重后合并展示
-    const [mainResult, focusResult] = await Promise.allSettled([
-      fetchLiveMonitorList(1, 20, { force }),
-      fetchLiveFocusMonitorList(1, 20, { force }),
-    ]);
-    if (mainResult.status === 'rejected' && focusResult.status === 'rejected') {
-      throw mainResult.reason;
-    }
-    if (mainResult.status === 'rejected') {
-      console.warn('[AnchorList] fetchLiveMonitorList failed:', mainResult.reason);
-    }
-    if (focusResult.status === 'rejected') {
-      console.warn('[AnchorList] fetchLiveFocusMonitorList failed:', focusResult.reason);
-    }
-    const merged = mergeLiveList(
-      mainResult.status === 'fulfilled' ? mainResult.value.list : [],
-      focusResult.status === 'fulfilled' ? focusResult.value.list : [],
-    );
-    liveList.value = merged;
-    total.value = merged.length;
+    const result = await fetchRecommendLiveList(1, 20, { force });
+    liveList.value = result.list;
+    total.value = result.total;
     // 刷新后下播的主播不再保留预览播放器
-    const validIds = new Set(merged.map((item) => item.liveIndexId));
+    const validIds = new Set(result.list.map((item) => item.liveIndexId));
     previewHandles.forEach((_handle, id) => {
       if (!validIds.has(id)) {
         stopPreview(id);
@@ -320,7 +287,7 @@ async function loadList(force = false, silent = false) {
     apiError.value = error instanceof Error ? error.message : String(error);
     liveList.value = [];
     total.value = 0;
-    console.error('[AnchorList] fetchLiveMonitorList failed:', error);
+    console.error('[AnchorList] fetchRecommendLiveList failed:', error);
   } finally {
     if (!silent) {
       loading.value = false;

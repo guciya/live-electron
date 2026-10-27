@@ -124,7 +124,7 @@ cmsRequest.interceptors.response.use(
  * room_id 在不同接口下命名不一致（room_id / chat_room_id / im_group_id / group_id），
  * 与 H5 项目 liveList.ts 保持同样的兼容策略。
  */
-function normalize(item: RawLiveListItem): NikoLiveListItem | null {
+export function normalize(item: RawLiveListItem): NikoLiveListItem | null {
   const liveIndexId = String(item.live_index_id ?? '');
   const roomId = String(item.room_id ?? item.chat_room_id ?? item.im_group_id ?? item.group_id ?? '');
   if (!liveIndexId) {
@@ -175,16 +175,22 @@ function normalize(item: RawLiveListItem): NikoLiveListItem | null {
 interface ListResponse {
   list?: RawLiveListItem[];
   data?: RawLiveListItem[];
+  items?: RawLiveListItem[];
+  records?: RawLiveListItem[];
   total_data?: number;
+  total?: number;
+  count?: number;
 }
 
-function toList(data: unknown): { list: NikoLiveListItem[]; total: number } {
+export function toList(data: unknown): { list: NikoLiveListItem[]; total: number } {
   const payload = (data ?? {}) as ListResponse;
-  const raw = Array.isArray(payload) ? payload : payload.list ?? payload.data ?? [];
+  const raw = Array.isArray(payload)
+    ? payload
+    : payload.list ?? payload.data ?? payload.items ?? payload.records ?? [];
   const list = (Array.isArray(raw) ? raw : [])
     .map(normalize)
     .filter((item): item is NikoLiveListItem => !!item);
-  return { list, total: payload.total_data ?? list.length };
+  return { list, total: payload.total_data ?? payload.total ?? payload.count ?? list.length };
 }
 
 interface LiveMonitorResult {
