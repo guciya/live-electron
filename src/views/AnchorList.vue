@@ -75,6 +75,21 @@
             <IconLiveStart class="start-live-icon" />
             <span>去开播</span>
           </button>
+          <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
+            <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9.5" cy="7.5" r="3.5" />
+              <path d="M3 20c0-3.2 2.9-5.5 6.5-5.5 1.9 0 3.6.7 4.6 1.8" />
+              <path d="M18 10v6M15 13h6" />
+            </svg>
+            <span>关注列表</span>
+          </button>
+          <button class="anchor-start-live-btn" type="button" @click="handleOpenMessage">
+            <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.5 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.6-4.4a7.5 7.5 0 1 1 14.9-4.1z" />
+              <path d="M9 11h6M9 14.5h3.5" />
+            </svg>
+            <span>消息</span>
+          </button>
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize">
               <svg-icon :icon="MinimizeIcon"></svg-icon>
@@ -387,6 +402,7 @@ function handleCardClick(item: NikoLiveListItem) {
       roomId: item.roomId,
       liveTitle: item.title,
       anchorName: item.nickname,
+      anchorId: item.anchorUserId,
       avatar: item.avatar,
       viewerCount: String(item.viewerCount),
     },
@@ -397,6 +413,16 @@ function handleCardClick(item: NikoLiveListItem) {
 
 function handleStartLive() {
   router.push({ name: isMacPlatform() ? 'tui-livekit-mac' : 'tui-live-kit-main' });
+}
+
+// 关注列表：点击入口，具体逻辑待接入
+function handleOpenFollowList() {
+  // TODO: 打开关注列表
+}
+
+// 消息：点击入口，具体逻辑待接入
+function handleOpenMessage() {
+  // TODO: 打开消息中心
 }
 
 // 退出登录二次确认：点击「退出登录」先弹窗，确认后才执行登出

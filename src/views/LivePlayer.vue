@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <UIKitProvider theme="dark">
     <div class="live-player-page">
       <header class="player-header tui-window-header">
@@ -36,31 +36,58 @@
           <div v-if="errorText" class="player-status">{{ errorText }}</div>
 
           <div class="player-anchor">
-            <img
-              v-if="avatar && !avatarError"
-              class="player-avatar"
-              :src="avatar"
-              alt=""
-              @error="avatarError = true"
-            />
-            <span v-else class="player-avatar player-avatar-empty">{{ initial }}</span>
-            <div class="player-anchor-info">
+            <div class="player-anchor-side">
+              <div class="player-avatar-wrap is-clickable" @click.stop="handleAnchorClick">
+                <img
+                  v-if="avatar && !avatarError"
+                  class="player-avatar"
+                  :src="avatar"
+                  alt=""
+                  @error="avatarError = true"
+                />
+                <span v-else class="player-avatar player-avatar-empty">{{ initial }}</span>
+                <!-- 直播中：压在头像底部 -->
+                <span class="player-live-badge">直播中</span>
+              </div>
+              <!-- 人气榜：头像下方的榜单入口 -->
+              <button
+                class="player-popularity"
+                type="button"
+                @click.stop="popularityPanelVisible = true"
+              >
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                  <rect x="3" y="12" width="4" height="9" rx="1" />
+                  <rect x="10" y="7" width="4" height="14" rx="1" />
+                  <rect x="17" y="3" width="4" height="18" rx="1" />
+                </svg>
+                <span>人气榜</span>
+              </button>
+            </div>
+            <div class="player-anchor-info is-clickable" @click.stop="handleAnchorClick">
               <span class="player-anchor-name">{{ anchorName || '主播' }}</span>
               <span class="player-anchor-sub">{{ title }}</span>
             </div>
-            <span class="player-live-badge">直播中</span>
+            <button
+              v-if="canFollow"
+              class="player-follow-btn"
+              :class="{ 'is-followed': following }"
+              type="button"
+              :disabled="followLoading"
+              @click.stop="handleToggleFollow"
+            >{{ following ? '已关注' : '关注' }}</button>
           </div>
 
-          <!-- 在线观众折叠组件 + 声音开关（视频右上角，同一行） -->
+          <!-- 在线观众折叠组件 + 声音开关（视频右上角，同一行），下方为更多直播入口 -->
           <div class="player-top-right">
-            <!-- 声音开关：点击切换静音/开启，图标随状态变化 -->
-            <button
-              class="player-sound-btn"
-              type="button"
-              :title="muted ? '开启声音' : '关闭声音'"
-              :aria-label="muted ? '开启声音' : '关闭声音'"
-              @click="toggleSound"
-            >
+            <div class="player-top-right-row">
+              <!-- 声音开关：点击切换静音/开启，图标随状态变化 -->
+              <button
+                class="player-sound-btn"
+                type="button"
+                :title="muted ? '开启声音' : '关闭声音'"
+                :aria-label="muted ? '开启声音' : '关闭声音'"
+                @click="toggleSound"
+              >
               <!-- 有声状态 -->
               <template v-if="!muted">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,7 +144,30 @@
                 </div>
               </div>
             </div>
+            </div>
+
+            <!-- 更多直播：在线观众下方的直播列表入口 -->
+            <div class="player-more-live">
+              <button
+                class="player-more-live-btn"
+                type="button"
+                @click="toggleMoreLive"
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="14" rx="2" />
+                  <path d="M8 21h8M12 18v3" />
+                </svg>
+                <span>更多直播</span>
+              </button>
+            </div>
           </div>
+
+          <MoreLiveTray
+            :visible="moreLiveVisible"
+            :current-live-index-id="liveIndexId"
+            @close="moreLiveVisible = false"
+            @select="enterOtherLive"
+          />
         </div>
 
         <aside class="player-side">
@@ -139,6 +189,14 @@
         :visible="giftPanelVisible"
         :live-index-id="liveIndexId"
         @close="giftPanelVisible = false"
+      />
+
+      <PopularityRankPanel
+        :visible="popularityPanelVisible"
+        :anchor-name="anchorName"
+        :anchor-avatar="avatar"
+        @close="popularityPanelVisible = false"
+        @support="handleRankSupport"
       />
 
       <GamePanel
@@ -179,11 +237,15 @@ import {
 } from '../niko/im/liveIm';
 import { getAudienceCardInfo, type AudienceCardInfo } from '../niko/api/live';
 import { fetchRecommendLiveList } from '../niko/api/live';
+import type { NikoLiveListItem } from '../niko/api/liveList';
+import { attentionUser } from '../niko/api/user';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import GiftPanel from '../niko/components/GiftPanel.vue';
 import GamePanel from '../niko/components/GamePanel.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
+import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
+import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -196,6 +258,8 @@ const avatar = avatarRaw ? resolveImageUrl(avatarRaw) : '';
 // IM 群组 ID（后端 room_id）与直播场次 ID（live_index_id）
 const roomId = String(route.query.roomId || '');
 const liveIndexId = String(route.query.liveId || '');
+// 主播用户 ID：关注接口的 attentionUserId
+const anchorId = Number(route.query.anchorId || 0);
 // play_url 带签名参数，通过 history.state 传递（H5 项目同样做法）
 const playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
 
@@ -213,6 +277,68 @@ const gamePanelVisible = ref(false);
 const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
+const popularityPanelVisible = ref(false);
+
+// 关注：接口没有查询态，默认未关注，点一次以接口结果为准
+const canFollow = computed(() => Number.isFinite(anchorId) && anchorId > 0);
+const following = ref(false);
+const followLoading = ref(false);
+
+async function handleToggleFollow() {
+  if (!canFollow.value || followLoading.value) {
+    return;
+  }
+  const next = !following.value;
+  followLoading.value = true;
+  try {
+    const res = await attentionUser({ attentionUserId: anchorId, attentionStatus: next ? 1 : 0 });
+    if (res && res.result === false) {
+      throw new Error('操作失败');
+    }
+    following.value = next;
+  } catch (error: any) {
+    console.warn('[LivePlayer] attention failed:', error?.message || error);
+  } finally {
+    followLoading.value = false;
+  }
+}
+
+/** 人气榜「为Ta助力」：关闭榜单，直接打开礼物面板 */
+function handleRankSupport() {
+  popularityPanelVisible.value = false;
+  giftPanelVisible.value = true;
+}
+
+// 更多直播：长条弹窗由 MoreLiveTray 组件自行拉取（同一 recommendLiveList 接口，一次 200 条）
+const moreLiveVisible = ref(false);
+
+function toggleMoreLive() {
+  moreLiveVisible.value = !moreLiveVisible.value;
+}
+
+/** 进入另一个直播间：同路由切换不会重建组件，push 后整页重载 */
+function enterOtherLive(item: NikoLiveListItem) {
+  moreLiveVisible.value = false;
+  // 点到自己当前所在的房间，不需要重载
+  if (item.liveIndexId === liveIndexId) {
+    return;
+  }
+  void router
+    .push({
+      name: 'live-player',
+      query: {
+        liveId: item.liveIndexId,
+        roomId: item.roomId,
+        liveTitle: item.title,
+        anchorName: item.nickname,
+        anchorId: item.anchorUserId,
+        avatar: item.avatar,
+        viewerCount: String(item.viewerCount),
+      },
+      state: { playUrl: item.playUrl },
+    })
+    .then(() => window.location.reload());
+}
 
 // 在线观众折叠组件：群消息 audience_list 下发的成员列表（liveIm 内已做解析）
 const audienceMembers = ref<LiveImMember[]>([]);
@@ -466,6 +592,41 @@ async function handleUserClick(payload: { userId: string; isMystery: boolean }) 
   } catch (error: any) {
     console.warn('[LivePlayer] get audience card failed:', error?.message || error);
     userCardVisible.value = false;
+  } finally {
+    userCardLoading.value = false;
+  }
+}
+
+/** 点击直播间顶部主播头像/昵称，弹出主播信息卡片（复用观众信息卡） */
+async function handleAnchorClick() {
+  if (!anchorId) {
+    return;
+  }
+  // 先用路由里的本地信息占位，避免接口慢/失败时空白
+  const fallback: AudienceCardInfo = {
+    user_id: anchorId,
+    nickname: anchorName || '主播',
+    avatar: avatar.value || '',
+    user_show_id: '',
+    introduction: '',
+  };
+  userCardInfo.value = fallback;
+  userCardVisible.value = true;
+  userCardLoading.value = true;
+  try {
+    const result: any = await getAudienceCardInfo({
+      audienceUserId: anchorId,
+      liveIndexId: liveIndexId || undefined,
+    });
+    const info = result?.audience_info || result?.data?.audience_info;
+    if (info) {
+      userCardInfo.value = { ...fallback, ...info };
+      if (info.is_attention !== undefined) {
+        following.value = Boolean(Number(info.is_attention));
+      }
+    }
+  } catch (error: any) {
+    console.warn('[LivePlayer] get anchor card failed:', error?.message || error);
   } finally {
     userCardLoading.value = false;
   }
@@ -866,17 +1027,35 @@ onBeforeUnmount(() => {
 .player-anchor {
   position: absolute;
   left: 1rem;
-  top: 1rem;
+  top: 0rem;
+  z-index: 25;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
-  border-radius: 1.25rem;
+  border-radius: 1rem;
   background-color: rgba(0, 0, 0, 0.45);
 
+  /* 头像列：头像（含直播中角标）+ 人气榜入口 */
+  .player-anchor-side {
+    position: relative;
+    margin-top: 18px;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .player-avatar-wrap {
+    position: relative;
+    width: 2rem;
+    height: 2rem;
+  }
+
   .player-avatar {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 2rem;
+    height: 2rem;
     border-radius: 50%;
     object-fit: cover;
     background-color: rgba(255, 255, 255, 0.15);
@@ -891,10 +1070,56 @@ onBeforeUnmount(() => {
     color: #fff;
   }
 
+  /* 直播中：压在头像底部 */
+  .player-live-badge {
+    position: absolute;
+    left: 50%;
+    bottom: -0.25rem;
+    padding: 0 0.25rem;
+    font-size: 0.5625rem;
+    line-height: 0.75rem;
+    color: #fff;
+    white-space: nowrap;
+    border-radius: 0.25rem;
+    background-color: #f04142;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+    transform: translateX(-50%);
+  }
+
+  /* 人气榜入口 */
+  .player-popularity {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0 0.25rem;
+    font-size: 0.5625rem;
+    line-height: 0.875rem;
+    color: #ffd666;
+    cursor: pointer;
+    background-color: rgba(255, 214, 102, 0.12);
+    border: none;
+    border-radius: 0.25rem;
+
+    &:hover {
+      background-color: rgba(255, 214, 102, 0.24);
+    }
+  }
+
   .player-anchor-info {
     display: flex;
     flex-direction: column;
     min-width: 0;
+  }
+
+  /* 主播头像 / 昵称可点击，弹出主播信息卡 */
+  .player-anchor-info.is-clickable,
+  .player-avatar-wrap.is-clickable {
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+
+    &:hover {
+      opacity: 0.85;
+    }
   }
 
   .player-anchor-name {
@@ -914,14 +1139,34 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
 
-  .player-live-badge {
+  /* 关注按钮 */
+  .player-follow-btn {
     flex: none;
-    padding: 0 0.375rem;
-    font-size: 0.625rem;
-    line-height: 1rem;
+    padding: 0 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.375rem;
     color: #fff;
-    border-radius: 0.125rem;
-    background-color: #f04142;
+    cursor: pointer;
+    background-image: linear-gradient(90deg, #ff6a9c, #ff3d71);
+    border: none;
+    border-radius: 0.75rem;
+
+    &:hover {
+      filter: brightness(1.08);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    /* 已关注：弱化为描边态 */
+    &.is-followed {
+      color: rgba(255, 255, 255, 0.7);
+      background-image: none;
+      background-color: rgba(255, 255, 255, 0.12);
+    }
   }
 }
 
@@ -932,8 +1177,40 @@ onBeforeUnmount(() => {
   right: 0.75rem;
   z-index: 20;
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.375rem;
+}
+
+/* 声音开关 + 在线观众同一行，更多直播在其下方 */
+.player-top-right-row {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.player-more-live {
+  position: relative;
+}
+
+.player-more-live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+  color: #fff;
+  cursor: pointer;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.65);
+  }
 }
 
 .player-sound-btn {

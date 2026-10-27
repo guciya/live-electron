@@ -35,3 +35,18 @@ export function codeLogin(mobile: string, verifyCode: string): Promise<NikoLogin
     platform: 'h5',
   }) as unknown as Promise<NikoLoginResult>;
 }
+
+export interface AttentionResult {
+  result: boolean;
+}
+
+/** 关注 / 取消关注用户：attentionStatus 1=关注 0=取消关注 */
+export function attentionUser(params: {
+  attentionUserId: number;
+  attentionStatus: number;
+}): Promise<AttentionResult> {
+  return request.post('/api/relation/userAttention', {
+    attentionUserId: params.attentionUserId,
+    attentionStatus: params.attentionStatus,
+  }) as unknown as Promise<AttentionResult>;
+}

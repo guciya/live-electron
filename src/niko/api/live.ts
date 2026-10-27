@@ -342,7 +342,7 @@ let recommendRawLogged = false;
  */
 export async function fetchRecommendLiveList(
   page = 1,
-  pageSize = 20,
+  pageSize = 300,
   options: { force?: boolean } = {},
 ): Promise<RecommendLiveListResult> {
   if (!options.force) {
