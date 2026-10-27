@@ -41,7 +41,7 @@ export function sendVerifyCode(params: { mobile: string } & GeetestParams): Prom
 
 /** 手机号 + 验证码登录 */
 export function codeLogin(mobile: string, verifyCode: string): Promise<NikoLoginResult> {
-  return request.post('/api/account/anchorWebVerifyCodeLogin', {
+  return request.post('/api/account/h5VerifyCodeLogin', {
     mobile,
     verifyCode,
   }) as unknown as Promise<NikoLoginResult>;

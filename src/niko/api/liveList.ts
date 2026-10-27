@@ -70,6 +70,15 @@ interface RawLiveListItem {
     audience_list?: RawAudienceItem[];
   };
   play_url?: string;
+  /** recommendLiveList 用 play_info 对象，host 字段是播放 CDN 根域名 */
+  play_info?: {
+    host?: string;
+    type?: number;
+    stream?: string;
+    live_name?: string;
+    secret?: string;
+    time?: string;
+  };
   organization_info?: {
     organization_name?: string;
     name?: string;
@@ -124,6 +133,35 @@ cmsRequest.interceptors.response.use(
  * room_id 在不同接口下命名不一致（room_id / chat_room_id / im_group_id / group_id），
  * 与 H5 项目 liveList.ts 保持同样的兼容策略。
  */
+/**
+ * 用 play_info 组装 flv.js 能播的完整 HTTP-FLV 地址。
+ * recommendLiveList 返回的是裸 host（rtmp://...），带 stream/secret/time 等分片字段，
+ * 需要按 CDN 约定拼成可播地址。旧 CMS 接口直接给拼好的 play_url，走不到这里。
+ */
+function buildFlvUrl(playInfo?: RawLiveListItem['play_info']): string {
+  if (!playInfo?.host) {
+    return '';
+  }
+  const host = playInfo.host.replace(/^rtmps?:\/\//, 'https://').replace(/\/+$/, '');
+  if (!playInfo.stream) {
+    // 只有 host 没有 stream，兜底直接返回 host（flv.js 播不了但不崩）
+    return host;
+  }
+  // type=3 看起来是 FLV 流，type=4 可能是 HLS。按 type 选扩展名
+  const ext = playInfo.type === 4 ? 'm3u8' : 'flv';
+  const params: string[] = [];
+  if (playInfo.secret) {
+    params.push(`txSecret=${encodeURIComponent(playInfo.secret)}`);
+  }
+  if (playInfo.time) {
+    params.push(`txTime=${encodeURIComponent(playInfo.time)}`);
+  }
+  // 路径：host/live/stream.ext?签名参数
+  // live_name 字段在样例里是 "live"，和路径段同名，直接忽略
+  const qs = params.length ? `?${params.join('&')}` : '';
+  return `${host}/live/${playInfo.stream}.${ext}${qs}`;
+}
+
 export function normalize(item: RawLiveListItem): NikoLiveListItem | null {
   const liveIndexId = String(item.live_index_id ?? '');
   const roomId = String(item.room_id ?? item.chat_room_id ?? item.im_group_id ?? item.group_id ?? '');
@@ -168,7 +206,9 @@ export function normalize(item: RawLiveListItem): NikoLiveListItem | null {
       ?? item.organization_info?.org_name
       ?? '',
     ),
-    playUrl: item.play_url ?? '',
+    // 优先用旧 CMS 接口给的 play_url（已拼好签名）；
+    // 没有时用 recommendLiveList 的 play_info 组装 HTTP-FLV 地址
+    playUrl: item.play_url ?? buildFlvUrl(item.play_info),
   };
 }
 
@@ -177,6 +217,10 @@ interface ListResponse {
   data?: RawLiveListItem[];
   items?: RawLiveListItem[];
   records?: RawLiveListItem[];
+  /** recommendLiveList 业务接口的列表字段 */
+  anchor_live_list?: RawLiveListItem[];
+  /** recommendLiveList 的推荐/置顶列表（暂未使用，预留） */
+  recommend_anchor_live_list?: RawLiveListItem[];
   total_data?: number;
   total?: number;
   count?: number;
@@ -186,7 +230,7 @@ export function toList(data: unknown): { list: NikoLiveListItem[]; total: number
   const payload = (data ?? {}) as ListResponse;
   const raw = Array.isArray(payload)
     ? payload
-    : payload.list ?? payload.data ?? payload.items ?? payload.records ?? [];
+    : payload.anchor_live_list ?? payload.recommend_anchor_live_list ?? payload.list ?? payload.data ?? payload.items ?? payload.records ?? [];
   const list = (Array.isArray(raw) ? raw : [])
     .map(normalize)
     .filter((item): item is NikoLiveListItem => !!item);
@@ -236,40 +280,5 @@ export async function fetchLiveMonitorList(
   }
 }
 
-// 关注主播列表同样做请求去重（与 liveMonitorList 相同的策略）
-let focusPending: Promise<LiveMonitorResult> | null = null;
-let focusCached: LiveMonitorResult | null = null;
-
-/**
- * 关注主播列表（/live/liveFocusMonitorList）。
- * 与 H5 的 fetchFocusLiveList 一致：分页参数为 page / page_size。
- */
-export async function fetchLiveFocusMonitorList(
-  page = 1,
-  pageSize = 20,
-  options: { force?: boolean } = {},
-): Promise<LiveMonitorResult> {
-  if (!options.force) {
-    if (focusPending) {
-      return focusPending;
-    }
-    if (focusCached) {
-      return focusCached;
-    }
-  }
-
-  console.log('[CmsLiveList] POST /live/liveFocusMonitorList', { page, pageSize, force: !!options.force });
-  const task = cmsRequest
-    .post('/live/liveFocusMonitorList', { page, page_size: pageSize })
-    .then((data) => toList(data));
-  focusPending = task;
-  try {
-    const result = await task;
-    focusCached = result;
-    return result;
-  } finally {
-    if (focusPending === task) {
-      focusPending = null;
-    }
-  }
-}
+// 默认列表接口已移除 liveFocusMonitorList，仅保留 liveMonitorList
+// 关注主播列表后续如有需要另行接入业务域接口

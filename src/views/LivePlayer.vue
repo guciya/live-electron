@@ -179,7 +179,7 @@ import {
   type LiveImSystemEvent,
 } from '../niko/im/liveIm';
 import { getAudienceCardInfo, type AudienceCardInfo } from '../niko/api/live';
-import { fetchLiveFocusMonitorList, fetchLiveMonitorList } from '../niko/api/liveList';
+import { fetchLiveMonitorList } from '../niko/api/liveList';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import GiftPanel from '../niko/components/GiftPanel.vue';
@@ -275,7 +275,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-/** 服务端权威下播判定：每 2 秒查一次在播列表（liveMonitorList / liveFocusMonitorList），
+/** 服务端权威下播判定：每 2 秒查一次在播列表（liveMonitorList），
  *  主播关播后房间会从列表里消失，连续 2 次消失即判定下播并退出。
  *  不依赖 flv.js 的错误事件 —— 实测 CDN 在主播关播时会静默保活连接，不报任何错。 */
 const LIVE_STATUS_POLL_MS = 2 * 1000;
@@ -295,19 +295,15 @@ async function pollLiveStatus() {
     return;
   }
   try {
-    const [main, focus] = await Promise.all([
-      fetchLiveMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true }),
-      fetchLiveFocusMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true }),
-    ]);
+    const result = await fetchLiveMonitorList(1, LIVE_STATUS_PAGE_SIZE, { force: true });
     if (destroyed) {
       return;
     }
-    const rooms = [...main.list, ...focus.list];
-    const exists = rooms.some(
+    const exists = result.list.some(
       (item) => item.roomId === roomId || (liveIndexId !== '' && item.liveIndexId === liveIndexId),
     );
-    // 只有两个接口都返回了不足一页的完整列表时，才能确定「不在列表里 == 已下播」
-    const complete = main.list.length < LIVE_STATUS_PAGE_SIZE && focus.list.length < LIVE_STATUS_PAGE_SIZE;
+    // 只有返回不足一页的完整列表时，才能确定「不在列表里 == 已下播」
+    const complete = result.list.length < LIVE_STATUS_PAGE_SIZE;
     if (exists || !complete) {
       missingFromListCount = 0;
       return;
