@@ -100,6 +100,8 @@ import { resolveImageUrl } from '../config';
 const props = defineProps<{
   visible: boolean;
   liveIndexId: string | number;
+  /** 主播ID（liveGiftList 接口必需参数） */
+  anchorId?: string | number;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -131,7 +133,10 @@ async function loadGifts() {
       const data = await getBackpackGiftList();
       gifts.value = data?.gift_list ?? [];
     } else {
-      const data = await getLiveGiftList(activeKey.value);
+      const data = await getLiveGiftList({
+        anchorId: props.anchorId ?? 0,
+        giftCategory: activeKey.value,
+      });
       gifts.value = data?.gift_list ?? [];
     }
   } catch (error: any) {

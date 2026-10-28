@@ -210,7 +210,7 @@ function toMessage(raw: any, text: string, kind: LiveImMessage['kind'] = 'chat')
 
 /**
  * 解析等级牌/勋章/身份角标。
- * 对齐 H5 niko/im 的 normalizeMessage：等级图标优先 card → gif → 普通 icon。
+ * 前端要求：聊天消息前的等级图标用 level_icon（与 AudiencePanel 等其他面板保持一致）。
  */
 function buildExtra(data: any): LiveImMessage['extra'] {
   if (!data) {
@@ -220,7 +220,7 @@ function buildExtra(data: any): LiveImMessage['extra'] {
   const medalInfo = data.adorn?.medal_info || {};
   return {
     levelColor: String(levelInfo.level_color || ''),
-    levelCardIcon: String(levelInfo.level_card_icon || levelInfo.level_gif_icon || levelInfo.level_icon || ''),
+    levelCardIcon: String(levelInfo.level_icon || levelInfo.level_card_icon || levelInfo.level_gif_icon || ''),
     medalImage: String(medalInfo.medal_image || ''),
     isManager: !!data.is_manager,
     isSuper: !!data.is_super,

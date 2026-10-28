@@ -194,6 +194,7 @@
       <GiftPanel
         :visible="giftPanelVisible"
         :live-index-id="liveIndexId"
+        :anchor-id="anchorId"
         @close="giftPanelVisible = false"
       />
 

@@ -284,6 +284,16 @@ function onMinimize() { window.ipcRenderer?.send('window-minimize'); }
 function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize'); }
 function onClose() { window.ipcRenderer?.send('window-close'); }
 
+/** 从 localStorage 取主播自己的 userId（主播设置页默认就是当前登录主播） */
+const anchorSelfId = (() => {
+  try {
+    const stored = window.localStorage.getItem('TUILiveKit-userInfo');
+    return Number(stored ? JSON.parse(stored)?.userId || 0 : 0);
+  } catch {
+    return 0;
+  }
+})();
+
 /* ---------- 心愿单礼物 ---------- */
 const giftList = ref<GiftItem[]>([]);
 const giftLoading = ref(false);
@@ -296,7 +306,7 @@ async function loadGifts() {
     const categories = Array.isArray(catRes) ? catRes : (catRes?.categories || []);
     const firstId = categories[0]?.id;
     if (!firstId) return;
-    const giftRes: any = await getLiveGiftList(firstId);
+    const giftRes: any = await getLiveGiftList({ anchorId: anchorSelfId, giftCategory: firstId });
     giftList.value = giftRes?.gift_list || giftRes || [];
   } catch (e) {
     console.warn('loadGifts failed', e);

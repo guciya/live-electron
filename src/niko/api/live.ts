@@ -135,9 +135,13 @@ export function getGiftCategory(): Promise<{ categories?: GiftCategory[] } & Gif
 }
 
 /** 某个分类下的礼物列表 */
-export function getLiveGiftList(categoryId: string | number): Promise<{ gift_list?: GiftItem[] }> {
+export function getLiveGiftList(params: {
+  anchorId: string | number;
+  giftCategory: string | number;
+}): Promise<{ gift_list?: GiftItem[] }> {
   return request.post('/live/liveGiftList', {
-    categoryId: Number(categoryId),
+    anchorId: Number(params.anchorId),
+    giftCategory: Number(params.giftCategory),
   }) as unknown as Promise<any>;
 }
 
