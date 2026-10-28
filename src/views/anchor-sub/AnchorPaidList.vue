@@ -44,24 +44,44 @@
         <section class="section-card">
           <div class="section-header">
             <span class="section-title">付费用户列表</span>
-            <button class="primary-btn" type="button" @click="showAdd = true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              添加用户
-            </button>
+            <div class="header-actions">
+              <select class="sort-select" v-model.number="sortType" @change="loadList">
+                <option :value="1">按时间</option>
+                <option :value="2">按贡献</option>
+              </select>
+              <button class="primary-btn" type="button" @click="showAdd = true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                添加用户
+              </button>
+            </div>
           </div>
 
           <div class="user-list" v-if="list.length">
-            <div class="user-row" v-for="(u, i) in list" :key="i">
-              <div class="user-avatar">{{ (u.nickname || '?').charAt(0) }}</div>
-              <div class="user-info">
-                <div class="user-name">{{ u.nickname }}</div>
-                <div class="user-id">ID: {{ u.id }}</div>
+            <div class="user-row" v-for="u in list" :key="u.user_id">
+              <div class="user-avatar">
+                <img v-if="avatarOf(u)" :src="avatarOf(u)" alt="" />
+                <span v-else>{{ (u.nickname || '?').charAt(0) }}</span>
               </div>
-              <span class="user-price">{{ u.price }} K币</span>
-              <button class="danger-btn" type="button" @click="removeUser(i)">移除</button>
+              <div class="user-info">
+                <div class="user-name">
+                  {{ u.nickname }}
+                  <img v-if="levelIcon(u)" class="level-badge" :src="levelIcon(u)" alt="" />
+                  <span v-else-if="u.user_level_info?.user_level || u.user_level" class="level-text">
+                    Lv.{{ u.user_level_info?.user_level ?? u.user_level }}
+                  </span>
+                </div>
+                <div class="user-id">ID: {{ u.user_show_id }} · 加入于 {{ u.create_time || '--' }}</div>
+              </div>
+              <span class="user-price">贡献 {{ formatNumber(u.contribute) }}</span>
+              <button class="danger-btn" type="button" @click="removeUser">移除</button>
             </div>
+          </div>
+          <div v-else-if="loading" class="empty">加载中...</div>
+          <div v-else-if="error" class="empty empty-error">
+            {{ error }}
+            <button class="retry-btn" type="button" @click="loadList">重试</button>
           </div>
           <div v-else class="empty">暂无付费用户</div>
         </section>
@@ -110,6 +130,8 @@ import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
 import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
+import { resolveImageUrl } from '../../niko/config';
+import { getAnchorWhitelist, type AnchorWhitelistUser } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
@@ -121,28 +143,52 @@ function onClose() { window.ipcRenderer?.send('window-close'); }
 const enabled = ref(false);
 const price = ref(1000);
 
-interface PaidUser { nickname: string; id: string; price: number; }
-const list = ref<PaidUser[]>([
-  { nickname: '小明', id: '10086', price: 500 },
-  { nickname: '路过', id: '10099', price: 0 },
-]);
+const sortType = ref(1);
+const list = ref<AnchorWhitelistUser[]>([]);
+const loading = ref(false);
+const error = ref('');
+
+async function loadList() {
+  loading.value = true;
+  error.value = '';
+  try {
+    list.value = await getAnchorWhitelist({ sortType: sortType.value, page: 1, pageSize: 100 });
+  } catch (e) {
+    console.warn('getAnchorWhitelist failed', e);
+    list.value = [];
+    error.value = '付费名单加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function avatarOf(u: AnchorWhitelistUser) {
+  return resolveImageUrl(u.avatar);
+}
+function levelIcon(u: AnchorWhitelistUser) {
+  return resolveImageUrl(u.user_level_info?.user_level_icon);
+}
+function formatNumber(n?: number) {
+  if (!n) return '0';
+  if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+  return String(n);
+}
 
 const showAdd = ref(false);
 const addId = ref('');
 const addPrice = ref(0);
 function confirmAdd() {
   if (!addId.value.trim()) { showMessage({ type: MessageToastType.Warning, message: '请输入用户 ID' }); return; }
-  list.value.unshift({ nickname: '用户_' + addId.value, id: addId.value, price: addPrice.value || 0 });
   showAdd.value = false; addId.value = ''; addPrice.value = 0;
-  showMessage({ type: MessageToastType.Success, message: '添加成功' });
+  showMessage({ type: MessageToastType.Warning, message: '暂不支持在线添加，请在后台配置' });
 }
-function removeUser(i: number) {
-  list.value.splice(i, 1);
-  showMessage({ type: MessageToastType.Info, message: '已移除' });
+function removeUser() {
+  showMessage({ type: MessageToastType.Warning, message: '暂不支持在线移除，请在后台配置' });
 }
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadList();
 });
 </script>
 
@@ -163,6 +209,10 @@ onMounted(() => {
 .section-card { background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9)); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 18px 22px; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .section-title { font-size: 14px; font-weight: 700; color: #f0f0f4; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.sort-select { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: #1e1e2a; color: #fff; font-size: 12px; cursor: pointer; outline: none; }
+.sort-select:focus { border-color: rgba(139,123,230,0.4); }
+.sort-select option { background: #1e1e2a; color: #e6e6ea; }
 
 .form-row { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .form-row:last-child { border-bottom: none; }
@@ -181,15 +231,21 @@ onMounted(() => {
 /* User list */
 .user-list { display: flex; flex-direction: column; gap: 6px; }
 .user-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); }
-.user-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #6b46c1, #f472b6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; flex-shrink: 0; }
+.user-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #6b46c1, #f472b6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-info { flex: 1; min-width: 0; }
-.user-name { font-size: 13px; font-weight: 600; color: #fff; }
+.user-name { font-size: 13px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 4px; }
+.level-badge { height: 16px; width: auto; }
+.level-text { font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5); }
 .user-id { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
 .user-price { font-size: 13px; color: #fbbf24; font-weight: 600; margin-right: 14px; }
 .danger-btn { height: 28px; padding: 0 12px; border-radius: 6px; border: none; background: rgba(239,68,68,0.15); color: #f87171; font-size: 11px; cursor: pointer; transition: background 0.15s; }
 .danger-btn:hover { background: rgba(239,68,68,0.28); }
 
 .empty { text-align: center; padding: 40px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.empty-error { color: #f87171; }
+.retry-btn { margin-left: 8px; height: 24px; padding: 0 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: transparent; color: rgba(255,255,255,0.7); font-size: 12px; cursor: pointer; }
+.retry-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
 .primary-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 14px; border: none; border-radius: 8px; background: linear-gradient(90deg, #6b46c1, #8b5cf6); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 10px rgba(139,92,246,0.3); transition: transform 0.12s; }
 .primary-btn:hover { transform: translateY(-1px); }

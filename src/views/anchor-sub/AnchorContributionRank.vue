@@ -18,10 +18,9 @@
             </svg>
             说明
           </button>
-          <select class="filter-select" v-model="sort" @change="reload">
-            <option value="all">全部榜单</option>
-            <option value="week">本周榜单</option>
-            <option value="month">本月榜单</option>
+          <select class="filter-select" v-model.number="sortType" @change="reload">
+            <option :value="1">默认排序</option>
+            <option :value="2">按时间排序</option>
           </select>
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize"><svg-icon :icon="MinimizeIcon" /></button>
@@ -36,42 +35,62 @@
 
       <main class="sub-body">
         <!-- Top 3 -->
-        <section class="top3">
-          <div class="top3-card" v-for="(u, i) in top3" :key="i" :class="'top3-card--' + (i + 1)">
+        <section class="top3" v-if="top3.length">
+          <div class="top3-card" v-for="(u, i) in top3" :key="u.user_id" :class="'top3-card--' + (i + 1)">
             <div class="top3-medal">{{ i + 1 }}</div>
             <div class="top3-avatar">
-              <img v-if="u.avatar" :src="u.avatar" alt="" @error="onImgErr" />
-              <span v-else>{{ (u.nickname || '?').charAt(0) }}</span>
+              <img v-if="avatarOf(u)" :src="avatarOf(u)" alt="" @error="onImgErr" />
+              <span v-else>{{ displayName(u).charAt(0) }}</span>
             </div>
-            <div class="top3-name">{{ u.nickname }}</div>
+            <div class="top3-name">
+              {{ displayName(u) }}
+              <img v-if="levelIcon(u)" class="level-badge" :src="levelIcon(u)" alt="" />
+            </div>
             <div class="top3-tags">
-              <span class="tag" v-for="t in u.tags" :key="t">{{ t }}</span>
+              <span class="tag" v-for="t in userTags(u)" :key="t">{{ t }}</span>
             </div>
             <div class="top3-score">
-              <span class="score-num">{{ formatNumber(u.score) }}</span>
-              <span class="score-unit">心动</span>
+              <span class="score-num">{{ formatNumber(u.contribute) }}</span>
+              <span class="score-flame">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                </svg>
+              </span>
             </div>
           </div>
         </section>
 
         <!-- 其余 -->
         <section class="rank-list">
-          <div class="rank-row" v-for="(u, idx) in rest" :key="idx">
+          <div class="rank-row" v-for="(u, idx) in rest" :key="u.user_id">
             <span class="rank-num">{{ idx + 4 }}</span>
             <div class="rank-avatar">
-              <img v-if="u.avatar" :src="u.avatar" alt="" @error="onImgErr" />
-              <span v-else>{{ (u.nickname || '?').charAt(0) }}</span>
+              <img v-if="avatarOf(u)" :src="avatarOf(u)" alt="" @error="onImgErr" />
+              <span v-else>{{ displayName(u).charAt(0) }}</span>
             </div>
-            <div class="rank-name">{{ u.nickname }}</div>
+            <div class="rank-name">
+              {{ displayName(u) }}
+              <img v-if="levelIcon(u)" class="level-badge" :src="levelIcon(u)" alt="" />
+            </div>
             <div class="rank-tags">
-              <span class="tag" v-for="t in u.tags" :key="t">{{ t }}</span>
+              <span class="tag" v-for="t in userTags(u)" :key="t">{{ t }}</span>
             </div>
             <div class="rank-score">
-              <span class="score-num">{{ formatNumber(u.score) }}</span>
-              <span class="score-unit">心动</span>
+              <span class="score-num">{{ formatNumber(u.contribute) }}</span>
+              <span class="score-flame">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                </svg>
+              </span>
             </div>
           </div>
-          <div v-if="!rest.length" class="empty">暂无更多榜单数据</div>
+          <div v-if="loading" class="empty">加载中...</div>
+          <div v-else-if="error" class="empty empty-error">
+            {{ error }}
+            <button class="retry-btn" type="button" @click="loadList">重试</button>
+          </div>
+          <div v-else-if="!list.length" class="empty">暂无贡献记录</div>
+          <div v-else-if="!rest.length" class="empty">暂无更多榜单数据</div>
         </section>
       </main>
 
@@ -100,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
@@ -109,31 +128,55 @@ import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
 import { resolveImageUrl } from '../../niko/config';
+import { getContributeUserList, type ContributeUserItem } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
-const sort = ref('all');
+const sortType = ref(1);
 const showHelp = ref(false);
+const list = ref<ContributeUserItem[]>([]);
+const loading = ref(false);
+const error = ref('');
+const top3 = computed(() => list.value.slice(0, 3));
+const rest = computed(() => list.value.slice(3));
+
 function goBack() { router.replace({ name: 'anchor-center' }); }
 function onMinimize() { window.ipcRenderer?.send('window-minimize'); }
 function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize'); }
 function onClose() { window.ipcRenderer?.send('window-close'); }
 function onImgErr() { /* fallback handled in template */ }
-function reload() { /* mock only */ }
+function reload() { loadList(); }
 
-interface RankUser { nickname: string; avatar?: string; score: number; tags: string[]; }
-const data: RankUser[] = [
-  { nickname: 'Guciya', avatar: resolveImageUrl(''), score: 6476000, tags: ['皇帝', '帝王'] },
-  { nickname: 'why',    avatar: resolveImageUrl(''), score: 5602000, tags: ['皇帝', '首富'] },
-  { nickname: '小明',   avatar: resolveImageUrl(''), score: 3210000, tags: ['国王'] },
-  { nickname: '路过',   avatar: resolveImageUrl(''), score: 1200000, tags: ['公爵'] },
-  { nickname: '随缘',   avatar: resolveImageUrl(''), score: 860000,  tags: ['侯爵'] },
-  { nickname: '路人甲', avatar: resolveImageUrl(''), score: 520000,  tags: ['伯爵'] },
-  { nickname: '夜猫',   avatar: resolveImageUrl(''), score: 310000,  tags: ['子爵'] },
-];
-const top3 = ref(data.slice(0, 3));
-const rest = ref(data.slice(3));
+async function loadList() {
+  loading.value = true;
+  error.value = '';
+  try {
+    list.value = await getContributeUserList({ page: 1, pageSize: 100, contributeType: 1, sortType: sortType.value });
+  } catch (e) {
+    console.warn('getContributeUserList failed', e);
+    list.value = [];
+    error.value = '贡献榜单加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
 
+function displayName(u: ContributeUserItem) {
+  return u.is_mystery ? '神秘人' : (u.nickname || '未知用户');
+}
+function avatarOf(u: ContributeUserItem) {
+  return u.is_mystery ? '' : resolveImageUrl(u.avatar);
+}
+function levelIcon(u: ContributeUserItem) {
+  return resolveImageUrl(u.user_level_info?.user_level_icon);
+}
+function userTags(u: ContributeUserItem): string[] {
+  const tags: string[] = [];
+  if (u.gender === 1) tags.push('男');
+  else if (u.gender === 2) tags.push('女');
+  if (u.age) tags.push(String(u.age));
+  return tags;
+}
 function formatNumber(n: number) {
   if (!n) return '0';
   if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
@@ -142,6 +185,7 @@ function formatNumber(n: number) {
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadList();
 });
 </script>
 
@@ -226,7 +270,9 @@ onMounted(() => {
 }
 
 .score-num { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-.score-unit { font-size: 11px; color: rgba(255,255,255,0.4); margin-left: 2px; }
+.score-flame { width: 16px; height: 16px; color: #f97316; display: inline-flex; align-items: center; align-self: center; }
+.score-flame svg { width: 100%; height: 100%; }
+.level-badge { height: 16px; width: auto; vertical-align: middle; margin-left: 4px; }
 
 /* List */
 .rank-list {
@@ -254,6 +300,9 @@ onMounted(() => {
 .rank-score { display: flex; align-items: baseline; gap: 4px; }
 
 .empty { text-align: center; padding: 40px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.empty-error { color: #f87171; }
+.retry-btn { margin-left: 8px; height: 24px; padding: 0 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: transparent; color: rgba(255,255,255,0.7); font-size: 12px; cursor: pointer; }
+.retry-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
 /* Modal */
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }

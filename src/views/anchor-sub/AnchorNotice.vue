@@ -24,7 +24,12 @@
       </header>
 
       <main class="sub-body">
-        <div class="notice-list" v-if="list.length">
+        <div v-if="loading" class="empty"><p>加载中...</p></div>
+        <div v-else-if="loadError" class="empty">
+          <p>通知加载失败：{{ loadError }}</p>
+          <button class="link-btn" type="button" @click="loadNotices">重试</button>
+        </div>
+        <div class="notice-list" v-else-if="list.length">
           <div
             class="notice-card"
             :class="{ 'notice-card--unread': !item.read }"
@@ -106,6 +111,7 @@ import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
 import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
+import { getAnchorNotifyList } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
@@ -115,12 +121,38 @@ function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize')
 function onClose() { window.ipcRenderer?.send('window-close'); }
 
 interface Notice { type: 'system' | 'income' | 'activity' | 'other'; title: string; desc: string; content: string; time: string; read: boolean; }
-const list = ref<Notice[]>([
-  { type: 'income',  title: '结算到账通知', desc: '10月25日的直播收益已结算到账', content: '您 2026年10月25日 的直播收益 <b>¥ 1,280.00</b> 已成功结算至账户，可前往「我的收益」查看明细。', time: '2026-10-26 09:12', read: false },
-  { type: 'activity', title: '【活动】金秋开播激励', desc: '开播满 4 小时，额外奖励 2000 K币', content: '活动时间：10月20日 - 11月10日<br>活动期间每日开播满 4 小时，即可额外获得 2000 K币 奖励。<br>详情请进入「任务中心」查看。', time: '2026-10-25 18:30', read: false },
-  { type: 'system',  title: '系统升级通知', desc: 'Niko直播将于 10月28日 02:00-03:00 进行版本升级', content: '升级期间直播间将短暂中断，请提前安排好直播时间。本次升级带来：<br>• 更稳定的连麦体验<br>• 新增 8 款礼物动效<br>• 主播中心数据统计优化', time: '2026-10-24 10:00', read: false },
-  { type: 'other',   title: '管理员设置提醒', desc: '您已成功添加 小明 为直播间管理员', content: '小明 现已拥有直播间管理权限，可进行禁言、踢人、置顶等操作。', time: '2026-10-15 16:22', read: true },
-]);
+const list = ref<Notice[]>([]);
+const loading = ref(false);
+const loadError = ref('');
+
+/** message_type 映射到卡片图标类型：0 系统 / 1 收益 / 2 活动 / 其他 */
+function toNoticeType(messageType?: number): Notice['type'] {
+  if (messageType === 1) return 'income';
+  if (messageType === 2) return 'activity';
+  if (messageType === 0) return 'system';
+  return 'other';
+}
+
+async function loadNotices() {
+  loading.value = true;
+  loadError.value = '';
+  try {
+    const data = await getAnchorNotifyList();
+    list.value = (data || []).map((item) => ({
+      type: toNoticeType(item.message_type),
+      title: item.title || '',
+      desc: item.message || '',
+      content: item.message || '',
+      time: item.create_time || '',
+      read: false,
+    }));
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : '加载失败';
+    console.warn('[AnchorNotice] load failed:', err);
+  } finally {
+    loading.value = false;
+  }
+}
 
 const unread = computed(() => list.value.filter(n => !n.read).length);
 const detail = ref<number | null>(null);
@@ -128,6 +160,7 @@ function openNotice(i: number) { list.value[i].read = true; detail.value = i; }
 function markAllRead() { list.value.forEach(n => n.read = true); showMessage({ type: MessageToastType.Success, message: '已全部标为已读' }); }
 
 onMounted(() => {
+  loadNotices();
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
 });
 </script>

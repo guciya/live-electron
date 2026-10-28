@@ -21,27 +21,31 @@
       </header>
 
       <main class="sub-body">
+        <div class="state-block" v-if="loading">加载中...</div>
+        <div class="state-block state-block--error" v-else-if="error">
+          <p>{{ error }}</p>
+          <button class="retry-btn" type="button" @click="loadLevel">重试</button>
+        </div>
+        <template v-else>
         <!-- 当前等级卡 -->
         <section class="level-hero">
           <div class="hero-bg"></div>
           <div class="hero-content">
             <div class="current-level">
               <div class="level-crown">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M2 20h20" stroke-linecap="round" />
-                  <path d="M4 20l2-10 6 4 6-4 2 10" stroke-linejoin="round" />
-                </svg>
+                <img v-if="levelIcon" :src="levelIcon" alt="" />
+                <span v-else class="level-crown-text">{{ levelName || levelText }}</span>
               </div>
-              <div class="level-num">Lv.<span>7</span></div>
-              <div class="level-name">青铜主播</div>
+              <div class="level-num">Lv.<span>{{ levelText }}</span></div>
+              <div class="level-name">主播等级 {{ levelText }}</div>
             </div>
             <div class="level-progress">
               <div class="progress-head">
-                <span>距离 Lv.8 还差 <b>{{ remain }}</b> 经验</span>
-                <span>{{ exp }} / {{ nextLevelExp }}</span>
+                <span>已获得经验 <b>{{ exp }}</b> / {{ totalExp }}</span>
+                <span v-if="nextLevelId">还需 <b>{{ diffExp }}</b> 心动升至 Lv.{{ nextLevelId }}</span>
               </div>
               <div class="progress-track">
-                <div class="progress-fill" :style="{ width: (exp / nextLevelExp * 100) + '%' }"></div>
+                <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
               </div>
             </div>
           </div>
@@ -83,13 +87,14 @@
             <li>经验值永久累积，不会过期</li>
           </ul>
         </section>
+        </template>
       </main>
     </div>
   </UIKitProvider>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
@@ -97,6 +102,8 @@ import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
+import { resolveImageUrl } from '../../niko/config';
+import { getAnchorCenter, type AnchorCenterData } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
@@ -105,9 +112,49 @@ function onMinimize() { window.ipcRenderer?.send('window-minimize'); }
 function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize'); }
 function onClose() { window.ipcRenderer?.send('window-close'); }
 
-const exp = ref(350);
-const nextLevelExp = ref(500);
-const remain = nextLevelExp.value - exp.value;
+/* ---------- 主播等级 ---------- */
+const anchorData = ref<AnchorCenterData | null>(null);
+const loading = ref(false);
+const error = ref('');
+
+async function loadLevel() {
+  loading.value = true;
+  error.value = '';
+  try {
+    anchorData.value = await getAnchorCenter();
+  } catch (e) {
+    console.warn('loadAnchorLevel failed', e);
+    error.value = '主播等级加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
+const levelInfo = computed(() => anchorData.value?.anchor_level_info);
+const currentLevel = computed(() => levelInfo.value?.current_level_info);
+const nextLevel = computed(() => levelInfo.value?.next_level_info);
+const levelName = computed(() => currentLevel.value?.level_name ?? '');
+const levelText = computed(() => currentLevel.value?.level_id ?? (levelName.value || '-'));
+const levelIcon = computed(() => {
+  const icon = currentLevel.value?.level_icon || currentLevel.value?.level_gif_icon;
+  return icon ? resolveImageUrl(icon) : '';
+});
+const exp = computed(() => Number(currentLevel.value?.experience ?? 0));
+const totalExp = computed(() => {
+  const required = Number(levelInfo.value?.level_experience);
+  if (Number.isFinite(required) && required > 0) return required;
+  return exp.value + Number(levelInfo.value?.diff_experience ?? 0);
+});
+const diffExp = computed(() => {
+  const diff = Number(levelInfo.value?.diff_experience);
+  if (Number.isFinite(diff)) return diff;
+  return Math.max(totalExp.value - exp.value, 0);
+});
+const nextLevelId = computed(() => nextLevel.value?.level_id);
+const progressPercent = computed(() => {
+  if (totalExp.value <= 0) return 0;
+  return Math.min(100, Math.round(exp.value / totalExp.value * 100));
+});
 
 interface Priv { name: string; desc: string; unlocked: boolean; req: number; }
 const privs: Priv[] = [
@@ -121,6 +168,7 @@ const privs: Priv[] = [
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadLevel();
 });
 </script>
 
@@ -142,8 +190,9 @@ onMounted(() => {
 .hero-bg { position: absolute; inset: 0; background: radial-gradient(400px 200px at 0% 50%, rgba(251,191,36,0.25), transparent 60%), linear-gradient(135deg, #2d1f0a, #1a1033); }
 .hero-content { position: relative; display: flex; align-items: center; gap: 32px; }
 .current-level { text-align: center; }
-.level-crown { width: 38px; height: 38px; margin: 0 auto 6px; color: #fbbf24; }
-.level-crown svg { width: 100%; height: 100%; }
+.level-crown { width: 52px; height: 52px; margin: 0 auto 6px; color: #fbbf24; display: flex; align-items: center; justify-content: center; }
+.level-crown img { width: 100%; height: 100%; object-fit: contain; }
+.level-crown-text { font-size: 22px; font-weight: 800; color: #fbbf24; }
 .level-num { font-size: 42px; font-weight: 800; color: #fff; letter-spacing: -1px; }
 .level-num span { color: #fbbf24; }
 .level-name { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 2px; }
@@ -152,6 +201,11 @@ onMounted(() => {
 .progress-head b { color: #ffd36b; }
 .progress-track { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #fbbf24, #f59e0b); border-radius: 4px; }
+
+.state-block { text-align: center; padding: 60px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.state-block p { margin: 0 0 12px; }
+.retry-btn { height: 30px; padding: 0 16px; border: 1px solid rgba(139,92,246,0.4); border-radius: 8px; background: rgba(139,92,246,0.16); color: #b39fff; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+.retry-btn:hover { background: rgba(139,92,246,0.3); color: #fff; }
 
 /* Section card */
 .section-card { background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9)); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 18px 22px; }

@@ -12,6 +12,7 @@
         </div>
         <div class="header-right">
           <span class="coin-tip">今日累计奖励：<b>{{ totalReward }}</b> K币</span>
+          <button class="revenue-btn" type="button" @click="openRevenue">收益明细</button>
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize"><svg-icon :icon="MinimizeIcon" /></button>
             <button class="window-tool-btn" type="button" @click="onToggleMaximize">
@@ -34,34 +35,35 @@
         </section>
 
         <!-- 任务列表 -->
-        <section class="task-list">
-          <div class="task-card" v-for="(t, i) in tasks" :key="i">
-            <div class="task-icon" :class="'task-icon--' + t.kind">
-              <svg v-if="t.kind === 'live'" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="12" r="10" opacity="0.25" />
-                <polygon points="10 7 17 12 10 17" />
-              </svg>
+        <section class="task-list" v-if="!loading && !error && tasks.length">
+          <div class="task-card" v-for="t in tasks" :key="t.task_id">
+            <div class="task-icon">
+              <img v-if="t.task_icon" :src="resolveImageUrl(t.task_icon)" alt="" />
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6L12 2z" />
               </svg>
             </div>
             <div class="task-info">
-              <div class="task-title">{{ t.title }}</div>
-              <div class="task-reward">奖励：<b>{{ t.reward }}</b> K币</div>
+              <div class="task-title">{{ t.task_name }}</div>
+              <div class="task-desc" v-if="t.task_desc">{{ t.task_desc }}</div>
+              <div class="task-reward">奖励：<b>{{ t.reward_count }}</b>{{ t.reward_type === 2 ? ' K币' : '' }}</div>
               <div class="progress-track">
-                <div class="progress-fill" :style="{ width: t.progress + '%' }"></div>
+                <div class="progress-fill" :style="{ width: progressWidth(t.progress) + '%' }"></div>
               </div>
-              <div class="progress-text">{{ t.progressText }}</div>
+              <div class="progress-text">进度 {{ t.progress }}%</div>
             </div>
-            <button
-              class="task-btn"
-              :class="{ 'task-btn--done': t.done }"
-              :disabled="t.done"
-              type="button"
-              @click="claim(t)"
-            >{{ t.done ? '已领取' : (t.progress >= 100 ? '领取奖励' : '未完成') }}</button>
+            <span class="task-status" :class="{ 'task-status--done': t.is_complete }">
+              {{ t.is_complete ? '已完成' : '未完成' }}
+            </span>
           </div>
         </section>
+
+        <div class="state-block" v-else-if="loading">加载中...</div>
+        <div class="state-block state-block--error" v-else-if="error">
+          <p>{{ error }}</p>
+          <button class="retry-btn" type="button" @click="loadTasks">重试</button>
+        </div>
+        <div class="state-block" v-else>暂无任务</div>
 
         <!-- 活动说明 -->
         <section class="explain-card">
@@ -78,6 +80,44 @@
           </p>
         </section>
       </main>
+
+      <!-- 收益明细 -->
+      <transition name="fade">
+        <div class="modal-mask" v-if="revenueVisible" @click.self="revenueVisible = false">
+          <div class="modal-card">
+            <div class="modal-header">
+              <span>收益明细</span>
+              <button class="modal-close" type="button" @click="revenueVisible = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="revenue-total">
+                <span class="revenue-total-label">累计收益</span>
+                <span class="revenue-total-value">{{ totalRevenue }} K币</span>
+              </div>
+
+              <div class="state-block" v-if="revenueLoading">加载中...</div>
+              <div class="state-block state-block--error" v-else-if="revenueError">
+                <p>{{ revenueError }}</p>
+                <button class="retry-btn" type="button" @click="loadRevenue">重试</button>
+              </div>
+              <div class="revenue-list" v-else-if="revenueList.length">
+                <div class="revenue-item" v-for="(r, i) in revenueList" :key="i">
+                  <div class="revenue-info">
+                    <div class="revenue-name">{{ revenueName(r) }}</div>
+                    <div class="revenue-time" v-if="revenueTime(r)">{{ revenueTime(r) }}</div>
+                  </div>
+                  <span class="revenue-amount">+{{ revenueAmount(r) }} K币</span>
+                </div>
+              </div>
+              <div class="state-block" v-else>暂无收益明细</div>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
   </UIKitProvider>
 </template>
@@ -91,7 +131,8 @@ import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
-import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
+import { resolveImageUrl } from '../../niko/config';
+import { getAnchorTaskList, getAnchorTaskRevenueList, type AnchorTaskItem, type AnchorTaskRevenueItem } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
@@ -100,27 +141,68 @@ function onMinimize() { window.ipcRenderer?.send('window-minimize'); }
 function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize'); }
 function onClose() { window.ipcRenderer?.send('window-close'); }
 
-interface Task {
-  title: string; reward: number; kind: 'live' | 'star';
-  progress: number; progressText: string; done: boolean;
-}
-const tasks = ref<Task[]>([
-  { title: '开播 2 小时', reward: 2000, kind: 'live', progress: 43, progressText: '43 分 28 秒 / 2 小时', done: false },
-  { title: '开播 4 小时', reward: 4000, kind: 'live', progress: 43, progressText: '43 分 28 秒 / 4 小时', done: false },
-  { title: '完成 1 场直播', reward: 500, kind: 'star', progress: 100, progressText: '1 / 1', done: false },
-  { title: '收到 10 个礼物', reward: 1500, kind: 'star', progress: 60, progressText: '6 / 10', done: false },
-  { title: '新增 5 位关注', reward: 1000, kind: 'star', progress: 0, progressText: '0 / 5', done: false },
-]);
+/* ---------- 任务列表 ---------- */
+const tasks = ref<AnchorTaskItem[]>([]);
+const loading = ref(false);
+const error = ref('');
 
-const totalReward = computed(() => tasks.value.filter(t => t.done).reduce((s, t) => s + t.reward, 0));
-function claim(t: Task) {
-  if (t.progress < 100) return;
-  t.done = true;
-  showMessage({ type: MessageToastType.Success, message: `已领取 ${t.reward} K币` });
+async function loadTasks() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const data = await getAnchorTaskList();
+    tasks.value = Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('loadAnchorTaskList failed', e);
+    error.value = '任务列表加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
+const totalReward = computed(() => tasks.value.filter(t => t.is_complete).reduce((s, t) => s + Number(t.reward_count || 0), 0));
+function progressWidth(progress: number) { return Math.min(Number(progress) || 0, 100); }
+
+/* ---------- 收益明细 ---------- */
+const revenueVisible = ref(false);
+const revenueLoading = ref(false);
+const revenueError = ref('');
+const revenueList = ref<AnchorTaskRevenueItem[]>([]);
+const totalRevenue = ref(0);
+
+function openRevenue() {
+  revenueVisible.value = true;
+  loadRevenue();
+}
+async function loadRevenue() {
+  revenueLoading.value = true;
+  revenueError.value = '';
+  try {
+    const data = await getAnchorTaskRevenueList();
+    revenueList.value = Array.isArray(data?.revenue_list) ? data.revenue_list : [];
+    totalRevenue.value = Number(data?.total_revenue ?? 0);
+  } catch (e) {
+    console.warn('loadAnchorTaskRevenueList failed', e);
+    revenueError.value = '收益明细加载失败';
+  } finally {
+    revenueLoading.value = false;
+  }
+}
+function revenueName(item: AnchorTaskRevenueItem) {
+  const raw = item as Record<string, any>;
+  return raw.task_name || raw.revenue_name || '任务收益';
+}
+function revenueAmount(item: AnchorTaskRevenueItem) {
+  const raw = item as Record<string, any>;
+  return Number(raw.revenue_count ?? raw.amount ?? 0);
+}
+function revenueTime(item: AnchorTaskRevenueItem) {
+  return (item as Record<string, any>).create_time || '';
 }
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadTasks();
 });
 </script>
 
@@ -140,6 +222,8 @@ onMounted(() => {
 .header-title { font-size: 14px; font-weight: 700; color: #fff; }
 .coin-tip { font-size: 12px; color: rgba(255,255,255,0.55); margin-right: 12px; }
 .coin-tip b { color: #ffd36b; font-weight: 700; }
+.revenue-btn { height: 28px; padding: 0 12px; border: none; background: rgba(139,92,246,0.16); color: #b39fff; font-size: 12px; cursor: pointer; border-radius: 6px; transition: background 0.15s; }
+.revenue-btn:hover { background: rgba(139,92,246,0.3); color: #fff; }
 .window-tool-btn { width: 34px; height: 28px; border: none; background: transparent; color: rgba(255,255,255,0.7); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .window-tool-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
 
@@ -170,32 +254,59 @@ onMounted(() => {
 .task-icon {
   width: 46px; height: 46px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: rgba(139,92,246,0.16); color: #b39fff;
+  overflow: hidden;
 }
 .task-icon svg { width: 24px; height: 24px; }
-.task-icon--live { background: rgba(244,114,182,0.16); color: #f472b6; }
-.task-icon--star { background: rgba(251,191,36,0.16); color: #fbbf24; }
+.task-icon img { width: 100%; height: 100%; object-fit: cover; }
 .task-info { flex: 1; min-width: 0; }
 .task-title { font-size: 14px; font-weight: 600; color: #fff; }
+.task-desc { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
 .task-reward { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
 .task-reward b { color: #ffd36b; font-weight: 600; }
 .progress-track { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-top: 10px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #8b5cf6, #f472b6); border-radius: 2px; transition: width 0.3s; }
 .progress-text { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 5px; }
-.task-btn {
-  height: 36px; padding: 0 18px; border-radius: 18px;
-  border: none; cursor: pointer; font-size: 12px; font-weight: 600; flex-shrink: 0;
-  background: linear-gradient(90deg, #6b46c1, #8b5cf6); color: #fff;
-  transition: transform 0.12s, box-shadow 0.2s, opacity 0.2s;
-  box-shadow: 0 2px 10px rgba(139,92,246,0.3);
+.task-status {
+  flex-shrink: 0; font-size: 11px; padding: 4px 12px; border-radius: 12px;
+  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.1);
 }
-.task-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(139,92,246,0.45); }
-.task-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.task-btn--done { background: rgba(34,197,94,0.2); color: #4ade80; box-shadow: none; }
+.task-status--done { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.3); }
+
+.state-block { text-align: center; padding: 40px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.state-block p { margin: 0 0 12px; }
+.retry-btn { height: 30px; padding: 0 16px; border: 1px solid rgba(139,92,246,0.4); border-radius: 8px; background: rgba(139,92,246,0.16); color: #b39fff; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+.retry-btn:hover { background: rgba(139,92,246,0.3); color: #fff; }
 
 .explain-card { padding: 18px 22px; background: rgba(30,30,42,0.95); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; }
 .explain-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #f0f0f4; margin-bottom: 10px; }
 .explain-title svg { width: 16px; height: 16px; color: #b39fff; }
 .explain-text { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.8; margin: 0; }
+
+/* 收益明细弹层 */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-card { width: 480px; max-height: 70vh; background: #1a1a24; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.modal-close { width: 28px; height: 28px; border: none; background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.modal-close svg { width: 16px; height: 16px; }
+.modal-body { padding: 18px 22px; overflow-y: auto; }
+.revenue-total { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; margin-bottom: 12px; border-radius: 10px; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); }
+.revenue-total-label { font-size: 12px; color: rgba(255,255,255,0.6); }
+.revenue-total-value { font-size: 20px; font-weight: 700; color: #ffd36b; }
+.revenue-list { display: flex; flex-direction: column; gap: 8px; }
+.revenue-item { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); }
+.revenue-info { flex: 1; min-width: 0; }
+.revenue-name { font-size: 13px; color: #fff; font-weight: 600; }
+.revenue-time { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px; }
+.revenue-amount { font-size: 13px; font-weight: 600; color: #4ade80; flex-shrink: 0; }
+
+.modal-body::-webkit-scrollbar { width: 5px; }
+.modal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 .sub-body::-webkit-scrollbar { width: 6px; }
 .sub-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }

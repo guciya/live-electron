@@ -30,6 +30,12 @@
       </header>
 
       <main class="sub-body">
+        <div class="state-block" v-if="controlLoading">加载中...</div>
+        <div class="state-block state-block--error" v-else-if="controlError">
+          <p>{{ controlError }}</p>
+          <button class="retry-btn" type="button" @click="loadControl">重试</button>
+        </div>
+        <template v-else>
         <!-- 基础设置 -->
         <section class="section-card">
           <div class="section-title">基础设置</div>
@@ -53,7 +59,7 @@
               <label class="form-label">封面图</label>
               <div class="cover-upload" @click="triggerFileInput">
                 <div class="cover-preview">
-                  <img v-if="form.cover" :src="form.cover" />
+                  <img v-if="coverUrl" :src="coverUrl" />
                   <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <circle cx="8.5" cy="8.5" r="1.5" />
@@ -121,11 +127,41 @@
             </div>
             <div class="form-row form-row--switch">
               <div>
+                <div class="form-label">随机PK</div>
+                <div class="form-hint">开启后系统会随机为你匹配PK对手</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="form.allowRandomPK" />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <div class="form-row form-row--switch">
+              <div>
                 <div class="form-label">被陌生人搜索PK</div>
                 <div class="form-hint">开启后陌生人可在PK广场搜索到你</div>
               </div>
               <label class="switch">
                 <input type="checkbox" v-model="form.allowStrangerPK" />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <div class="form-row form-row--switch">
+              <div>
+                <div class="form-label">语音连麦</div>
+                <div class="form-hint">允许观众申请语音连麦</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="form.allowAudioCall" />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <div class="form-row form-row--switch">
+              <div>
+                <div class="form-label">视频连麦</div>
+                <div class="form-hint">允许观众申请视频连麦</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="form.allowVideoCall" />
                 <span class="switch-slider"></span>
               </label>
             </div>
@@ -166,6 +202,7 @@
                 <option value="60">1 分钟</option>
                 <option value="120">2 分钟</option>
                 <option value="300">5 分钟</option>
+                <option v-if="!['30', '60', '120', '300'].includes(form.previewDuration)" :value="form.previewDuration">{{ form.previewDuration }} 秒</option>
               </select>
             </div>
           </div>
@@ -175,8 +212,18 @@
         <section class="section-card">
           <div class="section-title">互动设置</div>
           <div class="form-list">
-            <div class="form-row">
-              <label class="form-label">被关注自动回复</label>
+            <div class="form-row form-row--switch">
+              <div>
+                <div class="form-label">被关注自动回复</div>
+                <div class="form-hint">开启后自动回复关注你的观众</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="form.autoReplyEnabled" />
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+            <div class="form-row" v-if="form.autoReplyEnabled">
+              <label class="form-label">回复内容</label>
               <input class="form-input" v-model="form.autoReply" placeholder="例如：感谢关注，欢迎常来～" maxlength="50" />
             </div>
             <div class="form-row">
@@ -211,6 +258,7 @@
             </div>
           </div>
         </section>
+        </template>
       </main>
     </div>
   </UIKitProvider>
@@ -225,7 +273,8 @@ import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
-import { getGiftCategory, getLiveGiftList, type GiftItem } from '../../niko/api/live';
+import { getGiftCategory, getLiveGiftList, getAnchorLiveControl, type GiftItem } from '../../niko/api/live';
+import { resolveImageUrl } from '../../niko/config';
 import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
 
 const router = useRouter();
@@ -264,7 +313,7 @@ function clearGift() {
   form.wishlist = '';
   giftDropdownOpen.value = false;
 }
-function giftImage(g: GiftItem) { return g.gift_image || ''; }
+function giftImage(g: GiftItem) { return g.gift_image ? resolveImageUrl(g.gift_image) : ''; }
 function giftName(g: GiftItem) { return g.gift_name || '未知礼物'; }
 function giftPrice(g: GiftItem) { return Number(g.gift_price || 0); }
 
@@ -290,7 +339,7 @@ function onFileChange(e: Event) {
 }
 
 const form = reactive({
-  title: '欢迎来到 Niko 直播间',
+  title: '',
   category: 'chat',
   cover: '',
   enablePassword: false,
@@ -298,18 +347,60 @@ const form = reactive({
   replay: true,
   allowRecord: true,
   allowPKInvite: true,
+  allowRandomPK: false,
   allowStrangerPK: false,
+  allowAudioCall: false,
+  allowVideoCall: false,
   countdown: true,
   listAutoplay: true,
   paidPreview: false,
   previewDuration: '60',
+  autoReplyEnabled: false,
   autoReply: '',
   wishlist: '',
 });
-function save() { showMessage({ type: MessageToastType.Success, message: '设置已保存' }); }
+
+/* ---------- 直播设置 ---------- */
+const controlLoading = ref(false);
+const controlError = ref('');
+
+async function loadControl() {
+  controlLoading.value = true;
+  controlError.value = '';
+  try {
+    const data = await getAnchorLiveControl();
+    form.title = data.live_title ?? '';
+    form.cover = data.live_cover ?? '';
+    form.allowPKInvite = Boolean(data.is_accept_invite_pk);
+    form.allowRandomPK = Boolean(data.is_accept_random_pk);
+    form.allowAudioCall = Boolean(data.is_accept_audio_call);
+    form.allowVideoCall = Boolean(data.is_accept_video_call);
+    form.allowStrangerPK = Boolean(data.is_accept_search_by_stranger_pk);
+    form.countdown = Boolean(data.is_open_live_countdown);
+    form.listAutoplay = Boolean(data.is_open_list_preview);
+    const duration = Number(data.free_preview_duration ?? 0);
+    form.paidPreview = duration > 0;
+    form.previewDuration = String(duration);
+    form.autoReplyEnabled = Boolean(data.followed_reply?.reply_switch);
+    form.autoReply = data.followed_reply?.reply_content ?? '';
+  } catch (e) {
+    console.warn('loadAnchorLiveControl failed', e);
+    controlError.value = '直播设置加载失败';
+  } finally {
+    controlLoading.value = false;
+  }
+}
+
+const coverUrl = computed(() => (form.cover ? resolveImageUrl(form.cover) : ''));
+
+function save() {
+  // TODO: 等待保存接口（如 /live/anchorLiveControlUpdate）
+  return;
+}
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadControl();
   loadGifts();
   document.addEventListener('click', closeGiftDropdown);
 });
@@ -345,6 +436,11 @@ function closeGiftDropdown() { giftDropdownOpen.value = false; }
 
 .section-card { background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9)); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 20px 24px; }
 .section-title { font-size: 14px; font-weight: 700; color: #f0f0f4; margin-bottom: 16px; }
+
+.state-block { text-align: center; padding: 60px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.state-block p { margin: 0 0 12px; }
+.retry-btn { height: 30px; padding: 0 16px; border: 1px solid rgba(139,92,246,0.4); border-radius: 8px; background: rgba(139,92,246,0.16); color: #b39fff; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+.retry-btn:hover { background: rgba(139,92,246,0.3); color: #fff; }
 
 .form-list { display: flex; flex-direction: column; gap: 16px; }
 .form-row { display: flex; align-items: center; gap: 16px; }

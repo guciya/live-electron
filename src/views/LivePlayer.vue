@@ -80,6 +80,20 @@
           <!-- 在线观众折叠组件 + 声音开关（视频右上角，同一行），下方为更多直播入口 -->
           <div class="player-top-right">
             <div class="player-top-right-row">
+              <!-- 人气榜入口：喇叭最左侧 -->
+              <button
+                class="player-rank-btn"
+                type="button"
+                title="人气榜"
+                aria-label="人气榜"
+                @click.stop="popularityPanelVisible = true"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                  <path d="M6 3h12v2h3v3a4 4 0 0 1-4 4h-.5A6.5 6.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6.5 6.5 0 0 1 7.5 12H7a4 4 0 0 1-4-4V5h3V3zm0 4H5v1a2 2 0 0 0 1.2 1.8A6.6 6.6 0 0 1 6 7zm12 0a6.6 6.6 0 0 1-.2 1.8A2 2 0 0 0 19 7V7h-1z" />
+                </svg>
+                <span>人气榜</span>
+              </button>
+
               <!-- 声音开关：点击切换静音/开启，图标随状态变化 -->
               <button
                 class="player-sound-btn"
@@ -130,19 +144,11 @@
                 </span>
                 <span class="player-audience-count">{{ audienceCountText }}人</span>
               </button>
-              <div v-if="audiencePanelVisible" class="player-audience-panel" @click.stop>
-                <div class="player-audience-panel-title">在线观众（{{ audienceMembers.length }}）</div>
-                <div class="player-audience-list">
-                  <div v-for="member in audienceMembers" :key="member.userId" class="player-audience-item">
-                    <img v-if="member.avatar" class="player-audience-item-avatar" :src="member.avatar" alt="" />
-                    <span v-else class="player-audience-item-avatar player-audience-item-initial">
-                      {{ (member.nickname || 'N').slice(0, 1).toUpperCase() }}
-                    </span>
-                    <span class="player-audience-item-name">{{ member.nickname }}</span>
-                  </div>
-                  <div v-if="!audienceMembers.length" class="player-audience-empty">暂无在线观众</div>
-                </div>
-              </div>
+              <AudiencePanel
+                :visible="audiencePanelVisible"
+                :live-index-id="liveIndexIdNumber"
+                @click.stop
+              />
             </div>
             </div>
 
@@ -193,6 +199,7 @@
 
       <PopularityRankPanel
         :visible="popularityPanelVisible"
+        :live-index-id="liveIndexIdNumber"
         :anchor-name="anchorName"
         :anchor-avatar="avatar"
         @close="popularityPanelVisible = false"
@@ -245,6 +252,7 @@ import GiftPanel from '../niko/components/GiftPanel.vue';
 import GamePanel from '../niko/components/GamePanel.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
+import AudiencePanel from '../niko/components/AudiencePanel.vue';
 import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 
 const route = useRoute();
@@ -258,6 +266,8 @@ const avatar = avatarRaw ? resolveImageUrl(avatarRaw) : '';
 // IM 群组 ID（后端 room_id）与直播场次 ID（live_index_id）
 const roomId = String(route.query.roomId || '');
 const liveIndexId = String(route.query.liveId || '');
+// 人气榜 / 在线观众接口需要数字类型的场次 ID
+const liveIndexIdNumber = computed(() => Number(liveIndexId) || undefined);
 // 主播用户 ID：关注接口的 attentionUserId
 const anchorId = Number(route.query.anchorId || 0);
 // play_url 带签名参数，通过 history.state 传递（H5 项目同样做法）
@@ -1213,6 +1223,31 @@ onBeforeUnmount(() => {
   }
 }
 
+.player-rank-btn {
+  flex: none;
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+  height: 2rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  color: #fff;
+  cursor: pointer;
+  background-image: linear-gradient(135deg, rgba(255, 122, 162, 0.9), rgba(255, 61, 113, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  transition: filter 0.2s ease, transform 0.12s ease;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+}
+
 .player-sound-btn {
   flex: none;
   display: inline-flex;
@@ -1294,82 +1329,5 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #fff;
   white-space: nowrap;
-}
-
-.player-audience-panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  width: 13rem;
-  max-height: 18rem;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background-color: rgba(20, 21, 24, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.625rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-}
-
-.player-audience-panel-title {
-  padding: 0.625rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.player-audience-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.375rem 0;
-}
-
-.player-audience-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.06);
-  }
-}
-
-.player-audience-item-avatar {
-  flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  object-fit: cover;
-  background-color: rgba(255, 255, 255, 0.12);
-}
-
-.player-audience-item-initial {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: #fff;
-}
-
-.player-audience-item-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.85);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.player-audience-empty {
-  padding: 1.25rem 0;
-  font-size: 0.75rem;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.45);
 }
 </style>

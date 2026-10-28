@@ -88,6 +88,20 @@
                 v-if="isInLive && !isGoingToLoginPage"
                 :live-id="currentLive?.liveId"
               />
+              <!-- 人气榜入口：直播标题右侧 -->
+              <button
+                class="pusher-rank-btn"
+                type="button"
+                title="人气榜"
+                aria-label="人气榜"
+                :disabled="!isInLive"
+                @click.stop="popularityPanelVisible = true"
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                  <path d="M6 3h12v2h3v3a4 4 0 0 1-4 4h-.5A6.5 6.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6.5 6.5 0 0 1 7.5 12H7a4 4 0 0 1-4-4V5h3V3zm0 4H5v1a2 2 0 0 0 1.2 1.8A6.6 6.6 0 0 1 6 7zm12 0a6.6 6.6 0 0 1-.2 1.8A2 2 0 0 0 19 7V7h-1z" />
+                </svg>
+                <span>人气榜</span>
+              </button>
             </div>
             <div class="main-center-top-right">
               {{ displayAudienceCount }} {{ t('People watching') }}
@@ -174,9 +188,10 @@
                 ({{ displayAudienceCount }})
               </div>
             </div>
-            <LiveAudiencePanel
-              height="calc(100% - 40px)"
-              :live-index-id="pendingPreLiveId"
+            <AudiencePanel
+              docked
+              :visible="true"
+              :live-index-id="liveIndexIdNumber"
               @count-change="onAudienceCountChange"
             />
           </div>
@@ -245,6 +260,15 @@
         </div>
       </div>
       </template>
+
+      <!-- 人气榜弹窗（覆盖整个开播页） -->
+      <PopularityRankPanel
+        :visible="popularityPanelVisible"
+        :live-index-id="liveIndexIdNumber"
+        :anchor-name="loginUserInfo?.userName || ''"
+        :anchor-avatar="loginUserInfo?.avatarUrl || ''"
+        @close="popularityPanelVisible = false"
+      />
     </div>
   </UIKitProvider>
 </template>
@@ -295,7 +319,8 @@ import LiveSettingButton from '../TUILiveKit/components/LiveSettingButton.vue';
 import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
-import LiveAudiencePanel from '../niko/components/LiveAudiencePanel.vue';
+import AudiencePanel from '../niko/components/AudiencePanel.vue';
+import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
@@ -515,6 +540,10 @@ const loginReady = ref(false);
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
 const pendingPreLiveId = ref<string>('');
+/** 人气榜弹窗开关 */
+const popularityPanelVisible = ref(false);
+/** 当前直播场次 id（接口需要 number 类型） */
+const liveIndexIdNumber = computed(() => Number(pendingPreLiveId.value) || undefined);
 /** 连麦/PK 主播列表弹窗（对齐 web-obs-live：先查开播主播再邀请） */
 const showPkDialog = ref(false);
 const pkDialogTitle = ref('PK');
@@ -1944,6 +1973,7 @@ onBeforeUnmount(() => {
 }
 
 .tui-livekit-win {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -2137,6 +2167,32 @@ onBeforeUnmount(() => {
             text-overflow: ellipsis;
             white-space: nowrap;
             font-weight: 600;
+          }
+
+          .pusher-rank-btn {
+            flex: none;
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            height: 22px;
+            padding: 0 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.85);
+            cursor: pointer;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 999px;
+            transition: color 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
+
+            &:hover:not(:disabled) {
+              color: #fff;
+              border-color: rgba(255, 255, 255, 0.7);
+            }
+
+            &:disabled {
+              cursor: not-allowed;
+              opacity: 0.45;
+            }
           }
         }
 

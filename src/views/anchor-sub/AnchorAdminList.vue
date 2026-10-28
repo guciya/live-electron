@@ -39,18 +39,26 @@
           </div>
 
           <div class="admin-list" v-if="list.length">
-            <div class="admin-row" v-for="(u, i) in list" :key="i">
-              <div class="admin-avatar">{{ (u.nickname || '?').charAt(0) }}</div>
+            <div class="admin-row" v-for="u in list" :key="u.user_id">
+              <div class="admin-avatar">
+                <img v-if="avatarOf(u)" :src="avatarOf(u)" alt="" />
+                <span v-else>{{ (u.nickname || '?').charAt(0) }}</span>
+              </div>
               <div class="admin-info">
                 <div class="admin-name">
                   {{ u.nickname }}
-                  <span class="admin-tag" v-if="u.isOwner">房主</span>
+                  <img v-if="levelIcon(u)" class="level-badge" :src="levelIcon(u)" alt="" />
+                  <span v-else-if="u.user_level_info?.user_level" class="level-text">Lv.{{ u.user_level_info.user_level }}</span>
                 </div>
-                <div class="admin-id">ID: {{ u.id }} · 添加于 {{ u.addedAt }}</div>
+                <div class="admin-id">ID: {{ u.user_show_id }} · 任命于 {{ u.appoint_time || '--' }}</div>
               </div>
-              <button v-if="!u.isOwner" class="danger-btn" type="button" @click="removeUser(i)">解除</button>
-              <span v-else class="owner-label">房主不可移除</span>
+              <button class="danger-btn" type="button" @click="removeUser">解除</button>
             </div>
+          </div>
+          <div v-else-if="loading" class="empty">加载中...</div>
+          <div v-else-if="error" class="empty empty-error">
+            {{ error }}
+            <button class="retry-btn" type="button" @click="loadList">重试</button>
           </div>
           <div v-else class="empty">暂无管理员</div>
         </section>
@@ -95,6 +103,8 @@ import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
 import CloseIcon from '../../TUILiveKit/common/icons/CloseIcon.vue';
 import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
+import { resolveImageUrl } from '../../niko/config';
+import { getAnchorManagerList, type AnchorManagerUser } from '../../niko/api/live';
 
 const router = useRouter();
 const isMaximized = ref(false);
@@ -103,28 +113,45 @@ function onMinimize() { window.ipcRenderer?.send('window-minimize'); }
 function onToggleMaximize() { window.ipcRenderer?.send('window-toggle-maximize'); }
 function onClose() { window.ipcRenderer?.send('window-close'); }
 
-interface AdminUser { nickname: string; id: string; addedAt: string; isOwner?: boolean; }
-const list = ref<AdminUser[]>([
-  { nickname: 'why', id: '9527', addedAt: '2026.09.01', isOwner: true },
-  { nickname: '小明', id: '10086', addedAt: '2026.10.15' },
-]);
+const list = ref<AnchorManagerUser[]>([]);
+const loading = ref(false);
+const error = ref('');
+
+async function loadList() {
+  loading.value = true;
+  error.value = '';
+  try {
+    list.value = await getAnchorManagerList();
+  } catch (e) {
+    console.warn('getAnchorManagerList failed', e);
+    list.value = [];
+    error.value = '管理员列表加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function avatarOf(u: AnchorManagerUser) {
+  return resolveImageUrl(u.avatar);
+}
+function levelIcon(u: AnchorManagerUser) {
+  return resolveImageUrl(u.user_level_info?.user_level_icon);
+}
 
 const showAdd = ref(false);
 const addId = ref('');
 function confirmAdd() {
   if (!addId.value.trim()) { showMessage({ type: MessageToastType.Warning, message: '请输入用户 ID' }); return; }
-  if (list.value.length >= 3) { showMessage({ type: MessageToastType.Warning, message: '最多设置 3 位管理员' }); return; }
-  list.value.push({ nickname: '用户_' + addId.value, id: addId.value, addedAt: new Date().toLocaleDateString('zh-CN').replace(/\//g, '.') });
   showAdd.value = false; addId.value = '';
-  showMessage({ type: MessageToastType.Success, message: '添加成功' });
+  showMessage({ type: MessageToastType.Warning, message: '暂不支持在线添加，请在后台配置' });
 }
-function removeUser(i: number) {
-  list.value.splice(i, 1);
-  showMessage({ type: MessageToastType.Info, message: '已解除管理员权限' });
+function removeUser() {
+  showMessage({ type: MessageToastType.Warning, message: '暂不支持在线解除，请在后台配置' });
 }
 
 onMounted(() => {
   window.ipcRenderer?.invoke?.('window-is-maximized').then(v => { isMaximized.value = Boolean(v); }).catch(() => undefined);
+  loadList();
 });
 </script>
 
@@ -150,16 +177,20 @@ onMounted(() => {
 
 .admin-list { display: flex; flex-direction: column; gap: 6px; }
 .admin-row { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); }
-.admin-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #6b46c1, #f472b6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; }
+.admin-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #6b46c1, #f472b6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+.admin-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .admin-info { flex: 1; min-width: 0; }
 .admin-name { font-size: 14px; font-weight: 600; color: #fff; display: inline-flex; align-items: center; gap: 8px; }
-.admin-tag { font-size: 10px; padding: 1px 8px; border-radius: 8px; background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.level-badge { height: 16px; width: auto; }
+.level-text { font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5); }
 .admin-id { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 3px; }
 .danger-btn { height: 28px; padding: 0 12px; border-radius: 6px; border: none; background: rgba(239,68,68,0.15); color: #f87171; font-size: 11px; cursor: pointer; transition: background 0.15s; }
 .danger-btn:hover { background: rgba(239,68,68,0.28); }
-.owner-label { font-size: 11px; color: rgba(255,255,255,0.35); }
 
 .empty { text-align: center; padding: 40px 0; color: rgba(255,255,255,0.4); font-size: 13px; }
+.empty-error { color: #f87171; }
+.retry-btn { margin-left: 8px; height: 24px; padding: 0 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: transparent; color: rgba(255,255,255,0.7); font-size: 12px; cursor: pointer; }
+.retry-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
 .primary-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 14px; border: none; border-radius: 8px; background: linear-gradient(90deg, #6b46c1, #8b5cf6); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 10px rgba(139,92,246,0.3); }
 .primary-btn svg { width: 14px; height: 14px; }

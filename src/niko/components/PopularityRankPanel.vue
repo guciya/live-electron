@@ -31,7 +31,7 @@
       <div v-if="activeTab === 'rush'" class="rank-rush">
         <div class="rank-rush-timer">
           <span>本轮抢热推倒计时 {{ rushCountdownText }}</span>
-          <span class="rank-rush-refresh">↻</span>
+          <span class="rank-rush-refresh" title="刷新" @click.stop="loadRank">↻</span>
         </div>
         <div class="rank-rush-anchor">
           <div class="rank-rush-avatar-wrap">
@@ -43,8 +43,15 @@
         </div>
       </div>
 
+      <!-- 加载 / 错误 -->
+      <div v-if="loading" class="rank-tip">加载中...</div>
+      <div v-else-if="loadError" class="rank-tip">
+        <span>{{ loadError }}</span>
+        <button class="rank-retry" type="button" @click="loadRank">重试</button>
+      </div>
+
       <!-- 前三名领奖台（抢热推不设领奖台，直接列表展示） -->
-      <div v-if="activeTab !== 'rush'" class="rank-podium">
+      <div v-else-if="activeTab !== 'rush'" class="rank-podium">
         <div
           v-for="slot in podium"
           :key="slot.rank"
@@ -64,7 +71,7 @@
       </div>
 
       <!-- 名次列表 -->
-      <div class="rank-list">
+      <div class="rank-list" v-if="!loading && !loadError">
         <div v-for="row in listRows" :key="row.rank" class="rank-row">
           <span class="rank-row-index">{{ row.rank }}</span>
           <div class="rank-row-body">
@@ -96,9 +103,11 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { resolveImageUrl } from '../config';
 import { useAuthStore } from '../store/auth';
+import { getAnchorRank, type AnchorRankResult } from '../api/live';
 
 const props = defineProps<{
   visible: boolean;
+  liveIndexId?: number;
   anchorName?: string;
   anchorAvatar?: string;
 }>();
@@ -119,18 +128,14 @@ const TABS: { key: TabKey; label: string }[] = [
 const activeTab = ref<TabKey>('rush');
 
 const authStore = useAuthStore();
-const myNickname = computed(() => authStore.userInfo?.nickname || '我');
-const myInitial = computed(() => myNickname.value.slice(0, 1).toUpperCase());
-const myAvatar = computed(() => {
-  const raw = authStore.userInfo?.avatar || '';
-  return raw ? resolveImageUrl(raw) : '';
-});
-// 未上榜时展示占位名次
-const myRankText = ref('未上榜');
 
-const anchorInitial = computed(() => (props.anchorName || 'N').slice(0, 1).toUpperCase());
+/** rankType：3 抢热推 / 1 小时榜 / 2 主播日榜 */
+const RANK_TYPE: Record<TabKey, number> = { rush: 3, hour: 1, day: 2 };
 
-/** 榜单接口未接入：前三名与 4~6 名统一走「虚位以待」占位 */
+const rankData = ref<AnchorRankResult | null>(null);
+const loading = ref(false);
+const loadError = ref('');
+
 interface RankSlot {
   rank: number;
   name: string;
@@ -138,27 +143,67 @@ interface RankSlot {
   score: string;
 }
 
-const podium = computed<RankSlot[]>(() => [
-  { rank: 2, name: '虚位以待', avatar: '', score: '' },
-  { rank: 1, name: '虚位以待', avatar: '', score: '' },
-  { rank: 3, name: '虚位以待', avatar: '', score: '' },
-]);
+function placeholderSlot(rank: number): RankSlot {
+  return { rank, name: '虚位以待', avatar: '', score: '' };
+}
 
-const tailRows = computed<RankSlot[]>(() =>
-  [4, 5, 6].map((rank) => ({ rank, name: '虚位以待', avatar: '', score: '0' })),
+/** 接口返回的真实榜单 */
+const rankRows = computed<RankSlot[]>(() =>
+  (rankData.value?.rank_list || []).map((item, index) => ({
+    rank: item.rank || index + 1,
+    name: item.nickname || '虚位以待',
+    avatar: resolveImageUrl(item.avatar),
+    score: item.popularity === undefined || item.popularity === null ? '' : String(item.popularity),
+  })),
 );
+
+/** 前三名领奖台：缺位时保留「虚位以待」占位 */
+const podium = computed<RankSlot[]>(() =>
+  [2, 1, 3].map((rank) => rankRows.value.find((row) => row.rank === rank) || placeholderSlot(rank)),
+);
+
+/** 4 名以后 */
+const tailRows = computed<RankSlot[]>(() => {
+  const rest = rankRows.value.filter((row) => row.rank >= 4);
+  return rest.length ? rest : [4, 5, 6].map(placeholderSlot);
+});
 
 /** 抢热推没有领奖台，列表从第 1 名开始；其余两个榜从第 4 名开始 */
 const listRows = computed<RankSlot[]>(() => {
   if (activeTab.value !== 'rush') {
     return tailRows.value;
   }
-  return [1, 2, 3, 4, 5, 6].map((rank) => ({ rank, name: '虚位以待', avatar: '', score: '0' }));
+  return rankRows.value.length ? rankRows.value : [1, 2, 3, 4, 5, 6].map(placeholderSlot);
 });
 
-/** 抢热推倒计时：本地按 10 分钟轮次演示，接口就绪后改用服务端下发时间 */
-const RUSH_ROUND_SECONDS = 10 * 60;
-const rushRemain = ref(RUSH_ROUND_SECONDS);
+/** 抢热推当前推荐的直播主播 */
+const recommendInfo = computed(() => rankData.value?.recommend_anchor_info || null);
+const anchorName = computed(() => (activeTab.value === 'rush' ? recommendInfo.value?.nickname : '') || props.anchorName || '虚位以待');
+const anchorAvatar = computed(() => {
+  const recommendAvatar = recommendInfo.value?.avatar;
+  if (recommendAvatar) {
+    return resolveImageUrl(recommendAvatar);
+  }
+  return props.anchorAvatar ? resolveImageUrl(props.anchorAvatar) : '';
+});
+const anchorInitial = computed(() => (anchorName.value || 'N').slice(0, 1).toUpperCase());
+
+/** 我的榜单信息 */
+const selfInfo = computed(() => rankData.value?.anchor_rank_info || null);
+const myRankText = computed(() => (selfInfo.value && selfInfo.value.rank > 0 ? `第 ${selfInfo.value.rank} 名` : '未上榜'));
+const myNickname = computed(() => selfInfo.value?.nickname || authStore.userInfo?.nickname || '我');
+const myInitial = computed(() => myNickname.value.slice(0, 1).toUpperCase());
+const myAvatar = computed(() => {
+  const selfAvatar = selfInfo.value?.avatar;
+  if (selfAvatar) {
+    return resolveImageUrl(selfAvatar);
+  }
+  const raw = authStore.userInfo?.avatar || '';
+  return raw ? resolveImageUrl(raw) : '';
+});
+
+/** 抢热推倒计时：使用服务端下发的本轮剩余秒数 */
+const rushRemain = ref(0);
 let rushTimer: number | null = null;
 
 const rushCountdownText = computed(() => {
@@ -167,10 +212,53 @@ const rushCountdownText = computed(() => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 });
 
+let requestSeq = 0;
+
+async function loadRank() {
+  const liveIndexId = props.liveIndexId;
+  if (!liveIndexId) {
+    rankData.value = null;
+    return;
+  }
+  const seq = ++requestSeq;
+  loading.value = true;
+  loadError.value = '';
+  try {
+    const result = await getAnchorRank({
+      liveIndexId,
+      rankType: RANK_TYPE[activeTab.value],
+      isEarlier: 0,
+    });
+    if (seq !== requestSeq) {
+      return;
+    }
+    rankData.value = result;
+    rushRemain.value = result?.minute_rank_remain_second || 0;
+  } catch (error) {
+    if (seq !== requestSeq) {
+      return;
+    }
+    rankData.value = null;
+    loadError.value = error instanceof Error ? error.message : '加载失败';
+    console.warn('[PopularityRankPanel] load rank failed:', error);
+  } finally {
+    if (seq === requestSeq) {
+      loading.value = false;
+    }
+  }
+}
+
 function startRushTimer() {
   stopRushTimer();
   rushTimer = window.setInterval(() => {
-    rushRemain.value = rushRemain.value > 0 ? rushRemain.value - 1 : RUSH_ROUND_SECONDS;
+    if (rushRemain.value > 0) {
+      rushRemain.value -= 1;
+      return;
+    }
+    // 本轮结束，重新拉取榜单
+    if (props.visible) {
+      loadRank();
+    }
   }, 1000);
 }
 
@@ -185,6 +273,7 @@ watch(
   () => props.visible,
   (visible) => {
     if (visible) {
+      loadRank();
       startRushTimer();
     } else {
       stopRushTimer();
@@ -192,6 +281,12 @@ watch(
   },
   { immediate: true },
 );
+
+watch(activeTab, () => {
+  if (props.visible) {
+    loadRank();
+  }
+});
 
 onUnmounted(stopRushTimer);
 </script>
@@ -495,6 +590,27 @@ onUnmounted(stopRushTimer);
   min-height: 0;
   padding: 0.5rem 0.875rem;
   overflow-y: auto;
+}
+
+.rank-tip {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 8rem;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rank-retry {
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  color: #fff;
+  cursor: pointer;
+  background-image: linear-gradient(135deg, #ff7aa2, #ff3d71);
+  border: none;
+  border-radius: 0.75rem;
 }
 
 .rank-row {

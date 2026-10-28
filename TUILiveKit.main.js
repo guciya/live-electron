@@ -986,31 +986,69 @@ function bindIPCEvent() {
   });
   // ============== End of New IPC Message Router ==============
 
-  ipcMain.on('on-minimize-window', () => {
+  // 窗口工具按钮：按事件来源窗口处理，避免页面在子窗口/重建窗口里时操作到错误窗口
+  ipcMain.on('on-minimize-window', (evt) => {
     console.log(`${logPrefix}on-minimize-window event`);
-    if (isWindowAlive(windowMap.main)) {
-      windowMap.main.minimize();
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
+      target.minimize();
     }
   });
 
   ipcMain.on('on-maximize-window', (evt, flag) => {
     console.log(`${logPrefix}on-maximize-window event:`, flag);
-    if (isWindowAlive(windowMap.main)) {
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
       if (flag) {
-        windowMap.main.maximize();
+        target.maximize();
       } else {
-        windowMap.main.unmaximize();
+        target.unmaximize();
       }
     }
   });
 
-  ipcMain.on('on-close-window', () => {
+  ipcMain.on('on-close-window', (evt) => {
     console.log(`${logPrefix}on-close-window event`);
     // Delegate close behavior to the main window 'close' handler so that
     // the renderer can decide whether the application should actually quit.
-    if (isWindowAlive(windowMap.main)) {
-      windowMap.main.close();
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
+      target.close();
     }
+  });
+
+  // 主播中心 / 主播中心子页使用的窗口控制通道（window-minimize 等）。
+  // 之前只注册了 on-*-window，导致这些页面的最小化/最大化/关闭按钮点了没反应。
+  ipcMain.on('window-minimize', (evt) => {
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
+      target.minimize();
+    }
+  });
+
+  ipcMain.on('window-toggle-maximize', (evt) => {
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
+      if (target.isMaximized()) {
+        target.unmaximize();
+      } else {
+        target.maximize();
+      }
+    }
+  });
+
+  ipcMain.on('window-close', (evt) => {
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    if (target && !target.isDestroyed()) {
+      target.close();
+    }
+  });
+
+  // 先移除旧的 handle，避免窗口重建时重复注册报错
+  ipcMain.removeHandler('window-is-maximized');
+  ipcMain.handle('window-is-maximized', (evt) => {
+    const target = BrowserWindow.fromWebContents(evt.sender);
+    return target && !target.isDestroyed() ? target.isMaximized() : false;
   });
 
   // 最小化到系统托盘（不退出）
@@ -1453,6 +1491,10 @@ function unbindIPCMainEvent() {
   ipcMain.removeAllListeners('on-minimize-window');
   ipcMain.removeAllListeners('on-maximize-window');
   ipcMain.removeAllListeners('on-close-window');
+  ipcMain.removeAllListeners('window-minimize');
+  ipcMain.removeAllListeners('window-toggle-maximize');
+  ipcMain.removeAllListeners('window-close');
+  ipcMain.removeHandler('window-is-maximized');
   ipcMain.removeAllListeners('minimize-to-tray');
   ipcMain.removeAllListeners('open-child');
   ipcMain.removeAllListeners('close-child');

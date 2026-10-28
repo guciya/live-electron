@@ -375,3 +375,256 @@ export async function fetchRecommendLiveList(
     }
   }
 }
+
+// ==================== 主播中心子页 ====================
+
+/** 用户等级信息（多个接口共用的结构） */
+export interface UserLevelInfo {
+  user_level: number;
+  user_level_name: string;
+  user_level_icon?: string;
+  level_gif_icon?: string;
+}
+
+/** 任务中心任务项 */
+export interface AnchorTaskItem {
+  task_id: number;
+  task_name: string;
+  task_icon?: string;
+  /** 任务目标值（开播任务为秒数） */
+  task_goal: number;
+  reward_count: number;
+  /** 奖励类型，2 = K币 */
+  reward_type: number;
+  task_start_time?: string;
+  task_end_time?: string;
+  task_desc?: string;
+  is_complete: boolean;
+  /** 任务进度（百分比数值，如 853 表示 853%） */
+  progress: number;
+}
+
+/** GET 任务中心任务列表 */
+export function getAnchorTaskList(): Promise<AnchorTaskItem[]> {
+  return request.post('/live/anchorTaskList') as unknown as Promise<AnchorTaskItem[]>;
+}
+
+/** 任务收益明细项（字段未固定，页面做兼容展示） */
+export interface AnchorTaskRevenueItem {
+  revenue_id?: number;
+  task_id?: number;
+  task_name?: string;
+  revenue_count?: number;
+  revenue_type?: number;
+  create_time?: string;
+  [key: string]: unknown;
+}
+
+/** 任务收益汇总 */
+export interface AnchorTaskRevenueResult {
+  revenue_list: AnchorTaskRevenueItem[];
+  total_revenue: number;
+}
+
+/** GET 任务收益明细 */
+export function getAnchorTaskRevenueList(): Promise<AnchorTaskRevenueResult> {
+  return request.post('/live/anchorTaskRevenueList') as unknown as Promise<AnchorTaskRevenueResult>;
+}
+
+/** 贡献榜单用户项 */
+export interface ContributeUserItem {
+  user_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  gender?: number;
+  age?: number;
+  is_mystery?: boolean;
+  introduction?: string;
+  contribute: number;
+  user_level_info?: UserLevelInfo;
+  frame_info?: unknown;
+  vip_business_card_info?: unknown;
+}
+
+/** GET 贡献榜单（contributeType 1/2/3，sortType 1/2） */
+export function getContributeUserList(params: {
+  page?: number;
+  pageSize?: number;
+  contributeType?: number;
+  sortType?: number;
+}): Promise<ContributeUserItem[]> {
+  return request.post('/live/contributeUserList', {
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 100,
+    contributeType: params.contributeType ?? 1,
+    sortType: params.sortType ?? 1,
+  }) as unknown as Promise<ContributeUserItem[]>;
+}
+
+/** 直播设置 */
+export interface AnchorLiveControl {
+  anchor_id?: number;
+  live_title?: string;
+  live_cover?: string;
+  live_category_id?: number;
+  is_accept_invite_pk: boolean;
+  is_accept_random_pk: boolean;
+  is_accept_audio_call: boolean;
+  is_accept_video_call: boolean;
+  is_accept_search_by_stranger_pk: boolean;
+  is_open_live_countdown: boolean;
+  free_preview_duration: number;
+  is_open_list_preview: boolean;
+  followed_reply?: {
+    reply_switch: boolean;
+    reply_type: number;
+    reply_content: string;
+  };
+  live_title_review?: { review_status: number; live_title: string };
+  live_cover_review?: { review_status: number; live_cover: string };
+  live_wishlist_gift?: unknown[];
+}
+
+/** GET 直播设置 */
+export function getAnchorLiveControl(): Promise<AnchorLiveControl> {
+  return request.post('/live/anchorLiveControl') as unknown as Promise<AnchorLiveControl>;
+}
+
+/** 付费名单 / 白名单用户 */
+export interface AnchorWhitelistUser {
+  user_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  gender?: number;
+  age?: number;
+  introduction?: string;
+  contribute?: number;
+  is_whitelist?: boolean;
+  user_level_info?: UserLevelInfo;
+  user_level?: number;
+  frame_info?: unknown;
+  create_time?: string;
+}
+
+/** GET 付费名单（sortType 1 时间 / 2 贡献） */
+export function getAnchorWhitelist(params: {
+  sortType?: number;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<AnchorWhitelistUser[]> {
+  return request.post('/live/anchorWhitelist', {
+    sortType: params.sortType ?? 1,
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 100,
+  }) as unknown as Promise<AnchorWhitelistUser[]>;
+}
+
+/** 管理员用户 */
+export interface AnchorManagerUser {
+  user_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  gender?: number;
+  age?: number;
+  introduction?: string;
+  is_manager?: boolean;
+  user_level_info?: UserLevelInfo;
+  frame_info?: unknown;
+  appoint_time?: string;
+}
+
+/** GET 管理员列表 */
+export function getAnchorManagerList(): Promise<AnchorManagerUser[]> {
+  return request.post('/live/anchorManagerList') as unknown as Promise<AnchorManagerUser[]>;
+}
+
+/** 平台通知 */
+export interface AnchorNotifyItem {
+  id: number;
+  title: string;
+  message: string;
+  message_type?: number;
+  create_time?: string;
+}
+
+/** GET 平台通知列表 */
+export function getAnchorNotifyList(): Promise<AnchorNotifyItem[]> {
+  return request.post('/live/anchorNotifyList') as unknown as Promise<AnchorNotifyItem[]>;
+}
+
+// ==================== 人气榜 / 在线观众 ====================
+
+/** 人气榜榜单用户 */
+export interface AnchorRankUser {
+  anchor_id?: number;
+  user_show_id?: number;
+  nickname: string;
+  avatar?: string;
+  rank: number;
+  /** 人气值 */
+  popularity: number;
+  /** 距上一名差值 */
+  diff_popularity?: number;
+}
+
+/** 当前主播自己的榜单信息 */
+export interface AnchorRankSelfInfo {
+  anchor_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  rank: number;
+  popularity: number;
+  diff_popularity: number;
+}
+
+/** 抢热推推荐主播 */
+export interface AnchorRankRecommendInfo {
+  anchor_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  anchor_info?: {
+    is_live: boolean;
+    anchor_level_info?: {
+      anchor_level: number;
+      anchor_level_name: string;
+      anchor_level_icon?: string;
+      anchor_level_gif_icon?: string;
+    };
+    live_info?: { live_index_id: number; room_id: string };
+  };
+}
+
+export interface AnchorRankResult {
+  rank_list: AnchorRankUser[];
+  anchor_rank_info?: AnchorRankSelfInfo | null;
+  recommend_anchor_info?: AnchorRankRecommendInfo | null;
+  /** 抢热推本轮剩余秒数 */
+  minute_rank_remain_second: number;
+}
+
+/** GET 人气榜（rankType 1 小时榜 / 2 主播日榜 / 3 抢热推） */
+export function getAnchorRank(params: {
+  liveIndexId: number;
+  rankType: number;
+  isEarlier?: number;
+}): Promise<AnchorRankResult> {
+  return request.post('/rank/anchorRank', {
+    liveIndexId: params.liveIndexId,
+    rankType: params.rankType,
+    isEarlier: params.isEarlier ?? 0,
+  }) as unknown as Promise<AnchorRankResult>;
+}
+
+/** GET 直播间贡献榜 */
+export function getLiveContributeUserList(params: {
+  liveIndexId: number;
+}): Promise<ContributeUserItem[]> {
+  return request.post('/live/liveContributeUserList', {
+    liveIndexId: params.liveIndexId,
+  }) as unknown as Promise<ContributeUserItem[]>;
+}
