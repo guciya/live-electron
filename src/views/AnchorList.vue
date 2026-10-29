@@ -39,7 +39,7 @@
             </svg>
             <span>公会|家族</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="handlePendingEntry('提现')">
+          <button class="anchor-text-btn" type="button" @click="openWithdrawPage()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="6" width="20" height="14" rx="2" />
               <path d="M2 10h20" />
@@ -63,14 +63,6 @@
             </svg>
             <span>公会入驻</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="handleLogout">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <path d="M16 17l5-5-5-5" />
-              <path d="M21 12H9" />
-            </svg>
-            <span>退出登录</span>
-          </button>
           <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="9.5" cy="7.5" r="3.5" />
@@ -85,6 +77,14 @@
               <path d="M9 11h6M9 14.5h3.5" />
             </svg>
             <span>消息</span>
+          </button>
+           <button class="anchor-text-btn" type="button" @click="handleLogout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>退出登录</span>
           </button>
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize">
@@ -235,6 +235,9 @@
           </div>
         </div>
       </div>
+
+      <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
+      <MessageCenter :visible="messageCenterVisible" @close="messageCenterVisible = false" />
     </div>
   </UIKitProvider>
 </template>
@@ -257,11 +260,12 @@ import { fetchRecommendLiveList } from '../niko/api/live';
 import { type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
+import MessageCenter from '../niko/components/MessageCenter.vue';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
-const { logout: logoutIm } = useLoginState();
+const { logout: logoutIm, login: loginIm } = useLoginState();
 
 const liveList = ref<NikoLiveListItem[]>([]);
 const total = ref(0);
@@ -417,14 +421,38 @@ function handleStartLive() {
   router.push({ name: isMacPlatform() ? 'tui-livekit-mac' : 'tui-live-kit-main' });
 }
 
-// 关注列表：点击入口，具体逻辑待接入
+// 关注列表：H5 主项目暂无该页面/接口，先提示暂未开放
 function handleOpenFollowList() {
-  // TODO: 打开关注列表
+  showMessage({ type: MessageToastType.Info, message: '关注列表功能暂未开放，敬请期待' });
 }
 
-// 消息：点击入口，具体逻辑待接入
-function handleOpenMessage() {
-  // TODO: 打开消息中心
+// 消息：打开消息中心弹窗（基于 TUIChatEngine C2C 单聊）
+// AnchorList 主窗口默认不走 IM 登录，这里先用本地登录凭据补登一次再打开
+const messageCenterVisible = ref(false);
+const messageCenterOpening = ref(false);
+async function handleOpenMessage() {
+  if (messageCenterOpening.value) return;
+  messageCenterOpening.value = true;
+  try {
+    const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+    if (!stored) {
+      showMessage({ type: MessageToastType.Error, message: '登录信息失效，请重新登录' });
+      return;
+    }
+    const { sdkAppId, userId, userSig } = JSON.parse(stored);
+    // useLoginState().login 内部幂等：已登录且同 userId 直接返回
+    await loginIm({
+      sdkAppId: Number(sdkAppId),
+      userId: String(userId),
+      userSig: String(userSig),
+    });
+    messageCenterVisible.value = true;
+  } catch (error: any) {
+    console.error('[AnchorList] open message center failed:', error);
+    showMessage({ type: MessageToastType.Error, message: `消息中心打开失败：${error?.message || 'IM 登录失败'}` });
+  } finally {
+    messageCenterOpening.value = false;
+  }
 }
 
 // 退出登录二次确认：点击「退出登录」先弹窗，确认后才执行登出
@@ -452,11 +480,33 @@ async function confirmLogout() {
   router.replace({ name: 'login' });
 }
 
-// 公会|家族：打开组织页（软件内部窗口）
-const ORGANIZATION_URL = `${NIKO_CONFIG.h5WebBase}/organization`;
+// 站外业务页 SSO 配置：与 H5 主项目 ssoBridge.ts 协议对齐，让子应用（os / withdraw / organization）
+// 用同一套接收逻辑拿到 token。其他项目接入时只需要：
+//   1. 监听 window message，data.type === 'SSO_TOKEN' 时取 data.token
+//   2. 或从 sessionStorage / localStorage 读 'niko-auth'（key 与 H5 主项目一致）
+const H5_ORIGIN = NIKO_CONFIG.h5WebBase;
+
+// 公会|家族：组织页（带尾斜杠，子应用相对路径资源才不会 404）
+const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
+// 家族入驻 / 公会入驻：同一个入驻页（生产域；测试域 test-h5.nikolive.cn 未部署该子应用）
+const SETTLE_URL = `${H5_ORIGIN}/os/#/settle`;
+// 提现页（生产域）
+const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
+
+/** 软件内打开 H5 业务页并下发 SSO token（协议对齐 H5 主项目 ssoBridge） */
+function openExternalWithSso(url: string, title: string) {
+  window.ipcRenderer?.send('open-internal-url', {
+    url,
+    title,
+    sso: {
+      token: authStore.token || '',
+      origin: H5_ORIGIN,
+    },
+  });
+}
 
 function openOrganizationPage() {
-  window.ipcRenderer?.send('open-internal-url', { url: ORGANIZATION_URL, title: '公会|家族' });
+  openExternalWithSso(ORGANIZATION_URL, '公会|家族');
 }
 
 /** 跳转到主播中心页面 */
@@ -464,16 +514,12 @@ function goAnchorCenter() {
   router.push({ name: 'anchor-center' });
 }
 
-// 家族入驻 / 公会入驻：同一个入驻页，软件内部窗口打开
-const SETTLE_URL = `${NIKO_CONFIG.h5WebBase}/os/#/settle`;
-
 function openSettlePage(title: string) {
-  window.ipcRenderer?.send('open-internal-url', { url: SETTLE_URL, title });
+  openExternalWithSso(SETTLE_URL, title);
 }
 
-// 公会|家族 / 提现：对齐 H5 个人页口径，暂未开放
-function handlePendingEntry(label: string) {
-  showMessage({ type: MessageToastType.Info, message: `${label}功能暂未开放，敬请期待` });
+function openWithdrawPage() {
+  openExternalWithSso(WITHDRAW_URL, '提现');
 }
 
 function onUserAvatarError() {

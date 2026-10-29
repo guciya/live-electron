@@ -1530,11 +1530,52 @@ function initMainWindowPage() {
 
 // 系统托盘
 let appTray = null;
-// 软件内部页面窗口（家族入驻/公会入驻/组织管理等 H5 业务页，不暴露 node 能力）
+// 软件内部页面窗口（家族入驻/公会入驻/组织管理/提现等 H5 业务页，不暴露 node 能力）
 let internalPageWindow = null;
+// 当前内部页 SSO 配置：{ token, origin }
+// 与 H5 主项目 ssoBridge.ts 的协议对齐：子应用加载后通过 message 事件接收 SSO_TOKEN，
+// 同时把 token 写入 niko-auth storage，让子应用无论用哪种方式都能拿到登录态。
+let internalPageSso = null;
 // 模拟 Chrome 最新版 UA（Electron 默认 UA 带 "Electron/" 字样，部分 H5 站点检测后返回空壳）
 const CHROME_LIKE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-function openInternalPage(url, title) {
+
+/**
+ * 把当前 SSO 配置注入到 internalPageWindow 加载的页面。
+ * 子应用（withdraw / os / organization 等）的接收逻辑约定：
+ *   1) 监听 window message 事件，data.type === 'SSO_TOKEN' 时取 data.token
+ *   2) 或直接从 sessionStorage / localStorage 读 'niko-auth'
+ * 两种都注入，兼容两种实现。
+ */
+function injectSsoToInternalPage() {
+  if (!internalPageWindow || internalPageWindow.isDestroyed()) {
+    return;
+  }
+  if (!internalPageSso || !internalPageSso.token) {
+    return;
+  }
+  const token = String(internalPageSso.token);
+  const origin = String(internalPageSso.origin || '');
+  const script = `
+    (function () {
+      try {
+        var token = ${JSON.stringify(token)};
+        var origin = ${JSON.stringify(origin)};
+        var session = JSON.stringify({ token: token });
+        try { window.sessionStorage.setItem('niko-auth', session); } catch (e) {}
+        try { window.localStorage.setItem('niko-auth', session); } catch (e) {}
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'SSO_TOKEN', token: token },
+          origin: origin,
+        }));
+      } catch (e) {}
+    })();
+  `;
+  internalPageWindow.webContents.executeJavaScript(script).catch(() => {});
+}
+
+function openInternalPage(url, title, sso) {
+  // 每次打开都更新 SSO 配置（不同入口可能拿到不同 token）
+  internalPageSso = sso && sso.token ? { token: String(sso.token), origin: String(sso.origin || '') } : null;
   if (internalPageWindow && !internalPageWindow.isDestroyed()) {
     if (title) {
       internalPageWindow.setTitle(title);
@@ -1565,19 +1606,23 @@ function openInternalPage(url, title) {
     },
   });
   internalPageWindow.webContents.setUserAgent(CHROME_LIKE_UA);
+  // 主帧加载完成注入一次；SPA hash 路由切换时再注入一次（did-navigate-in-page）
+  internalPageWindow.webContents.on('did-finish-load', injectSsoToInternalPage);
+  internalPageWindow.webContents.on('did-navigate-in-page', injectSsoToInternalPage);
   internalPageWindow.loadURL(url);
   internalPageWindow.webContents.on('did-fail-load', (_e, code, desc) => {
     console.error('[internalPage] did-fail-load:', code, desc, 'url:', url);
   });
   internalPageWindow.on('closed', () => {
     internalPageWindow = null;
+    internalPageSso = null;
   });
 }
 
 ipcMain.on('open-internal-url', (_event, payload) => {
-  const { url, title } = payload || {};
+  const { url, title, sso } = payload || {};
   if (typeof url === 'string' && /^https?:\/\//.test(url)) {
-    openInternalPage(url, title);
+    openInternalPage(url, title, sso);
   }
 });
 
