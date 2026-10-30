@@ -31,6 +31,17 @@
         <div class="player-stage">
           <video ref="videoEl" class="player-video" autoplay playsinline></video>
 
+          <!-- 独立 TRTC 连麦宫格：主播主画面 + 连麦观众小图，叠在 FLV 主画面之上 -->
+          <CoGuestGrid
+            v-if="trtcReady && (guestUsers.length > 0 || trtcAnchorUserId)"
+            ref="coGuestGridRef"
+            :anchor-user-id="trtcAnchorUserId || ''"
+            :anchor-name="anchorName"
+            :guest-users="guestUsers"
+            @video-ready="onCoGuestVideoReady"
+            @video-remove="onCoGuestVideoRemove"
+          />
+
           <GiftEffect />
 
           <div v-if="errorText" class="player-status">{{ errorText }}</div>
@@ -254,7 +265,11 @@ import GamePanel from '../niko/components/GamePanel.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import AudiencePanel from '../niko/components/AudiencePanel.vue';
+import CoGuestGrid from '../niko/components/CoGuestGrid.vue';
 import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
+import trtcCloud from '../TUILiveKit/utils/trtcCloud';
+import { TRTCParams, TRTCAppScene, TRTCRoleType } from 'trtc-electron-sdk';
+import type { CoGuestUser } from '../niko/components/CoGuestGrid.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -289,6 +304,177 @@ const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
 const popularityPanelVisible = ref(false);
+
+// ========== TRTC 独立连麦宫格 ==========
+// 主播端推流用 liveIndexId 作为 TRTC strRoomId，观众端进房同理
+const trtcReady = ref(false);
+// 主播 userId：优先用路由 query 里的 anchorId，fallback 到当前登录用户
+const trtcAnchorUserId = ref(String(anchorId || ''));
+const guestUsers = ref<CoGuestUser[]>([]); // 连麦观众列表（不含主播）
+const coGuestGridRef: Ref<any> = ref(null);
+// 记录当前登录用户 userId
+const myUserId = computed(() => {
+  try {
+    const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+    if (!stored) return '';
+    return String(JSON.parse(stored).userId || '');
+  } catch {
+    return '';
+  }
+});
+
+let trtcEntered = false;
+const remoteUserStates = new Map<string, { videoAvailable: boolean; nickname?: string }>();
+
+function getAnchorUserId(): string {
+  return trtcAnchorUserId.value || myUserId.value;
+}
+
+function startRemoteViewSafe(userId: string) {
+  if (!trtcEntered) return;
+  const el = coGuestGridRef.value?.getVideoEl?.(userId);
+  if (!el) return;
+  try {
+    // startRemoteView 需要一个 video element 或 div，传 video 元素可以直接播放
+    trtcCloud.startRemoteView(userId, el);
+    console.log('[LivePlayer] TRTC startRemoteView:', userId);
+  } catch (e) {
+    console.warn('[LivePlayer] startRemoteView failed:', userId, e);
+  }
+}
+
+function stopRemoteViewSafe(userId: string) {
+  if (!trtcEntered) return;
+  try {
+    trtcCloud.stopRemoteView(userId);
+  } catch (e) {
+    console.warn('[LivePlayer] stopRemoteView failed:', userId, e);
+  }
+}
+
+function refreshGuestList() {
+  // 主播（用路由 anchorId 匹配）不进 guest list
+  const anchorId = getAnchorUserId();
+  const list: CoGuestUser[] = [];
+  remoteUserStates.forEach((state, uid) => {
+    if (uid === anchorId) {
+      // 主播（route 里的 anchorId 或者 fallback 到 myUserId）
+      return;
+    }
+    if (state.videoAvailable) {
+      list.push({ userId: uid, nickname: state.nickname });
+    }
+  });
+  // 稳定排序：按 userId 字典序，避免切换闪烁
+  list.sort((a, b) => a.userId.localeCompare(b.userId));
+  guestUsers.value = list;
+}
+
+function onRemoteUserVideoAvailable(userId: string, available: boolean) {
+  const state = remoteUserStates.get(userId) || { videoAvailable: false };
+  state.videoAvailable = available;
+  remoteUserStates.set(userId, state);
+  if (available) {
+    // 给 video 元素挂载好后 startRemoteView
+    // CoGuestGrid 会渲染新的 slot → onCoGuestVideoReady 触发 → 调用 startRemoteView
+  } else {
+    stopRemoteViewSafe(userId);
+  }
+  refreshGuestList();
+}
+
+function onRemoteUserEnterRoom(userId: string) {
+  // 记录下 nickname 如果有（TRTC 事件里可能不带）
+  if (!remoteUserStates.has(userId)) {
+    remoteUserStates.set(userId, { videoAvailable: false });
+  }
+}
+
+function onCoGuestVideoReady(users: CoGuestUser[]) {
+  // DOM 渲染完成后，把需要的远端视频挂上去
+  for (const u of users) {
+    const remote = remoteUserStates.get(u.userId);
+    if (remote?.videoAvailable) {
+      startRemoteViewSafe(u.userId);
+    }
+  }
+}
+
+function onCoGuestVideoRemove(userIds: string[]) {
+  for (const uid of userIds) {
+    stopRemoteViewSafe(uid);
+  }
+}
+
+function enterTrtcRoomAsAudience(roomId: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+    if (!stored) {
+      reject(new Error('TRTC 登录信息缺失'));
+      return;
+    }
+    const userInfo = JSON.parse(stored);
+    const params = new TRTCParams(
+      Number(userInfo.sdkAppId),
+      String(userInfo.userId || ''),
+      String(userInfo.userSig || ''),
+      0,
+      String(roomId),
+      TRTCRoleType.TRTCRoleAudience,
+    );
+    const onEnterRoom = (result: number) => {
+      trtcCloud.off('onEnterRoom', onEnterRoom);
+      if (result >= 0) {
+        trtcEntered = true;
+        trtcReady.value = true;
+        resolve(result);
+      } else {
+        reject(new Error(`TRTC enterRoom failed, code: ${result}`));
+      }
+    };
+    trtcCloud.on('onEnterRoom', onEnterRoom);
+    // 绑定远端事件
+    trtcCloud.on('onRemoteUserVideoAvailable', onRemoteUserVideoAvailable);
+    trtcCloud.on('onRemoteUserEnterRoom', onRemoteUserEnterRoom);
+    trtcCloud.enterRoom(params, TRTCAppScene.TRTCAppSceneLIVE);
+  });
+}
+
+function cleanupTrtc() {
+  if (!trtcEntered) return;
+  try {
+    // 停所有远端视图
+    remoteUserStates.forEach((_state, uid) => stopRemoteViewSafe(uid));
+    trtcCloud.off('onRemoteUserVideoAvailable', onRemoteUserVideoAvailable);
+    trtcCloud.off('onRemoteUserEnterRoom', onRemoteUserEnterRoom);
+    trtcCloud.exitRoom();
+  } catch (e) {
+    console.warn('[LivePlayer] trtc cleanup failed:', e);
+  }
+  trtcEntered = false;
+  trtcReady.value = false;
+  trtcAnchorUserId.value = '';
+  guestUsers.value = [];
+  remoteUserStates.clear();
+}
+
+async function initTrtc() {
+  if (!liveIndexId) {
+    console.warn('[LivePlayer] skip TRTC: no liveIndexId');
+    return;
+  }
+  try {
+    const result = await enterTrtcRoomAsAudience(liveIndexId);
+    console.log('[LivePlayer] TRTC audience enterRoom ok:', result, 'roomId:', liveIndexId);
+  } catch (error: any) {
+    console.warn('[LivePlayer] TRTC enterRoom failed (FLV fallback still works):', error?.message || error);
+    // TRTC 失败不影响 FLV 主画面，只是没有独立连麦宫格
+  }
+}
+
+function exitTrtc() {
+  cleanupTrtc();
+}
 
 // 关注：接口没有查询态，默认未关注，点一次以接口结果为准
 const canFollow = computed(() => Number.isFinite(anchorId) && anchorId > 0);
@@ -484,6 +670,8 @@ async function exitRoom(title: string, message: string, silent = false) {
   }
   // 离开 IM 群（异步，不阻塞退出流程）
   void leaveLiveChat();
+  // TRTC 独立连麦宫格：退出房间
+  exitTrtc();
   // 销毁播放器与停滞计时器
   playerHandle?.destroy();
   playerHandle = null;
@@ -849,6 +1037,8 @@ onMounted(() => {
   });
   void startPlayback();
   void initChat();
+  // TRTC 独立连麦宫格：以观众身份进房，拉取连麦观众独立视频流
+  void initTrtc();
   // 每 2 秒对比在播列表，主播关播后 2~4 秒内必定退出（不依赖拉流错误事件）
   startLiveStatusPoll();
 });
@@ -880,6 +1070,8 @@ onBeforeUnmount(() => {
   playerHandle = null;
   // 退出直播间时离开 IM 群；保留 IM 登录态，去开播时直接复用同一会话
   void leaveLiveChat();
+  // TRTC 独立连麦宫格：退出房间
+  exitTrtc();
 });
 </script>
 
