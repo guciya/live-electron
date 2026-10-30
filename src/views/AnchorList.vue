@@ -130,10 +130,10 @@
         <div v-else-if="!liveList.length" class="anchor-empty">
           <IconLive class="anchor-empty-icon" />
           <p class="anchor-empty-text">暂无主播正在直播</p>
-          <button class="anchor-start-live-btn anchor-empty-start" type="button" @click="handleStartLive">
-            <IconLiveStart class="start-live-icon" />
-            <span>去开播</span>
-          </button>
+          <!-- <button class="anchor-start-live-btn anchor-empty-start" type="button" @click="handleStartLive"> -->
+            <!-- <IconLiveStart class="start-live-icon" /> -->
+            <!-- <span>去开播</span> -->
+          <!-- </button> -->
         </div>
 
         <div v-else class="anchor-grid">
