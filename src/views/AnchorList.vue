@@ -214,8 +214,8 @@
         </div>
       </main>
 
-      <!-- 悬浮圆形开播按钮：页面底部居中 -->
-      <button class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
+      <!-- 悬浮圆形开播按钮：页面底部居中（仅主播展示） -->
+      <button v-if="isAnchor" class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
         <IconLiveStart class="anchor-fab-icon" />
         <span>开播</span>
       </button>
@@ -324,7 +324,7 @@ import { isMacPlatform } from '../TUILiveKit/utils/platform';
 import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
 import { NIKO_CONFIG, resolveImageUrl } from '../niko/config';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
-import { fetchAttentionLiveList, fetchRecommendLiveList } from '../niko/api/live';
+import { fetchAttentionLiveList, fetchRecommendLiveList, getAnchorCenter } from '../niko/api/live';
 import { type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
@@ -348,6 +348,8 @@ const userAvatar = computed(() => {
   return resolveImageUrl(userInfo.value.avatar);
 });
 const userInitial = computed(() => (userInfo.value?.nickname || userInfo.value?.userShowId || 'N').slice(0, 1).toUpperCase());
+/** 是否主播（/api/user/personalInfo 的 is_anchor）：非主播隐藏开播入口 */
+const isAnchor = computed(() => authStore.isAnchor);
 
 /**
  * 加载主播列表（数据源：/live/recommendLiveList，业务域 + 登录 Token）。
@@ -499,7 +501,7 @@ async function loadFollowList() {
   followLoading.value = true;
   followError.value = '';
   try {
-    const result = await fetchAttentionLiveList(0, 0);
+    const result = await fetchAttentionLiveList(1, 500);
     followList.value = result.list;
   } catch (error) {
     followList.value = [];
@@ -651,10 +653,12 @@ async function confirmLogout() {
   router.replace({ name: 'login' });
 }
 
-// 站外业务页 SSO 配置：与 H5 主项目 ssoBridge.ts 协议对齐，让子应用（os / withdraw / organization）
-// 用同一套接收逻辑拿到 token。其他项目接入时只需要：
-//   1. 监听 window message，data.type === 'SSO_TOKEN' 时取 data.token
-//   2. 或从 sessionStorage / localStorage 读 'niko-auth'（key 与 H5 主项目一致）
+// 站外业务页 SSO 配置：三个内嵌 H5 项目读取登录态的方式不同，主进程会一次性写入所有 key：
+//   - h5-tixian（/withdraw）：sessionStorage['token']
+//   - h5-organization（/organization）：localStorage['token'] + sessionStorage['organizationInfoObj']
+//   - h5-organization-settled：localStorage['guild_token']（兜底 sessionStorage['niko-auth'].token）
+//   - 公共：sessionStorage / localStorage['niko-auth']（JSON: { token }）
+//   另外兼容 postMessage 握手（data.type === 'SSO_TOKEN'）
 const H5_ORIGIN = NIKO_CONFIG.h5WebBase;
 
 // 公会|家族：组织页（带尾斜杠，子应用相对路径资源才不会 404）
@@ -665,19 +669,35 @@ const SETTLE_URL = `${H5_ORIGIN}/os/#/settle`;
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
 
 /** 软件内打开 H5 业务页并下发 SSO token（协议对齐 H5 主项目 ssoBridge） */
-function openExternalWithSso(url: string, title: string) {
+function openExternalWithSso(
+  url: string,
+  title: string,
+  extra: { organizationId?: number } = {},
+) {
   window.ipcRenderer?.send('open-internal-url', {
     url,
     title,
     sso: {
       token: authStore.token || '',
       origin: H5_ORIGIN,
+      // 公会页需要组织 id（sessionStorage['organizationInfoObj']），由主播中心接口带出
+      organizationId: extra.organizationId,
     },
   });
 }
 
-function openOrganizationPage() {
-  openExternalWithSso(ORGANIZATION_URL, '公会|家族');
+async function openOrganizationPage() {
+  // 优先用个人信息接口下发的 organization_info.id（organization_mode 决定公会/家族）
+  let organizationId: number | undefined = authStore.organizationId;
+  if (!organizationId) {
+    try {
+      const anchorData = await getAnchorCenter();
+      organizationId = anchorData?.organization_info?.id ?? anchorData?.organization_id ?? undefined;
+    } catch (error) {
+      console.warn('[AnchorList] getAnchorCenter failed before opening organization page:', error);
+    }
+  }
+  openExternalWithSso(ORGANIZATION_URL, '公会|家族', { organizationId });
 }
 
 /** 跳转到主播中心页面 */
@@ -735,6 +755,8 @@ async function refreshSilently() {
 }
 
 onMounted(() => {
+  // 恢复登录态的会话没有登录回调，这里补拉一次个人信息（is_anchor / organization_info）
+  void authStore.loadPersonalInfo();
   void loadList();
   // 挂载后立刻强制静默拉一次：无论是首次进入还是从直播间/其他页面返回，
   // 列表数据都马上是最新的，不用等第一次 2 秒轮询
@@ -1620,8 +1642,9 @@ onBeforeUnmount(() => {
 .follow-panel {
   display: flex;
   flex-direction: column;
-  width: min(1100px, calc(100vw - 4rem));
-  max-height: calc(100vh - 6rem);
+  width: min(1440px, calc(50vw - 3rem));
+  height: 80vh;
+  max-height: calc(100vh - 3rem);
   background: var(--bg-color-dialog, #22252b);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -1718,12 +1741,14 @@ onBeforeUnmount(() => {
 }
 
 .follow-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 0.875rem;
 }
 
 .follow-card {
+  flex: 0 0 190px;
   overflow: hidden;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);

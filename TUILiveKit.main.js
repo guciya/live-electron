@@ -1541,10 +1541,16 @@ const CHROME_LIKE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/53
 
 /**
  * 把当前 SSO 配置注入到 internalPageWindow 加载的页面。
- * 子应用（withdraw / os / organization 等）的接收逻辑约定：
- *   1) 监听 window message 事件，data.type === 'SSO_TOKEN' 时取 data.token
- *   2) 或直接从 sessionStorage / localStorage 读 'niko-auth'
- * 两种都注入，兼容两种实现。
+ *
+ * 三个内嵌 H5 项目读取 token 的方式各不相同（都已在 H5 侧固定，桌面端不改它们）：
+ *   - h5-tixian（/withdraw）：sessionStorage['token']
+ *   - h5-organization（/organization）：localStorage['token'] + sessionStorage['organizationInfoObj']
+ *   - h5-organization-settled（/organization-settled）：localStorage['guild_token']，兜底 sessionStorage['niko-auth']
+ *   - 以及 H5 主项目约定的 sessionStorage/localStorage['niko-auth']（JSON: { token }）
+ * 另外兼容 postMessage 握手（data.type === 'SSO_TOKEN'）。
+ *
+ * 由于这些 key 需要在页面脚本启动前就位，注入后若发现是本窗口第一次拿到该 token，
+ * 会 reload 一次（reload 后标记命中就不会再 reload，不会循环）。
  */
 function injectSsoToInternalPage() {
   if (!internalPageWindow || internalPageWindow.isDestroyed()) {
@@ -1555,44 +1561,115 @@ function injectSsoToInternalPage() {
   }
   const token = String(internalPageSso.token);
   const origin = String(internalPageSso.origin || '');
+  const rawOrgId = internalPageSso.organizationId;
+  const orgIdLiteral = rawOrgId !== undefined && rawOrgId !== null && Number.isFinite(Number(rawOrgId))
+    ? String(Number(rawOrgId))
+    : 'null';
   const script = `
     (function () {
       try {
         var token = ${JSON.stringify(token)};
         var origin = ${JSON.stringify(origin)};
-        var session = JSON.stringify({ token: token });
-        try { window.sessionStorage.setItem('niko-auth', session); } catch (e) {}
-        try { window.localStorage.setItem('niko-auth', session); } catch (e) {}
+        var orgId = ${orgIdLiteral};
+        var authJson = JSON.stringify({ token: token });
+
+        // H5 主项目 / h5-tixian / h5-organization-settled 的公共登录态
+        try { window.sessionStorage.setItem('niko-auth', authJson); } catch (e) {}
+        try { window.localStorage.setItem('niko-auth', authJson); } catch (e) {}
+
+        // h5-tixian：sessionStorage['token']
+        try { window.sessionStorage.setItem('token', token); } catch (e) {}
+
+        // h5-organization：localStorage['token'] + sessionStorage['organizationInfoObj']
+        try { window.localStorage.setItem('token', token); } catch (e) {}
+        if (orgId !== null) {
+          var orgJson = JSON.stringify({ id: orgId });
+          try { window.sessionStorage.setItem('organizationInfoObj', orgJson); } catch (e) {}
+          try { window.sessionStorage.setItem('organizationInfo', orgJson); } catch (e) {}
+        }
+
+        // h5-organization-settled：localStorage['guild_token']
+        try { window.localStorage.setItem('guild_token', token); } catch (e) {}
+
+        // 兼容监听 message 握手的子应用
         window.dispatchEvent(new MessageEvent('message', {
           data: { type: 'SSO_TOKEN', token: token },
           origin: origin,
         }));
-      } catch (e) {}
+
+        // 首次拿到该 token 时标记并要求 reload，让页面启动时就能读到登录态
+        var marker = null;
+        try { marker = window.sessionStorage.getItem('__niko_sso_token'); } catch (e) {}
+        if (marker !== token) {
+          try { window.sessionStorage.setItem('__niko_sso_token', token); } catch (e) {}
+          return true;
+        }
+        return false;
+      } catch (e) {
+        return false;
+      }
     })();
   `;
-  internalPageWindow.webContents.executeJavaScript(script).catch(() => {});
+  internalPageWindow.webContents
+    .executeJavaScript(script, true)
+    .then((needReload) => {
+      if (needReload && internalPageWindow && !internalPageWindow.isDestroyed()) {
+        internalPageWindow.webContents.reload();
+      }
+    })
+    .catch(() => {});
+}
+
+/**
+ * 内嵌 H5 业务页窗口尺寸：默认主窗口内容的 80% 宽、90% 高（不超过屏幕可用区域）。
+ * 主窗口不存在（如从托盘打开）时给一个常规大窗口兜底。
+ */
+function computeInternalPageBounds() {
+  const { screen } = require('electron');
+  const parentWindow = windowMap.main && !windowMap.main.isDestroyed() ? windowMap.main : null;
+  const parentBounds = parentWindow ? parentWindow.getContentBounds() : null;
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  if (parentBounds && parentBounds.width > 0 && parentBounds.height > 0) {
+    return {
+      width: Math.max(720, Math.min(Math.round(parentBounds.width * 0.8), workArea.width)),
+      height: Math.max(600, Math.min(Math.round(parentBounds.height * 0.9), workArea.height)),
+    };
+  }
+  return {
+    width: Math.round(workArea.width * 0.8),
+    height: Math.round(workArea.height * 0.9),
+  };
 }
 
 function openInternalPage(url, title, sso) {
-  // 每次打开都更新 SSO 配置（不同入口可能拿到不同 token）
-  internalPageSso = sso && sso.token ? { token: String(sso.token), origin: String(sso.origin || '') } : null;
+  // 每次打开都更新 SSO 配置（不同入口可能拿到不同 token / 组织信息）
+  internalPageSso = sso && sso.token
+    ? {
+      token: String(sso.token),
+      origin: String(sso.origin || ''),
+      organizationId: sso.organizationId,
+    }
+    : null;
   if (internalPageWindow && !internalPageWindow.isDestroyed()) {
     if (title) {
       internalPageWindow.setTitle(title);
     }
+    // 复用的窗口也按当前主窗口重新算尺寸，避免留在旧的手机尺寸
+    const bounds = computeInternalPageBounds();
+    internalPageWindow.setBounds(bounds);
+    internalPageWindow.center();
     internalPageWindow.loadURL(url);
     internalPageWindow.show();
     internalPageWindow.focus();
     return;
   }
+  const bounds = computeInternalPageBounds();
   internalPageWindow = new BrowserWindow({
-    width: 440,
-    height: 956,
-    minWidth: 440,
-    minHeight: 956,
-    maxWidth: 440,
-    maxHeight: 956,
-    resizable: false,
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: 720,
+    minHeight: 600,
+    resizable: true,
     parent: windowMap.main || undefined,
     title: title || 'Niko直播',
     autoHideMenuBar: true,
@@ -1605,6 +1682,7 @@ function openInternalPage(url, title, sso) {
       // 默认 partition 为空字符串，走 session.defaultSession
     },
   });
+  internalPageWindow.center();
   internalPageWindow.webContents.setUserAgent(CHROME_LIKE_UA);
   // 主帧加载完成注入一次；SPA hash 路由切换时再注入一次（did-navigate-in-page）
   internalPageWindow.webContents.on('did-finish-load', injectSsoToInternalPage);

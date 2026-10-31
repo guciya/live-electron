@@ -220,6 +220,11 @@ async function handleLogin() {
       loginType: LoginType.UserSig,
     }));
 
+    // 登录成功后拉取用户个人信息（is_anchor 决定是否展示开播入口，organization_info 供公会页使用）
+    authStore.loadPersonalInfo(true).catch((error) => {
+      logger.warn('[Login] load personal info failed:', error);
+    });
+
     window.localStorage.setItem(MOBILE_STORAGE_KEY, mobile.value);
     verifyCode.value = '';
     if (countdownTimer !== null) {
