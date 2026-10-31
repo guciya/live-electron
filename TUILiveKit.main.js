@@ -1310,22 +1310,23 @@ function bindIPCEvent() {
     if (!gift || !isWindowAlive(windowMap.giftOverlay) || !isWindowAlive(windowMap.main)) {
       return;
     }
-    // 优先复用 stream-layout-area 持续维护的视频区域坐标（与 mainCover 同源、随布局实时更新）；
-    // 渲染进程一次性量取的 DOM 坐标在窗口最大化/布局动画等场景会出现偏差，仅作为兜底
+    // 优先用渲染进程本次量取的视频区坐标（CSS px，与窗口内容区同源）；
+    // stream-layout-area 维护的坐标来自 SDK 且按 devicePixelRatio 换算，
+    // 高分屏下与 CSS px 不一致，仅在没有 payload.bounds 时兜底
     let rel = null;
-    if (coverWindowRelativeBounds.width > 0 && coverWindowRelativeBounds.height > 0) {
-      rel = {
-        x: coverWindowRelativeBounds.x,
-        y: coverWindowRelativeBounds.y,
-        width: coverWindowRelativeBounds.width,
-        height: coverWindowRelativeBounds.height,
-      };
-    } else if (payload?.bounds) {
+    if (payload?.bounds && payload.bounds.width > 0 && payload.bounds.height > 0) {
       rel = {
         x: Math.round(payload.bounds.left || 0),
         y: Math.round(payload.bounds.top || 0),
         width: Math.max(1, Math.round(payload.bounds.width || 0)),
         height: Math.max(1, Math.round(payload.bounds.height || 0)),
+      };
+    } else if (coverWindowRelativeBounds.width > 0 && coverWindowRelativeBounds.height > 0) {
+      rel = {
+        x: coverWindowRelativeBounds.x,
+        y: coverWindowRelativeBounds.y,
+        width: coverWindowRelativeBounds.width,
+        height: coverWindowRelativeBounds.height,
       };
     }
     if (!rel || !rel.width || !rel.height) {

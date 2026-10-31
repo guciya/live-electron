@@ -4,7 +4,7 @@
       <div class="follow-panel-header">
         <div class="follow-panel-title">
           <span>关注列表</span>
-          <span class="follow-panel-count">{{ list.length }} 位正在直播</span>
+          <span class="follow-panel-count">{{ list.length }} 位</span>
         </div>
         <button class="follow-panel-close" type="button" aria-label="关闭" @click="handleClose">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -20,36 +20,36 @@
         </div>
         <div v-else-if="loading" class="follow-state">加载中...</div>
         <div v-else-if="!list.length" class="follow-state">
-          <p>关注的主播都还没开播</p>
+          <p>暂无关注用户</p>
         </div>
         <div v-else class="follow-grid">
           <div
-            v-for="item in list"
-            :key="item.liveIndexId"
+            v-for="user in list"
+            :key="user.user_id"
             class="follow-card"
-            @click="handleSelect(item)"
+            @click="handleSelect(user)"
           >
-            <div class="follow-card-cover">
-              <img
-                v-if="item.cover"
-                class="follow-card-cover-img"
-                :src="resolveImageUrl(item.cover)"
-                alt=""
-              />
-              <div v-else class="follow-card-empty">直播中</div>
-              <span class="follow-card-enter">进入直播间</span>
-            </div>
-            <div class="follow-card-info">
-              <img
-                v-if="item.avatar"
-                class="follow-card-avatar"
-                :src="resolveImageUrl(item.avatar)"
-                alt=""
-              />
-              <div v-else class="follow-card-avatar follow-card-avatar-empty" />
-              <div class="follow-card-text">
-                <span class="follow-card-title">{{ item.title || '直播中' }}</span>
-                <span class="follow-card-name">{{ item.nickname || '主播' }}</span>
+            <img
+              v-if="user.avatar"
+              class="follow-card-avatar"
+              :src="resolveImageUrl(user.avatar)"
+              alt=""
+            />
+            <div v-else class="follow-card-avatar follow-card-avatar-empty" />
+            <div class="follow-card-text">
+              <div class="follow-card-name-row">
+                <span class="follow-card-title">{{ user.nickname || `用户${user.user_show_id}` }}</span>
+                <span v-if="user.is_whitelist" class="follow-card-badge">白名单</span>
+              </div>
+              <div class="follow-card-meta">
+                <img
+                  v-if="levelIcon(user)"
+                  class="follow-card-level-icon"
+                  :src="levelIcon(user)"
+                  alt=""
+                />
+                <span v-if="levelName(user)" class="follow-card-level-name">{{ levelName(user) }}</span>
+                <span class="follow-card-contribute">贡献 {{ user.contribute || 0 }}</span>
               </div>
             </div>
           </div>
@@ -61,17 +61,16 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { fetchAttentionLiveList } from '../api/live';
-import type { NikoLiveListItem } from '../api/liveList';
+import { fetchAnchorPrepareWhitelist, type AnchorPrepareWhitelistUser } from '../api/live';
 import { resolveImageUrl } from '../config';
 
 const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'select', item: NikoLiveListItem): void;
+  (e: 'select', user: AnchorPrepareWhitelistUser): void;
 }>();
 
-const list = ref<NikoLiveListItem[]>([]);
+const list = ref<AnchorPrepareWhitelistUser[]>([]);
 const loading = ref(false);
 const loadError = ref('');
 
@@ -79,15 +78,24 @@ async function loadList() {
   loading.value = true;
   loadError.value = '';
   try {
-    const result = await fetchAttentionLiveList(1, 500);
-    list.value = result.list;
+    // 主播预备白名单用户列表：type=2 关注
+    list.value = await fetchAnchorPrepareWhitelist({ page: 1, pageSize: 200, type: 2 });
   } catch (error) {
     list.value = [];
     loadError.value = error instanceof Error ? error.message : String(error);
-    console.error('[FollowListDialog] fetchAttentionLiveList failed:', error);
+    console.error('[FollowListDialog] fetchAnchorPrepareWhitelist failed:', error);
   } finally {
     loading.value = false;
   }
+}
+
+function levelIcon(user: AnchorPrepareWhitelistUser): string {
+  const icon = user.user_level_info?.user_level_icon;
+  return icon ? resolveImageUrl(icon) : '';
+}
+
+function levelName(user: AnchorPrepareWhitelistUser): string {
+  return user.user_level_info?.user_level_name || '';
 }
 
 watch(
@@ -104,8 +112,8 @@ function handleClose() {
   emit('close');
 }
 
-function handleSelect(item: NikoLiveListItem) {
-  emit('select', item);
+function handleSelect(user: AnchorPrepareWhitelistUser) {
+  emit('select', user);
 }
 </script>
 
@@ -222,66 +230,28 @@ function handleSelect(item: NikoLiveListItem) {
 }
 
 .follow-card {
-  width: 190px;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 240px;
+  padding: 0.625rem 0.75rem;
   border-radius: 0.75rem;
   background: #1c1d25;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.14);
   }
-}
-
-.follow-card-cover {
-  position: relative;
-  width: 100%;
-  height: 110px;
-  overflow: hidden;
-  background: #0d0e12;
-}
-
-.follow-card-cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.follow-card-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.follow-card-enter {
-  position: absolute;
-  right: 0.5rem;
-  bottom: 0.5rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.625rem;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.follow-card-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.625rem 0.625rem;
 }
 
 .follow-card-avatar {
   flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 50%;
   object-fit: cover;
   background: #2a2b33;
@@ -294,23 +264,60 @@ function handleSelect(item: NikoLiveListItem) {
 .follow-card-text {
   display: flex;
   flex-direction: column;
+  gap: 0.1875rem;
   min-width: 0;
 }
 
-.follow-card-title,
-.follow-card-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.75rem;
+.follow-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
 .follow-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
   color: #fff;
 }
 
-.follow-card-name {
+.follow-card-badge {
+  flex: none;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  color: #ffcf6b;
+  background: rgba(255, 207, 107, 0.14);
+  border: 1px solid rgba(255, 207, 107, 0.35);
+}
+
+.follow-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
   font-size: 0.6875rem;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.follow-card-level-icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  object-fit: contain;
+}
+
+.follow-card-level-name {
+  flex: none;
+  color: rgba(255, 207, 107, 0.85);
+}
+
+.follow-card-contribute {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

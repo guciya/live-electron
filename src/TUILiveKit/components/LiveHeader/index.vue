@@ -42,6 +42,7 @@
           <path d="M4 5.5h16v11H8.5L4 20V5.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span>消息</span>
+        <span v-if="messageUnread > 0" class="header-entry-badge">{{ messageUnread > 99 ? '99+' : messageUnread }}</span>
       </button>
       <div
         class="language-switch"
@@ -132,6 +133,8 @@ import { onMounted, onBeforeUnmount, ref, computed, type Ref } from 'vue';
 import { useUIKit, IconArrowStrokeSelectDown } from '@tencentcloud/uikit-base-component-vue3';
 import { showMessage, MessageToastType } from '../../base-component/MessageToast';
 import TUIRoomEngine from '@tencentcloud/tuiroom-engine-electron';
+import { TUILogin } from '@tencentcloud/tui-core-lite';
+import { TUIChatEngine } from '@tencentcloud/chat-uikit-engine-lite';
 import { useLoginState, Avatar } from 'tuikit-atomicx-vue3-electron';
 import type { TRTCStatistics } from 'trtc-electron-sdk';
 import SvgIcon from '../../common/base/SvgIcon.vue';
@@ -380,20 +383,70 @@ function handleLogOut() {
   emit('logout');
 }
 
+/**
+ * 未读私信红点：统计 C2C 会话未读数（直播间群消息不计入）。
+ * 10s 轮询 + 打开消息中心后由父组件调用 refreshMessageUnread 立即刷新。
+ */
+const messageUnread = ref(0);
+let unreadTimer: ReturnType<typeof setInterval> | null = null;
+
+const refreshMessageUnread = async () => {
+  try {
+    const chat = (TUILogin as any).getContext?.()?.chat || (TUIChatEngine as any)?.chat;
+    if (!chat?.getConversationList) {
+      return;
+    }
+    const res = await chat.getConversationList();
+    const list: any[] = res?.data?.conversationList || [];
+    messageUnread.value = list
+      .filter((conv) => String(conv.conversationID || '').startsWith('C2C'))
+      .reduce((sum, conv) => sum + Number(conv.unreadCount || 0), 0);
+  } catch (error) {
+    // IM 尚未就绪 / 登录切换中，忽略
+  }
+};
+
 onMounted(async () => {
   trtcCloud.on('onStatistics', onStatistics);
   ipcBridge.on(IPCMessageType.UPDATE_USER_PROFILE, onSaveProfileDialog);
+  void refreshMessageUnread();
+  unreadTimer = setInterval(refreshMessageUnread, 10000);
 });
 
 onBeforeUnmount(() => {
   trtcCloud.off('onStatistics', onStatistics);
   ipcBridge.off(IPCMessageType.UPDATE_USER_PROFILE, onSaveProfileDialog);
+  if (unreadTimer) {
+    clearInterval(unreadTimer);
+    unreadTimer = null;
+  }
 });
+
+defineExpose({ refreshMessageUnread });
 
 </script>
 
 <style lang="scss" scoped>
 @import "../../assets/variable.scss";
+.header-entry-btn {
+  position: relative;
+}
+.header-entry-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+  pointer-events: none;
+}
 .live-header {
   width: 100%;
   display: flex;

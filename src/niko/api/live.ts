@@ -382,6 +382,35 @@ export async function fetchRecommendLiveList(
 
 // ==================== 关注列表 ====================
 
+/** 主播预备白名单用户（/live/anchorPrepareWhitelist，type 1 贡献 / 2 关注 / 3 粉丝） */
+export interface AnchorPrepareWhitelistUser {
+  user_id: number;
+  user_show_id: number;
+  nickname: string;
+  avatar?: string;
+  gender?: number;
+  age?: number;
+  introduction?: string;
+  contribute?: number;
+  is_whitelist?: boolean;
+  user_level_info?: UserLevelInfo;
+  user_level?: number;
+  frame_info?: unknown;
+}
+
+/** 主播预备白名单用户列表；type：1 贡献 / 2 关注 / 3 粉丝 */
+export function fetchAnchorPrepareWhitelist(params: {
+  page?: number;
+  pageSize?: number;
+  type?: number;
+} = {}): Promise<AnchorPrepareWhitelistUser[]> {
+  return request.post('/live/anchorPrepareWhitelist', {
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 100,
+    type: params.type ?? 2,
+  }) as unknown as Promise<AnchorPrepareWhitelistUser[]>;
+}
+
 /**
  * 关注主播在播列表（/live/attentionLiveList）。
  * 返回结构与 recommendLiveList 一致（数组，元素含 play_info / anchor_level_info），
