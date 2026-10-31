@@ -130,10 +130,6 @@
         <div v-else-if="!liveList.length" class="anchor-empty">
           <IconLive class="anchor-empty-icon" />
           <p class="anchor-empty-text">暂无主播正在直播</p>
-          <!-- <button class="anchor-start-live-btn anchor-empty-start" type="button" @click="handleStartLive"> -->
-            <!-- <IconLiveStart class="start-live-icon" /> -->
-            <!-- <span>去开播</span> -->
-          <!-- </button> -->
         </div>
 
         <div v-else class="anchor-grid">
@@ -224,6 +220,78 @@
         <span>开播</span>
       </button>
 
+      <!-- 关注列表弹窗：/live/attentionLiveList 在播的关注主播 -->
+      <div v-if="followListVisible" class="follow-mask" @click.self="closeFollowList">
+        <div class="follow-panel">
+          <div class="follow-panel-header">
+            <div class="follow-panel-title">
+              <span>关注列表</span>
+              <span class="follow-panel-count">{{ followList.length }} 位正在直播</span>
+            </div>
+            <button class="follow-panel-close" type="button" aria-label="关闭" @click="closeFollowList">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="follow-panel-body">
+            <div v-if="followError" class="follow-state">
+              <p>关注列表加载失败：{{ followError }}</p>
+              <button class="anchor-retry-btn" type="button" :disabled="followLoading" @click="loadFollowList">重试</button>
+            </div>
+            <div v-else-if="followLoading" class="follow-state">加载中...</div>
+            <div v-else-if="!followList.length" class="follow-state">
+              <IconLive class="follow-empty-icon" />
+              <p>关注的主播都还没开播</p>
+            </div>
+            <div v-else class="follow-grid">
+              <div
+                v-for="item in followList"
+                :key="item.liveIndexId"
+                class="follow-card"
+                @click="enterFollowLive(item)"
+              >
+                <div class="follow-card-cover">
+                  <video
+                    v-if="item.playUrl"
+                    :ref="(el) => setFollowVideoRef(item.liveIndexId, el)"
+                    :data-live-id="item.liveIndexId"
+                    class="follow-card-video"
+                    muted
+                    autoplay
+                    playsinline
+                  />
+                  <img
+                    v-else-if="item.cover"
+                    class="follow-card-video"
+                    :src="resolveImageUrl(item.cover)"
+                    alt=""
+                  />
+                  <div v-else class="follow-card-empty">
+                    <IconLive />
+                  </div>
+                  <span class="follow-card-enter">进入直播间</span>
+                </div>
+                <div class="follow-card-info">
+                  <img
+                    v-if="item.avatar"
+                    class="follow-card-avatar"
+                    :src="resolveImageUrl(item.avatar)"
+                    alt=""
+                  />
+                  <div v-else class="follow-card-avatar follow-card-avatar-empty" />
+                  <div class="follow-card-text">
+                    <span class="follow-card-title">{{ item.title || '直播中' }}</span>
+                    <span class="follow-card-name">{{ item.nickname || '主播' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 退出登录确认弹窗 -->
       <div v-if="showLogoutConfirm" class="logout-confirm-mask" @click.self="cancelLogout">
         <div class="logout-confirm-dialog">
@@ -256,7 +324,7 @@ import { isMacPlatform } from '../TUILiveKit/utils/platform';
 import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
 import { NIKO_CONFIG, resolveImageUrl } from '../niko/config';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
-import { fetchRecommendLiveList } from '../niko/api/live';
+import { fetchAttentionLiveList, fetchRecommendLiveList } from '../niko/api/live';
 import { type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
@@ -421,9 +489,112 @@ function handleStartLive() {
   router.push({ name: isMacPlatform() ? 'tui-livekit-mac' : 'tui-live-kit-main' });
 }
 
-// 关注列表：H5 主项目暂无该页面/接口，先提示暂未开放
+// 关注列表：GET 关注主播在播列表（/live/attentionLiveList）
+const followListVisible = ref(false);
+const followList = ref<NikoLiveListItem[]>([]);
+const followLoading = ref(false);
+const followError = ref('');
+
+async function loadFollowList() {
+  followLoading.value = true;
+  followError.value = '';
+  try {
+    const result = await fetchAttentionLiveList(0, 0);
+    followList.value = result.list;
+  } catch (error) {
+    followList.value = [];
+    followError.value = error instanceof Error ? error.message : String(error);
+    console.error('[AnchorList] fetchAttentionLiveList failed:', error);
+  } finally {
+    followLoading.value = false;
+  }
+}
+
 function handleOpenFollowList() {
-  showMessage({ type: MessageToastType.Info, message: '关注列表功能暂未开放，敬请期待' });
+  followListVisible.value = true;
+  void loadFollowList();
+}
+
+function closeFollowList() {
+  followListVisible.value = false;
+  // 关闭弹窗时停止所有预览拉流，避免后台继续占用带宽
+  followPreviewHandles.forEach((handle) => handle.destroy());
+  followPreviewHandles.clear();
+  followVideoEls.clear();
+}
+
+/* ---------------- 关注列表预览（独立于主列表，避免与主列表共用播放器） ---------------- */
+const followVideoEls = new Map<string, HTMLVideoElement>();
+const followPreviewHandles = new Map<string, StreamPlayerHandle>();
+
+function stopFollowPreview(id: string) {
+  const handle = followPreviewHandles.get(id);
+  if (handle) {
+    handle.destroy();
+    followPreviewHandles.delete(id);
+  }
+}
+
+async function startFollowPreview(id: string) {
+  if (followPreviewHandles.has(id)) {
+    return;
+  }
+  const el = followVideoEls.get(id);
+  if (!el) {
+    return;
+  }
+  const item = followList.value.find((entry) => entry.liveIndexId === id);
+  if (!item?.playUrl) {
+    return;
+  }
+  try {
+    const handle = await createStreamPlayer(el, item.playUrl, {
+      muted: true,
+      onError: (detail) => console.warn('[AnchorList] follow preview failed:', id, detail),
+    });
+    if (followVideoEls.get(id) !== el) {
+      handle.destroy();
+      return;
+    }
+    followPreviewHandles.set(id, handle);
+  } catch (error) {
+    console.warn('[AnchorList] follow preview error:', id, error);
+  }
+}
+
+function setFollowVideoRef(id: string, el: Element | ComponentPublicInstance | null) {
+  if (el instanceof HTMLVideoElement) {
+    followVideoEls.set(id, el);
+    followPreviewObserver?.observe(el);
+    return;
+  }
+  followVideoEls.delete(id);
+  stopFollowPreview(id);
+}
+
+const followPreviewObserver: IntersectionObserver | null = typeof IntersectionObserver === 'undefined'
+  ? null
+  : new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const videoEl = entry.target as HTMLVideoElement;
+        const id = videoEl.dataset.liveId || '';
+        if (!id) {
+          return;
+        }
+        if (entry.isIntersecting) {
+          void startFollowPreview(id);
+        } else {
+          stopFollowPreview(id);
+        }
+      });
+    },
+    { rootMargin: '200px' },
+  );
+
+function enterFollowLive(item: NikoLiveListItem) {
+  closeFollowList();
+  handleCardClick(item);
 }
 
 // 消息：打开消息中心弹窗（基于 TUIChatEngine C2C 单聊）
@@ -1032,26 +1203,6 @@ onBeforeUnmount(() => {
     font-size: 0.875rem;
     color: var(--text-color-secondary, rgba(255, 255, 255, 0.65));
   }
-
-  .anchor-empty-start {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    height: 2.125rem;
-    padding: 0 1rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: #fff;
-    cursor: pointer;
-    background-color: var(--button-color-primary-default, #1c66e5);
-    border: none;
-    border-radius: 0.375rem;
-
-    .start-live-icon {
-      width: 1rem;
-      height: 1rem;
-    }
-  }
 }
 
 .anchor-grid {
@@ -1451,5 +1602,223 @@ onBeforeUnmount(() => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ==================== 关注列表弹窗 ==================== */
+.follow-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  animation: logout-mask-fade-in 0.2s ease;
+}
+
+.follow-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, calc(100vw - 4rem));
+  max-height: calc(100vh - 6rem);
+  background: var(--bg-color-dialog, #22252b);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.follow-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.follow-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
+
+  .follow-panel-count {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+.follow-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 0.375rem;
+
+  &:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+.follow-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  overflow-y: auto;
+}
+
+.follow-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem 0;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.55);
+
+  p {
+    margin: 0;
+    word-break: break-all;
+  }
+
+  .follow-empty-icon {
+    width: 3rem;
+    height: 3rem;
+    color: rgba(255, 255, 255, 0.28);
+  }
+
+  .anchor-retry-btn {
+    height: 1.875rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    color: #fff;
+    cursor: pointer;
+    background-color: #dc3545;
+    border: none;
+    border-radius: 0.25rem;
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.follow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.875rem;
+}
+
+.follow-card {
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.5rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+
+  &:hover {
+    border-color: rgba(255, 122, 162, 0.45);
+    transform: translateY(-2px);
+
+    .follow-card-enter {
+      opacity: 1;
+    }
+  }
+}
+
+.follow-card-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: #000;
+}
+
+.follow-card-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.follow-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.follow-card-enter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.follow-card-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.follow-card-avatar {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.1);
+
+  &.follow-card-avatar-empty {
+    display: block;
+  }
+}
+
+.follow-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.125rem;
+}
+
+.follow-card-title {
+  font-size: 0.75rem;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.follow-card-name {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

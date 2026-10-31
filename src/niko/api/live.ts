@@ -380,6 +380,23 @@ export async function fetchRecommendLiveList(
   }
 }
 
+// ==================== 关注列表 ====================
+
+/**
+ * 关注主播在播列表（/live/attentionLiveList）。
+ * 返回结构与 recommendLiveList 一致（数组，元素含 play_info / anchor_level_info），
+ * 复用 toList 归一化，页面可直接用 NikoLiveListItem 渲染卡片。
+ * page / pageSize 传 0 表示不分页（返回全部关注在播主播）。
+ */
+export async function fetchAttentionLiveList(
+  page = 0,
+  pageSize = 0,
+): Promise<{ list: NikoLiveListItem[]; total: number }> {
+  console.log('[AttentionLiveList] POST /live/attentionLiveList', { page, pageSize });
+  const data = await (request.post('/live/attentionLiveList', { page, pageSize }) as unknown as Promise<unknown>);
+  return toList(data);
+}
+
 // ==================== 主播中心子页 ====================
 
 /** 用户等级信息（多个接口共用的结构） */

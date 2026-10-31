@@ -342,10 +342,10 @@ watch(() => props.visible, async (visible) => {
 .msg-panel {
   display: flex;
   flex-direction: column;
-  width: 46rem;
-  height: 32rem;
-  max-width: 92vw;
-  max-height: 88vh;
+  width: 64rem;
+  height: 44rem;
+  max-width: 94vw;
+  max-height: 92vh;
   overflow: hidden;
   color: #fff;
   background: linear-gradient(180deg, #23242b 0%, #191a20 100%);
@@ -408,7 +408,7 @@ watch(() => props.visible, async (visible) => {
 
 .msg-side {
   flex: none;
-  width: 15rem;
+  width: 18rem;
   display: flex;
   flex-direction: column;
   overflow-y: auto;

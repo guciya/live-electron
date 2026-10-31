@@ -31,7 +31,7 @@
       <div v-if="activeTab === 'rush'" class="rank-rush">
         <div class="rank-rush-timer">
           <span>本轮抢热推倒计时 {{ rushCountdownText }}</span>
-          <span class="rank-rush-refresh" title="刷新" @click.stop="loadRank">↻</span>
+          <span class="rank-rush-refresh" title="刷新" @click.stop="loadRank({ silent: true })">↻</span>
         </div>
         <div class="rank-rush-anchor">
           <div class="rank-rush-avatar-wrap">
@@ -47,7 +47,7 @@
       <div v-if="loading" class="rank-tip">加载中...</div>
       <div v-else-if="loadError" class="rank-tip">
         <span>{{ loadError }}</span>
-        <button class="rank-retry" type="button" @click="loadRank">重试</button>
+        <button class="rank-retry" type="button" @click="loadRank()">重试</button>
       </div>
 
       <!-- 前三名领奖台（抢热推不设领奖台，直接列表展示） -->
@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { resolveImageUrl } from '../config';
 import { useAuthStore } from '../store/auth';
 import { getAnchorRank, type AnchorRankResult } from '../api/live';
@@ -132,9 +132,19 @@ const authStore = useAuthStore();
 /** rankType：3 抢热推 / 1 小时榜 / 2 主播日榜 */
 const RANK_TYPE: Record<TabKey, number> = { rush: 3, hour: 1, day: 2 };
 
-const rankData = ref<AnchorRankResult | null>(null);
-const loading = ref(false);
+/**
+ * 按 tab 缓存榜单数据：
+ * - 切 tab / 再次打开弹窗时直接复用缓存，接口在后台静默刷新
+ * - 只有「该 tab 还没有任何数据」时才展示加载中，避免内容来回闪烁
+ */
+const rankCache = reactive<Partial<Record<TabKey, AnchorRankResult>>>({});
+/** 正在展示加载态（无缓存）的 tab */
+const loadingTab = ref<TabKey | null>(null);
 const loadError = ref('');
+
+/** 当前 tab 的榜单数据 */
+const rankData = computed<AnchorRankResult | null>(() => rankCache[activeTab.value] ?? null);
+const loading = computed(() => loadingTab.value === activeTab.value);
 
 interface RankSlot {
   rank: number;
@@ -204,6 +214,8 @@ const myAvatar = computed(() => {
 
 /** 抢热推倒计时：使用服务端下发的本轮剩余秒数 */
 const rushRemain = ref(0);
+/** 本轮倒计时是否已经触发过刷新（防止服务端一直返回 0 时每秒重复请求） */
+let rushExpired = false;
 let rushTimer: number | null = null;
 
 const rushCountdownText = computed(() => {
@@ -212,38 +224,56 @@ const rushCountdownText = computed(() => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 });
 
-let requestSeq = 0;
+/** 同一 tab 的并发请求去重，避免轮询 + 手动点击叠加导致反复刷新 */
+const inflight = new Set<TabKey>();
 
-async function loadRank() {
+/**
+ * 拉取榜单。
+ * @param options.silent true = 静默刷新：不展示加载态、失败保留旧数据，用户无感知
+ */
+async function loadRank(options: { silent?: boolean } = {}) {
   const liveIndexId = props.liveIndexId;
+  const tab = activeTab.value;
   if (!liveIndexId) {
-    rankData.value = null;
+    delete rankCache[tab];
     return;
   }
-  const seq = ++requestSeq;
-  loading.value = true;
-  loadError.value = '';
+  if (inflight.has(tab)) {
+    return;
+  }
+  inflight.add(tab);
+  const silent = options.silent ?? Boolean(rankCache[tab]);
+  if (!silent) {
+    loadingTab.value = tab;
+    loadError.value = '';
+  }
   try {
     const result = await getAnchorRank({
       liveIndexId,
-      rankType: RANK_TYPE[activeTab.value],
+      rankType: RANK_TYPE[tab],
       isEarlier: 0,
     });
-    if (seq !== requestSeq) {
-      return;
+    // 直接覆盖缓存，模板用同一份数据平滑替换，不会出现中间态闪烁
+    rankCache[tab] = result;
+    if (tab === 'rush') {
+      rushRemain.value = result?.minute_rank_remain_second || 0;
+      if (rushRemain.value > 0) {
+        rushExpired = false;
+      }
     }
-    rankData.value = result;
-    rushRemain.value = result?.minute_rank_remain_second || 0;
+    if (tab === activeTab.value) {
+      loadError.value = '';
+    }
   } catch (error) {
-    if (seq !== requestSeq) {
-      return;
+    // 静默刷新失败：保留已有数据，不打扰用户
+    if (!silent && !rankCache[tab]) {
+      loadError.value = error instanceof Error ? error.message : '加载失败';
     }
-    rankData.value = null;
-    loadError.value = error instanceof Error ? error.message : '加载失败';
     console.warn('[PopularityRankPanel] load rank failed:', error);
   } finally {
-    if (seq === requestSeq) {
-      loading.value = false;
+    inflight.delete(tab);
+    if (loadingTab.value === tab) {
+      loadingTab.value = null;
     }
   }
 }
@@ -253,11 +283,16 @@ function startRushTimer() {
   rushTimer = window.setInterval(() => {
     if (rushRemain.value > 0) {
       rushRemain.value -= 1;
+      rushExpired = false;
       return;
     }
-    // 本轮结束，重新拉取榜单
-    if (props.visible) {
-      loadRank();
+    // 本轮倒计时刚走完：只静默刷新一次
+    if (rushExpired) {
+      return;
+    }
+    rushExpired = true;
+    if (props.visible && activeTab.value === 'rush') {
+      void loadRank({ silent: true });
     }
   }, 1000);
 }
@@ -273,7 +308,8 @@ watch(
   () => props.visible,
   (visible) => {
     if (visible) {
-      loadRank();
+      // 有缓存 → 静默刷新（用户无感）；首次打开 → 正常加载
+      void loadRank({ silent: Boolean(rankCache[activeTab.value]) });
       startRushTimer();
     } else {
       stopRushTimer();
@@ -282,11 +318,30 @@ watch(
   { immediate: true },
 );
 
-watch(activeTab, () => {
-  if (props.visible) {
-    loadRank();
+watch(activeTab, (tab) => {
+  if (!props.visible) {
+    return;
   }
+  if (tab === 'rush' && rankCache.rush) {
+    rushRemain.value = rankCache.rush.minute_rank_remain_second || 0;
+    rushExpired = false;
+  }
+  void loadRank({ silent: Boolean(rankCache[tab]) });
 });
+
+// 切换直播间时清空缓存，避免把上一个直播间的榜单带过来
+watch(
+  () => props.liveIndexId,
+  () => {
+    (Object.keys(rankCache) as TabKey[]).forEach((key) => delete rankCache[key]);
+    loadError.value = '';
+    rushRemain.value = 0;
+    rushExpired = false;
+    if (props.visible) {
+      void loadRank();
+    }
+  },
+);
 
 onUnmounted(stopRushTimer);
 </script>
