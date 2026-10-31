@@ -49,7 +49,7 @@ function handleAuthFailure(url: string, message?: string) {
 
 export const request = axios.create({
   timeout: 20000,
-  headers: { 'Content-Type': 'application/json', platform: 'pc' },
+  headers: { 'Content-Type': 'application/json', platform: 'h5' },
 });
 
 request.interceptors.request.use((config) => {
