@@ -47,7 +47,7 @@
             </svg>
             <span>提现</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('家族入驻')">
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('family')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 10.5 12 3l9 7.5" />
               <path d="M5 9.5V21h14V9.5" />
@@ -55,7 +55,7 @@
             </svg>
             <span>家族入驻</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('公会入驻')">
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('guild')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="4" y="3" width="16" height="18" rx="1" />
               <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" />
@@ -663,8 +663,9 @@ const H5_ORIGIN = NIKO_CONFIG.h5WebBase;
 
 // 公会|家族：组织页（带尾斜杠，子应用相对路径资源才不会 404）
 const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
-// 家族入驻 / 公会入驻：同一个入驻页（生产域；测试域 test-h5.nikolive.cn 未部署该子应用）
-const SETTLE_URL = `${H5_ORIGIN}/os/#/settle`;
+// 家族入驻 / 公会入驻：h5-organization-settled（vite base = /organization-settled，HashRouter）
+const FAMILY_SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/apply/family`;
+const GUILD_SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/apply/guild`;
 // 提现页（生产域）
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
 
@@ -705,8 +706,9 @@ function goAnchorCenter() {
   router.push({ name: 'anchor-center' });
 }
 
-function openSettlePage(title: string) {
-  openExternalWithSso(SETTLE_URL, title);
+function openSettlePage(kind: 'family' | 'guild') {
+  const url = kind === 'guild' ? GUILD_SETTLE_URL : FAMILY_SETTLE_URL;
+  openExternalWithSso(url, kind === 'guild' ? '公会入驻' : '家族入驻');
 }
 
 function openWithdrawPage() {
