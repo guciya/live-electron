@@ -5,7 +5,14 @@
         <span class="login-loading-text">{{ t('Logging In') }}</span>
       </div>
       <template v-else>
-      <LiveHeader @logout="handleLogout" @back-to-list="handleBackToList" :is-showing-in-child-window="true"/>
+      <LiveHeader
+        @logout="handleLogout"
+        @back-to-list="handleBackToList"
+        :is-showing-in-child-window="true"
+        show-entrances
+        @open-follow-list="followListVisible = true"
+        @open-message="handleOpenMessage"
+      />
       <div class="live-pusher-main">
         <div class="main-left">
           <div class="main-left-top">
@@ -230,6 +237,19 @@
           @invited="onPkInvited"
         />
 
+        <!-- 关注列表：/live/attentionLiveList 在播的关注主播 -->
+        <FollowListDialog
+          :visible="followListVisible"
+          @close="followListVisible = false"
+          @select="enterFollowLive"
+        />
+
+        <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
+        <MessageCenter
+          :visible="messageCenterVisible"
+          @close="messageCenterVisible = false"
+        />
+
         <!-- 关播结算（对齐 web-obs-live 的结算层） -->
         <div v-if="settleStats" class="niko-settle-mask">
           <div class="niko-settle-card">
@@ -320,6 +340,9 @@ import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import AudiencePanel from '../niko/components/AudiencePanel.vue';
+import FollowListDialog from '../niko/components/FollowListDialog.vue';
+import MessageCenter from '../niko/components/MessageCenter.vue';
+import type { NikoLiveListItem } from '../niko/api/liveList';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
@@ -374,7 +397,7 @@ const nativeId = ref<number | Uint8Array | null>(null);
 const mixerActive = ref(true);
 
 const router = useRouter();
-const { loginUserInfo } = useLoginState();
+const { loginUserInfo, login: loginIm } = useLoginState();
 const { t, language } = useUIKit();
 const loading = ref(false);
 const isToolsExpanded = ref(true);
@@ -531,6 +554,51 @@ const handleBackToList = () => {
   }
   router.replace({ name: 'anchor-list' });
 };
+
+/** 关注列表弹窗 */
+const followListVisible = ref(false);
+/** 消息中心弹窗 */
+const messageCenterVisible = ref(false);
+
+/** 点击关注列表里在播的主播：直接进该主播的观众端直播间 */
+function enterFollowLive(item: NikoLiveListItem) {
+  followListVisible.value = false;
+  router.push({
+    name: 'live-player',
+    query: {
+      liveId: item.liveIndexId,
+      roomId: item.roomId,
+      liveTitle: item.title,
+      anchorName: item.nickname,
+      anchorId: item.anchorUserId,
+      avatar: item.avatar,
+      viewerCount: String(item.viewerCount),
+    },
+    // play_url 带 txSecret/txTime 签名，放 query 会被二次编码破坏签名，因此用 history.state 传递
+    state: { playUrl: item.playUrl },
+  });
+}
+
+/** 打开消息中心：开播页本身已登录 IM，这里再兜底补登一次，避免过早点击时 IM 尚未就绪 */
+async function handleOpenMessage() {
+  try {
+    const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+    if (stored) {
+      const { sdkAppId, userId, userSig } = JSON.parse(stored);
+      // useLoginState().login 内部幂等：已登录且同 userId 直接返回
+      await loginIm({
+        sdkAppId: Number(sdkAppId),
+        userId: String(userId),
+        userSig: String(userSig),
+      });
+    }
+    messageCenterVisible.value = true;
+  } catch (error: any) {
+    console.error('[TUILiveKitWin] open message center failed:', error);
+    showMessage({ type: MessageToastType.Error, message: `消息中心打开失败：${error?.message || 'IM 登录失败'}` });
+  }
+}
+
 // 当前 SDKAppID 未开通直播房间套餐，使用 Conference 类型进房，手动维护直播状态
 const nikoIsLive = ref(false);
 const isInLive = computed(() => nikoIsLive.value || !!currentLive.value?.liveId);

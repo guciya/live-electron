@@ -1623,14 +1623,14 @@ function injectSsoToInternalPage() {
 }
 
 /**
- * 内嵌 H5 业务页窗口尺寸：屏幕可用区域的 40% 宽、90% 高。
+ * 内嵌 H5 业务页窗口尺寸：固定 580 × 1200（不超过屏幕可用区域）。
  */
 function computeInternalPageBounds() {
   const { screen } = require('electron');
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   return {
-    width: Math.max(520, Math.round(workArea.width * 0.4)),
-    height: Math.max(600, Math.round(workArea.height * 0.9)),
+    width: Math.min(580, workArea.width),
+    height: Math.min(1200, workArea.height),
   };
 }
 
@@ -1738,8 +1738,10 @@ function openInternalPage(url, title, sso) {
   internalPageWindow = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
-    minWidth: 520,
-    minHeight: 600,
+    minWidth: 580,
+    minHeight: 700,
+    maxWidth: 580,
+    maxHeight: 1200,
     resizable: true,
     show: false,
     parent: windowMap.main || undefined,

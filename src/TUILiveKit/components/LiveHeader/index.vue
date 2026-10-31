@@ -20,6 +20,29 @@
         </svg>
         <span>返回列表</span>
       </button>
+      <!-- 关注列表 / 消息：仅开播页启用（放在「返回列表」右侧） -->
+      <button
+        v-if="showEntrances"
+        class="back-list-btn header-entry-btn"
+        type="button"
+        @click="emit('openFollowList')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 20s-7-4.35-7-9a4 4 0 017-2.65A4 4 0 0119 11c0 4.65-7 9-7 9z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>关注列表</span>
+      </button>
+      <button
+        v-if="showEntrances"
+        class="back-list-btn header-entry-btn"
+        type="button"
+        @click="emit('openMessage')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 5.5h16v11H8.5L4 20V5.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>消息</span>
+      </button>
       <div
         class="language-switch"
         v-click-outside="closeLanguageMenu"
@@ -133,11 +156,18 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // 开播页专用：在「返回列表」右侧展示关注列表 / 消息入口
+  showEntrances: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits<{
   logout: [];
   backToList: [];
+  openFollowList: [];
+  openMessage: [];
 }>();
 
 const { t, language, setLanguage } = useUIKit();
