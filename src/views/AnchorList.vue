@@ -664,8 +664,8 @@ const H5_ORIGIN = NIKO_CONFIG.h5WebBase;
 // 公会|家族：组织页（带尾斜杠，子应用相对路径资源才不会 404）
 const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
 // 家族入驻 / 公会入驻：h5-organization-settled（vite base = /organization-settled，HashRouter）
-const FAMILY_SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/apply/family`;
-const GUILD_SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/apply/guild`;
+// 两个入口统一落到入驻首页 #/settle，由页面内自行选择家族/公会
+const SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/settle`;
 // 提现页（生产域）
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
 
@@ -707,8 +707,7 @@ function goAnchorCenter() {
 }
 
 function openSettlePage(kind: 'family' | 'guild') {
-  const url = kind === 'guild' ? GUILD_SETTLE_URL : FAMILY_SETTLE_URL;
-  openExternalWithSso(url, kind === 'guild' ? '公会入驻' : '家族入驻');
+  openExternalWithSso(SETTLE_URL, kind === 'guild' ? '公会入驻' : '家族入驻');
 }
 
 function openWithdrawPage() {

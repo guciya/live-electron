@@ -31,11 +31,10 @@ import './niko/utils/time'
 window.ipcRenderer?.on('show-feature-pending', (_event: unknown, label: string) => {
   showMessage({ type: MessageToastType.Info, message: `${label}功能暂未开放，敬请期待` });
 });
-// 家族入驻 / 公会入驻：h5-organization-settled（HashRouter，/apply/family 与 /apply/guild）
+// 家族入驻 / 公会入驻：h5-organization-settled（HashRouter），统一落到入驻首页 #/settle
 window.ipcRenderer?.on('open-settle-page', (_event: unknown, title: string) => {
-  const isGuild = String(title).includes('公会');
   window.ipcRenderer?.send('open-internal-url', {
-    url: `${NIKO_CONFIG.h5WebBase}/organization-settled/#/${isGuild ? 'apply/guild' : 'apply/family'}`,
+    url: `${NIKO_CONFIG.h5WebBase}/organization-settled/#/settle`,
     title: title || '入驻申请',
     sso: {
       token: readStoredAuthToken(),
