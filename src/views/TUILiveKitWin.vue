@@ -1588,6 +1588,26 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // please purchase roomkit first），kLive / kConference 均不可用，
     // 因此不再通过 TUIRoomEngine 建房，完全对齐 web-obs-live：
     // 原生 TRTC 以主播身份进房推流 + LiteChat 加入同 ID 的 IM 群（聊天室 / 在线观众）。
+
+    // ⚠️ 关键：trtcCloud 是全局单例，TUIRoomEngine WASM 也会缓存上次进的房间。
+    // AnchorList 进直播间 → LivePlayer enterRoom(room_X, audience) → 返回 → cleanupTrtc()
+    // 是 fire-and-forget，WASM 内部还残留 room_X 的状态。
+    // 如果直接 enterTrtcRoom(新房间)，会看到旧房间的用户画面（onRemoteUserEnterRoom 漏进来）。
+    // 这里先 await exitRoom() 确保旧房间完全退出，再以 anchor 身份进新房间。
+    await new Promise<void>((resolve) => {
+      try {
+        const exitRet = trtcCloud.exitRoom();
+        if (exitRet && typeof (exitRet as any).then === 'function') {
+          (exitRet as Promise<any>).then(() => resolve(), () => resolve());
+        } else {
+          // 没有 Promise 返回时，等 300ms 让 SDK C++ 层处理完
+          setTimeout(resolve, 300);
+        }
+      } catch {
+        resolve(); // 没进房过也会报错，忽略
+      }
+    });
+
     await enterTrtcRoom(trtcRoomId);
     // 进房成功后再赋值 roomId：LiveChatPanel 监听该值去登录 IM 并加群，
     // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰。
@@ -2336,16 +2356,21 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
-  // 关键清理：TUILiveKitWin 是独立子窗口，但 TRTC SDK 在同一 Electron 进程里
-  // 与主窗口 LivePlayer 共享状态。主窗口退出直播时 exitRoom 可能没完全释放
-  // 摄像头/视频 encoder，导致新窗口一进来就"映射"到旧 session 的画面。
-  // 这里先显式 stop 所有本地设备，确保干净起点。
+  // trtcCloud 是全局单例。这里的 cleanup 只负责本地设备释放，
+  // 不做 exitRoom（SSO channel 会被 tear down，WASM 模块 init 时 race）。
+  // 真正的 exitRoom 兜底在 onPreLiveConfirm 里做（login 完成后、enterRoom 之前）。
   try {
-    trtcCloud.stopLocalVideo();
-    trtcCloud.stopLocalPreview();
-    console.log('[Niko] cleared stale TRTC local device state');
+    // stopLocalVideo 在 trtcCloud export 上不存在（它是 StreamMixer 的方法），
+    // 只有 stopLocalPreview() 和 muteLocalVideo() 可用。用可选链安全调用。
+    if (typeof (trtcCloud as any).stopLocalPreview === 'function') {
+      (trtcCloud as any).stopLocalPreview();
+    }
+    if (typeof (trtcCloud as any).muteLocalVideo === 'function') {
+      (trtcCloud as any).muteLocalVideo(true, TRTCVideoStreamType.TRTCVideoStreamTypeBig);
+    }
+    console.log('[Niko] mounted: muted local video + stopped preview (safe cleanup)');
   } catch (_) {
-    // 忽略（可能尚未进房）
+    console.warn('[Niko] TRTC mounted cleanup warning:', _);
   }
   // 系统状态：立即预取 + 30s 轮询（主播名字上方展示）
   void refreshWinSystemStatus();
