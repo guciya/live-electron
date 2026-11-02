@@ -6,6 +6,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <title><%= htmlWebpackPlugin.options.title %></title>
+    <style>
+      /* Electron 窗口底层已设 backgroundColor: #101013，这里 HTML 解析阶段 body 就是深色，
+         彻底消除"窗口先白屏再变黑"的感觉 */
+      html, body { margin: 0; padding: 0; height: 100%; background: #101013; }
+      #app { height: 100%; }
+    </style>
   </head>
   <body>
     <noscript>

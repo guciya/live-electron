@@ -1,6 +1,32 @@
 import { request } from '../request';
 import { toList, type NikoLiveListItem } from './liveList';
 
+export interface LiveGetLiveInfoParams {
+  liveIndexId: number | string;
+}
+
+/** 直播间详情（含是否已关注主播）
+ *  观众进入关注列表里的直播间时调用，后端返回当前登录用户是否已关注该主播。 */
+export interface LiveGetLiveInfoResult {
+  live_index_id?: number;
+  room_id?: string;
+  anchor_info?: {
+    anchor_id?: number;
+    nickname?: string;
+    avatar?: string;
+    /** 当前登录用户是否已关注该主播 */
+    is_follow?: boolean;
+  };
+  is_follow?: boolean;
+  /** 后端可能直接返回关注状态，兼容两种写法 */
+  [key: string]: any;
+}
+
+/** GET/POST 直播间详情（含关注状态） */
+export function getLiveInfo(params: LiveGetLiveInfoParams): Promise<LiveGetLiveInfoResult> {
+  return request.post('/live/getLiveInfo', params) as unknown as Promise<LiveGetLiveInfoResult>;
+}
+
 export interface LiveCategory {
   id: string | number;
   name: string;
@@ -358,16 +384,9 @@ export async function fetchRecommendLiveList(
     }
   }
 
-  console.log('[RecommendLiveList] POST /live/recommendLiveList', { page, pageSize, force: !!options.force });
+  // 日志频繁打印影响调试，已移除（request.ts 里统一的 [NikoAuth] request 日志保留）
   const task = (request.post('/live/recommendLiveList', { page, pageSize }) as unknown as Promise<unknown>)
-    .then((data) => {
-      // 只打印一次原始结构，便于字段对不上时快速定位
-      if (!recommendRawLogged) {
-        recommendRawLogged = true;
-        console.log('[RecommendLiveList] raw response:', data);
-      }
-      return toList(data);
-    });
+    .then((data) => toList(data));
   recommendPending = task;
   try {
     const result = await task;

@@ -198,6 +198,8 @@ function emitMembers(members: LiveImMember[]): void {
 }
 
 function emitMessage(message: LiveImMessage): void {
+  // 调试：打印最终渲染用的消息，确认 extra 里的 roleIcon/levelCardIcon/medalImage 等字段
+  console.log('[NikoIM] emit kind=' + message.kind + ' from=' + message.fromUserId, JSON.stringify(message.extra || {}).slice(0, 400));
   messageListeners.forEach((listener) => listener(message));
 }
 
@@ -248,7 +250,8 @@ function buildExtra(data: any): LiveImMessage['extra'] {
   const medalInfo = data.adorn?.medal_info || {};
   return {
     levelColor: String(levelInfo.level_color || ''),
-    levelCardIcon: String(levelInfo.level_icon || levelInfo.level_card_icon || levelInfo.level_gif_icon || ''),
+    // 优先用 level_gif_icon（动图效果更好），兜底静态 level_icon / level_card_icon
+    levelCardIcon: String(levelInfo.level_gif_icon || levelInfo.level_icon || levelInfo.level_card_icon || ''),
     medalImage: String(medalInfo.medal_image || ''),
     isManager: !!data.is_manager,
     isSuper: !!data.is_super,
@@ -507,6 +510,9 @@ function parseCustomMessage(raw: any): any {
 }
 
 function handleRawMessage(raw: any): void {
+  // 调试：打印 IM 原始消息，确认 roleIcon/levelCardIcon/medalImage/isAnchor/isSuper/isManager 等动态字段
+  console.log('[NikoIM] raw msg:', raw);
+
   // 系统助手 C2C 消息（下播 / 封禁通知），to 为用户自身，必须在群过滤之前处理
   if (raw?.type === 'TIMTextElem' && String(raw?.from || '') === 'system_aide') {
     const text = String(raw?.payload?.text || '');

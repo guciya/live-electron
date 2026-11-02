@@ -13,7 +13,7 @@
         </div>
       </div>
       <!-- 系统状态：电池 + WiFi 纯 SVG 图标（去文字） -->
-      <div class="live-header-status">
+      <div v-if="!hideSystemStatus" class="live-header-status">
         <svg
           v-if="batteryInfo.hasBattery"
           class="live-status-svg"
@@ -210,6 +210,11 @@ const props = defineProps({
   },
   // 开播页专用：在「返回列表」右侧展示关注列表 / 消息入口
   showEntrances: {
+    type: Boolean,
+    default: false,
+  },
+  // 开播页隐藏电量/WiFi 图标（主播列表页保留）
+  hideSystemStatus: {
     type: Boolean,
     default: false,
   },

@@ -621,6 +621,11 @@ function windowOpenHandler(details) {
 }
 
 async function createWindow(width = 1366, height = 668) {
+  // IPC listener 必须在任何 BrowserWindow 构造之前注册！
+  // BrowserWindow 构造时 preload 脚本立即执行，里面 sendSync('get-login-video-buffer')
+  // 如果 listener 还没注册就会报 "without listeners"，同步 IPC 返回 undefined
+  bindIPCEvent();
+
   await checkAndApplyDeviceAccessPrivilege();
 
   // 主窗口图标：用 nativeImage 多尺寸 PNG 构建，避免 PowerShell 生成的 ICO 颜色丢失
@@ -638,6 +643,12 @@ async function createWindow(width = 1366, height = 668) {
     frame: false,
     acceptFirstMouse: true,
     icon: _mainIcon,
+    // Electron 窗口底层背景。默认白色，会在 Vue 渲染出深色之前显示白屏。
+    // 设成深色让窗口一出现就是黑底，配合登录页深色背景无缝衔接。
+    backgroundColor: '#101013',
+    // 先不显示，等页面（包括视频背景）完全加载好再显示。
+    // 避免用户看到空壳窗口慢慢加载的过程。
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'TUILiveKit.preload.js'),
       nodeIntegration: true,
@@ -775,7 +786,7 @@ async function createWindow(width = 1366, height = 668) {
   windowMap.mainCover.webContents.on('before-input-event', devToolsHandler);
   windowMap.confirm.webContents.on('before-input-event', devToolsHandler);
 
-  bindIPCEvent();
+  // bindIPCEvent() 已移到 createWindow 开头，确保在 BrowserWindow 构造前注册
   bindMainWindowEvent();
   bindChildWindowEvent();
   bindCoverWindowEvent();
@@ -828,12 +839,62 @@ async function createWindow(width = 1366, height = 668) {
   });
 }
 
+// ==================== 登录页视频预缓存 ====================
+// Chromium 在 file:// 协议下 preload="auto" 会退化成 preload="metadata"（只加载首帧），
+// 导致 2.4MB mp4 视频登录页出现要等数秒。
+// 解决：主进程启动时同步把 mp4 读到内存，渲染进程 IPC 拿 Buffer 生成 Blob URL，
+// 这样 video.src 赋值时零 I/O、零磁盘等待。
+let cachedLoginVideoBuffer = null;
+
+/** 在 webpack 产出的 media 目录里扫描 niko-live-video.*.mp4（content hash 不固定） */
+function findLoginVideoInDir(dirPath) {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(dirPath)) return null;
+    const entries = fs.readdirSync(dirPath);
+    const match = entries.find((f) => /^niko-live-video.*\.mp4$/.test(f));
+    if (!match) return null;
+    const fullPath = path.join(dirPath, match);
+    return fs.readFileSync(fullPath);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function preloadLoginVideo() {
+  try {
+    // webpack 产出在 dist-dev/media/ 或 dist/media/，文件名带 content hash：
+    // 开发时 __dirname 就是项目根；打包后 app.getAppPath() 指向 asar 根
+    const mediaDirs = [
+      path.join(__dirname, 'dist-dev', 'media'),
+      path.join(__dirname, 'dist', 'media'),
+      path.join(app.getAppPath(), 'dist', 'media'),
+    ];
+    for (const dir of mediaDirs) {
+      const buf = findLoginVideoInDir(dir);
+      if (buf) {
+        cachedLoginVideoBuffer = buf;
+        console.log(`${logPrefix} preloaded login video: ${buf.length} bytes (${(buf.length / 1024 / 1024).toFixed(2)} MB) from ${dir}`);
+        return;
+      }
+    }
+    console.warn(`${logPrefix} login video not found in any media dir, skip preload. dirs:`, mediaDirs);
+  } catch (e) {
+    console.warn(`${logPrefix} preloadLoginVideo failed:`, e && e.message);
+  }
+}
+
 function bindIPCEvent() {
   ipcMain.handle('app-path', () => {
     return app.getAppPath();
   });
   ipcMain.handle('get-language', () => {
     return language;
+  });
+
+  // 渲染进程请求登录页视频 Buffer（主进程启动时已同步读入内存）
+  ipcMain.handle('get-login-video-buffer', () => {
+    return cachedLoginVideoBuffer;
   });
 
   // 礼物特效配置（VAP JSON）由主进程转发，规避资源域无 CORS 头导致渲染进程 fetch 失败
@@ -2076,6 +2137,13 @@ function createTray() {
 }
 
 function bindMainWindowEvent() {
+  // 页面完全加载好（包括视频背景首帧渲染）后才显示窗口，
+  // 避免用户看到"窗口先出来 → 慢慢加载内容"的过程
+  windowMap.main?.once('ready-to-show', () => {
+    if (isWindowAlive(windowMap.main)) {
+      windowMap.main.show();
+    }
+  });
   windowMap.main?.webContents.on('did-fail-load', () => {
     console.log(`${logPrefix}main window: did-fail-load, reload soon...`);
     setTimeout(() => {
@@ -2302,6 +2370,10 @@ function openTUILiveKit() {
   const { width, height } = primaryDisplay.workAreaSize;
   const winWidth = width - 40;
   const winHeight = height - 40;
+
+  // 主进程启动时同步预读登录页视频到内存，渲染进程用 IPC 拿 Buffer 生成 Blob URL，
+  // 避免 file:// 协议下 Chromium preload="auto" 退化成 metadata 导致首帧加载慢
+  preloadLoginVideo();
 
   // 创建窗口优先，避免 vue-devtools 下载（可能超时）阻塞窗口弹出
   createWindow(winWidth, winHeight);

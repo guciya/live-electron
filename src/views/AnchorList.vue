@@ -141,6 +141,15 @@
             </svg>
             <span>公会入驻</span>
           </button>
+          <button class="anchor-text-btn" type="button" @click="anchorAuthVisible = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <path d="M14 14h3v3M17 21h4M14 17h3" />
+            </svg>
+            <span>主播认证</span>
+          </button>
           <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="9.5" cy="7.5" r="3.5" />
@@ -385,6 +394,38 @@
 
       <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
       <MessageCenter :visible="messageCenterVisible" @close="messageCenterVisible = false" />
+
+      <!-- 充值中心：二维码弹窗（替代内嵌 RechargeDialog，跟主播认证同款 UI） -->
+      <div v-if="rechargeVisible" class="anchor-auth-mask" @click.self="rechargeVisible = false">
+        <div class="anchor-auth-panel">
+          <button class="anchor-auth-close" type="button" aria-label="关闭" @click="rechargeVisible = false">×</button>
+          <div class="anchor-auth-title">充值中心</div>
+          <div class="anchor-auth-qr-wrap">
+            <img :src="rechargeQrUrl" class="anchor-auth-qr" alt="充值中心二维码" />
+          </div>
+          <div class="anchor-auth-tip">
+            使用手机微信扫描二维码，在浏览器中打开充值中心完成充值
+          </div>
+        </div>
+      </div>
+
+      <!-- 主播认证二维码弹窗 -->
+      <div v-if="anchorAuthVisible" class="anchor-auth-mask" @click.self="anchorAuthVisible = false">
+        <div class="anchor-auth-panel">
+          <button class="anchor-auth-close" type="button" aria-label="关闭" @click="anchorAuthVisible = false">×</button>
+          <div class="anchor-auth-title">主播认证</div>
+          <div class="anchor-auth-qr-wrap">
+            <img
+              :src="anchorAuthQrUrl"
+              class="anchor-auth-qr"
+              alt="主播认证二维码"
+            />
+          </div>
+          <div class="anchor-auth-tip">
+            使用手机微信扫描二维码，在浏览器中打开认证中心完成主播认证
+          </div>
+        </div>
+      </div>
     </div>
   </UIKitProvider>
 </template>
@@ -441,7 +482,7 @@ async function loadList(force = false, silent = false) {
     apiError.value = '';
   }
   try {
-    const result = await fetchRecommendLiveList(1, 20, { force });
+    const result = await fetchRecommendLiveList(1, 200, { force });
     liveList.value = result.list;
     total.value = result.total;
     // 刷新后下播的主播不再保留预览播放器
@@ -682,6 +723,72 @@ function enterFollowLive(item: NikoLiveListItem) {
 // AnchorList 主窗口默认不走 IM 登录，这里先用本地登录凭据补登一次再打开
 const messageCenterVisible = ref(false);
 const messageCenterOpening = ref(false);
+const rechargeVisible = ref(false);
+
+// ===== 充值中心二维码（跟主播认证同款） =====
+const rechargeCopied = ref(false);
+const rechargeQrUrl = computed(() => {
+  const url = NIKO_CONFIG.rechargeCenterUrl;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(url)}`;
+});
+function copyRechargeUrl() {
+  const url = NIKO_CONFIG.rechargeCenterUrl;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      rechargeCopied.value = true;
+      setTimeout(() => { rechargeCopied.value = false; }, 2000);
+    }).catch(() => fallbackCopyRecharge(url));
+  } else {
+    fallbackCopyRecharge(url);
+  }
+}
+function fallbackCopyRecharge(text: string) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); rechargeCopied.value = true; } catch {}
+  document.body.removeChild(ta);
+  setTimeout(() => { rechargeCopied.value = false; }, 2000);
+}
+function openRechargeExternal() {
+  openExternalWithSso(NIKO_CONFIG.rechargeCenterUrl, '充值中心');
+  rechargeVisible.value = false;
+}
+
+// ===== 主播认证二维码 =====
+const anchorAuthVisible = ref(false);
+const anchorAuthCopied = ref(false);
+/** 二维码图片 URL：用在线 qrserver 生成（需联网，纯 CDN 无需 npm 包） */
+const anchorAuthQrUrl = computed(() => {
+  const url = NIKO_CONFIG.anchorAuthUrl;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(url)}`;
+});
+function copyAnchorAuthUrl() {
+  const url = NIKO_CONFIG.anchorAuthUrl;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      anchorAuthCopied.value = true;
+      setTimeout(() => { anchorAuthCopied.value = false; }, 2000);
+    }).catch(() => fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+function fallbackCopy(text: string) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); anchorAuthCopied.value = true; } catch {}
+  document.body.removeChild(ta);
+  setTimeout(() => { anchorAuthCopied.value = false; }, 2000);
+}
+function openAnchorAuthExternal() {
+  openExternalWithSso(NIKO_CONFIG.anchorAuthUrl, '主播认证');
+  anchorAuthVisible.value = false;
+}
+
 async function handleOpenMessage() {
   if (messageCenterOpening.value) return;
   messageCenterOpening.value = true;
@@ -747,8 +854,6 @@ const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
 const SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/settle`;
 // 提现页（生产域）
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
-// 充值中心：h5-wpp（N 币充值 + 帮Ta充 + 微信/支付宝支付）
-const WPP_URL = `${H5_ORIGIN}/wpp/`;
 
 /** 软件内打开 H5 业务页并下发 SSO token（协议对齐 H5 主项目 ssoBridge） */
 function openExternalWithSso(
@@ -796,8 +901,8 @@ function openWithdrawPage() {
 }
 
 function openRechargePage() {
-  // 充值中心走 h5-wpp 项目，Electron 已有登录态，直接 SSO 传 token 过去（跳过登录页）
-  openExternalWithSso(WPP_URL, '充值中心');
+  // 充值中心：内嵌弹窗，不跳外链
+  rechargeVisible.value = true;
 }
 
 function onUserAvatarError() {
@@ -2043,4 +2148,106 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== 主播认证二维码弹窗 ===== */
+.anchor-auth-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.anchor-auth-panel {
+  position: relative;
+  width: 440px;
+  padding: 24px 24px 20px;
+  background: linear-gradient(180deg, #1e1e26 0%, #16161c 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  text-align: center;
+}
+
+.anchor-auth-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 24px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  border-radius: 50%;
+  transition: background-color .15s, color .15s;
+}
+.anchor-auth-close:hover { color: #fff; background: rgba(255, 255, 255, 0.15); }
+
+.anchor-auth-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.anchor-auth-qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  background: #fff;
+  border-radius: 12px;
+  margin: 0 auto 14px;
+  width: fit-content;
+}
+
+.anchor-auth-qr {
+  width: 200px;
+  height: 200px;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.anchor-auth-tip {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.anchor-auth-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.anchor-auth-btn-copy,
+.anchor-auth-btn-open {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+  border: none;
+}
+
+.anchor-auth-btn-copy {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.anchor-auth-btn-copy:hover { background: rgba(255, 255, 255, 0.14); }
+
+.anchor-auth-btn-open {
+  background: linear-gradient(135deg, #4a90d9, #3a78b8);
+  color: #fff;
+  font-weight: 600;
+}
+.anchor-auth-btn-open:hover { background: linear-gradient(135deg, #5aa0e9, #4a88c8); }
 </style>

@@ -93,6 +93,8 @@ import { TUIDialog } from '@tencentcloud/uikit-base-component-vue3';
 import { Avatar } from 'tuikit-atomicx-vue3-electron';
 import { useAuthStore } from '../../../niko/store/auth';
 import { showMessage, MessageToastType } from '../../base-component/MessageToast';
+import { createAliPayOrder } from '../../../niko/api/pay';
+import { resolveImageUrl } from '../../../niko/config';
 
 interface RechargeOption {
   diamonds: number;
@@ -108,6 +110,7 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const paying = ref(false);
 
 // 充值选项（与 web 端保持一致）
 const rechargeOptions: RechargeOption[] = [
@@ -126,7 +129,8 @@ const nickname = computed(() => {
   return authStore.personalInfo?.nickname || authStore.userInfo?.nickname || '用户';
 });
 const avatar = computed(() => {
-  return authStore.personalInfo?.avatar || authStore.userInfo?.avatar || '';
+  const raw = authStore.personalInfo?.avatar || authStore.userInfo?.avatar || '';
+  return resolveImageUrl(raw);
 });
 const coin = computed(() => {
   return authStore.personalInfo?.coin ?? 0;
@@ -139,6 +143,7 @@ watch(
     if (val) {
       selectedOption.value = rechargeOptions[0];
       payMethod.value = 'alipay';
+      paying.value = false;
       try {
         await authStore.loadPersonalInfo(true);
       } catch (e) {
@@ -148,20 +153,73 @@ watch(
   },
 );
 
-function handlePay() {
-  if (!selectedOption.value) {
-    showMessage({ type: MessageToastType.Warning, message: '请选择充值金额' });
-    return;
+/** 支付宝：后端返回 form（URL 或 HTML），在系统浏览器打开完成支付 */
+function execAlipayForm(formStr: string) {
+  if (!formStr) {
+    throw new Error('支付数据为空');
   }
-  // TODO: 对接后端支付接口，目前仅展示确认提示
-  showMessage({
-    type: MessageToastType.Info,
-    message: `即将通过${payMethod.value === 'alipay' ? '支付宝' : '微信'}支付 ¥${selectedOption.value.price.toFixed(2)}，支付接口待接入`,
-  });
-  emit('update:visible', false);
+  const { shell } = require('electron');
+  if (/^https?:\/\//i.test(formStr)) {
+    // URL：直接用系统浏览器打开
+    shell.openExternal(formStr);
+  } else if (/<form[\s>]/i.test(formStr)) {
+    // HTML form：构造临时页面提交
+    const div = document.createElement('div');
+    div.innerHTML = formStr;
+    div.style.position = 'fixed';
+    div.style.left = '-9999px';
+    document.body.appendChild(div);
+    const form = div.querySelector('form');
+    if (form) {
+      form.setAttribute('target', '_blank');
+      form.submit();
+    }
+    setTimeout(() => div.remove(), 30000);
+  } else {
+    throw new Error('支付数据格式异常');
+  }
+}
+
+async function handlePay() {
+  if (!selectedOption.value || paying.value) return;
+  const amount = selectedOption.value.price;
+  paying.value = true;
+
+  try {
+    if (payMethod.value === 'wechat') {
+      // Electron 桌面端没有微信 openId（JSAPI 支付需要微信内置浏览器），
+      // 微信 WAP 支付需要用户在手机上操作。这里引导用户用支付宝或在微信里打开。
+      showMessage({
+        type: MessageToastType.Info,
+        message: '微信支付请在微信中打开充值页面，建议使用支付宝',
+      });
+      return;
+    }
+
+    // 支付宝：调后端 /api/pay/aliWapPay
+    const result = await createAliPayOrder(amount);
+    if (!result?.form) {
+      throw new Error('支付表单数据缺失');
+    }
+    execAlipayForm(result.form);
+    showMessage({
+      type: MessageToastType.Success,
+      message: '已在浏览器打开支付页面，完成支付后请返回应用',
+    });
+    emit('update:visible', false);
+  } catch (err: any) {
+    console.error('[Recharge] pay failed:', err);
+    showMessage({
+      type: MessageToastType.Error,
+      message: err?.message || '支付请求失败，请稍后重试',
+    });
+  } finally {
+    paying.value = false;
+  }
 }
 
 function handleCancel() {
+  if (paying.value) return;
   emit('update:visible', false);
 }
 </script>

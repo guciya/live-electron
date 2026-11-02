@@ -3,6 +3,18 @@ const logPrefix = '[TUILiveKit.preload]';
 const { ipcRenderer } = require('electron');
 const path = require('path');
 
+// 同步从主进程拿登录页视频 Buffer（阻塞但 preload 在 HTML 解析前执行，不影响渲染）
+// 让 Vue 组件 mount 时立刻有数据，省掉 onMounted async + IPC 开销
+try {
+  const videoBuf = ipcRenderer.sendSync('get-login-video-buffer');
+  if (videoBuf && videoBuf.byteLength > 0) {
+    window.__LOGIN_VIDEO_BUFFER__ = videoBuf;
+    console.log(`${logPrefix} injected login video buffer: ${videoBuf.byteLength} bytes`);
+  }
+} catch (e) {
+  console.warn(`${logPrefix} failed to get login video buffer:`, e.message);
+}
+
 ipcRenderer.on('crash-file-path', () => {
   // 静默接收，不再打印调试日志
 });

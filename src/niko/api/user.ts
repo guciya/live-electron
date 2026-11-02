@@ -58,6 +58,8 @@ export interface NikoUserLevelInfo {
   level_icon?: string;
   level_gif_icon?: string;
   level_card_icon?: string;
+  /** 用户卡片的等级背景图（整张卡片的装饰） */
+  level_card_bg?: string;
   join_effects_id?: number;
   level_experience?: number;
   [key: string]: any;

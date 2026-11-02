@@ -39,13 +39,24 @@
           />
         </div>
 
-        <!-- 直播分类 -->
+        <!-- 直播分类（自定义下拉，Windows 原生 <select> option 不支持 padding） -->
         <div class="prelive-field">
           <label class="prelive-label">直播分类</label>
-          <select v-model="form.liveCategoryId" class="prelive-select">
-            <option value="">请选择分类</option>
-            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-          </select>
+          <div class="prelive-custom-select" :class="{ open: categoryOpen }">
+            <div class="prelive-select-trigger" @click="categoryOpen = !categoryOpen">
+              <span :class="{ placeholder: !selectedCategoryName }">{{ selectedCategoryName || '请选择分类' }}</span>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+            </div>
+            <div v-if="categoryOpen" class="prelive-select-panel" @click.stop>
+              <div
+                v-for="cat in categories"
+                :key="cat.id"
+                class="prelive-select-option"
+                :class="{ active: form.liveCategoryId === cat.id }"
+                @click="selectCategory(cat.id)"
+              >{{ cat.name }}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -82,6 +93,18 @@ const categories = ref<LiveCategory[]>([]);
 const uploading = ref(false);
 const submitting = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const categoryOpen = ref(false);
+
+/** 当前选中分类的名称（显示用） */
+const selectedCategoryName = computed(() => {
+  if (!form.liveCategoryId) return '';
+  return categories.value.find((c) => c.id === form.liveCategoryId)?.name || '';
+});
+
+function selectCategory(id: string | number) {
+  form.liveCategoryId = id;
+  categoryOpen.value = false;
+}
 
 const form = reactive({
   liveTitle: '',
@@ -97,6 +120,7 @@ const coverPreviewUrl = computed(() => resolveImageUrl(form.liveCoverUrl || form
 
 const handleClose = () => {
   if (submitting.value) return;
+  categoryOpen.value = false;
   emit('update:visible', false);
 };
 
@@ -210,7 +234,9 @@ watch(
   background: #101013;
   border: 1px solid #232329;
   border-radius: 12px;
-  overflow: hidden;
+  /* overflow: hidden 会裁掉自定义下拉 panel 的超出部分（滚动条也看不到）。
+     dialog 内部没有元素需要被圆角裁剪，改为 visible 让下拉弹出。 */
+  overflow: visible;
   color: #fff;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
 }
@@ -241,6 +267,50 @@ watch(
   &:focus { border-color: #4a90d9; }
 }
 .prelive-select option { background: #17171b; color: #fff; }
+/* 自定义直播分类下拉（替代原生 <select>，解决 Windows Electron option 不认 padding 的问题） */
+.prelive-custom-select {
+  position: relative;
+  width: 100%;
+  user-select: none;
+}
+.prelive-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #17171b;
+  border: 1px solid #26262c;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.prelive-select-trigger:hover { border-color: #4a90d9; }
+.prelive-custom-select.open .prelive-select-trigger { border-color: #4a90d9; }
+.prelive-select-trigger .placeholder { color: rgba(255,255,255,0.35); }
+.prelive-select-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #17171b;
+  border: 1px solid #26262c;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.prelive-select-option {
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color .12s;
+}
+.prelive-select-option:hover { background: rgba(74, 144, 217, 0.18); }
+.prelive-select-option.active { background: rgba(74, 144, 217, 0.28); color: #a9ccff; }
 .prelive-cover {
   width: 100%;
   min-height: 160px;

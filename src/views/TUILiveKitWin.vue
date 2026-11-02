@@ -11,6 +11,7 @@
         @back-to-list="handleBackToList"
         :is-showing-in-child-window="true"
         show-entrances
+        hide-system-status
         @open-follow-list="followListVisible = true"
         @open-message="handleOpenMessage"
       />
@@ -115,11 +116,8 @@
                     </template>
                   </svg>
                 </div>
-                <span class="main-center-status-text">
-                  {{ winBatteryInfo.hasBattery ? `${winBatteryInfo.level}%` : '' }}
-                  {{ winNetworkInfo.connected && winNetworkInfo.type === 'wifi' ? ` · ${winNetworkInfo.signal}%` : '' }}
-                </span>
               </div>
+              <!-- main-center-status-text 已按产品要求移除（hover tooltip 直接显示在上方即可） -->
               <!-- 原来的直播标题/开播时长行 -->
               <div class="main-center-top-title-row">
                 <span class="live-title" :title="currentLive?.liveName || liveParams.liveName">
@@ -199,7 +197,7 @@
               <div v-if="remoteGuestUsers.length" class="guest-column">
                 <div v-for="u in remoteGuestUsers" :key="u.userId" class="video-cell video-cell-guest">
                   <div :id="guestViewId(u.userId)" class="host-guest-video"></div>
-                  <span class="host-guest-name">{{ u.nickName || u.userId }}</span>
+                  <span class="host-guest-name">{{ u.nickName || u.userId || '连线嘉宾' }}</span>
                   <button
                     class="guest-audio-btn"
                     :class="{ 'is-muted': guestAudioMuted[u.userId] }"
@@ -1324,7 +1322,7 @@ const onRemoteUserEnterRoom = ({ userInfo }: { roomId: string; userInfo?: { user
 };
 
 /** RoomEngine 远端用户视频状态变更：{ userId, streamType, hasVideo, reason } */
-const onUserVideoStateChanged = ({ userId, streamType, hasVideo }: { userId: string; streamType: number; hasVideo: boolean; reason: number }) => {
+const onUserVideoStateChanged = ({ userId, streamType, hasVideo, userInfo }: { userId: string; streamType: number; hasVideo: boolean; reason: number; userInfo?: { userName?: string } }) => {
   if (!userId) {
     return;
   }
@@ -1341,7 +1339,17 @@ const onUserVideoStateChanged = ({ userId, streamType, hasVideo }: { userId: str
   console.log('[Niko] remote camera available:', userId);
   guestVideoAvailable.add(userId);
   if (!remoteGuestUsers.value.some((u) => u.userId === userId)) {
-    remoteGuestUsers.value = [...remoteGuestUsers.value, { userId }];
+    remoteGuestUsers.value = [...remoteGuestUsers.value, {
+      userId,
+      nickName: userInfo?.userName || '',
+    }];
+  } else {
+    // 已存在但没有名字 —— 补上
+    remoteGuestUsers.value = remoteGuestUsers.value.map((u) =>
+      u.userId === userId && !u.nickName && userInfo?.userName
+        ? { ...u, nickName: userInfo.userName }
+        : u,
+    );
   }
   bindGuestVideo(userId);
 };
@@ -1584,8 +1592,33 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰。
     // 注意这里必须用后端 room_id（不是 TRTC 的 live_index_id）
     nikoRoomId.value = imRoomId;
+    // 进房后先清掉所有旧 media source —— 关播时 mixerActive=false 卸载清了一次，
+    // 但 TRTC SDK 内部可能还残留旧设备状态，新的 StreamMixer 实例需要干净起点
+    try {
+      const allSources = [...videoMixerState.mediaSourceList.value];
+      for (const s of allSources) {
+        await videoMixerState.removeMediaSource(s);
+      }
+      console.log('[Niko] cleared old media sources, count:', allSources.length);
+    } catch (clearErr: any) {
+      console.warn('[Niko] clear old media sources failed:', clearErr?.message);
+    }
     // 开播前确保摄像头已加入混流，否则推出去的是黑屏
     await ensureDefaultCamera();
+    // 显式让 TRTC 启动本地视频：exitRoom 后 SDK 可能把摄像头设备 stop 了，
+    // StreamMixer addMediaSource 只加进列表，设备本身可能还是 inactive
+    try {
+      if (cameraList.value.length === 0) await getCameraList();
+      if (cameraList.value[0]) {
+        await trtcCloud.startLocalVideo({
+          videoDeviceId: cameraList.value[0].deviceId,
+          videoType: TRTCVideoStreamType.TRTCVideoStreamTypeBig,
+        });
+        console.log('[Niko] startLocalVideo ok:', cameraList.value[0].deviceName);
+      }
+    } catch (vErr: any) {
+      console.warn('[Niko] startLocalVideo failed:', vErr?.message || vErr);
+    }
     // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
     // 这里没有走 TUIKit startLive，需要手动 startPublish，否则手机端收不到画面。
     try {
@@ -2302,6 +2335,17 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
+  // 关键清理：TUILiveKitWin 是独立子窗口，但 TRTC SDK 在同一 Electron 进程里
+  // 与主窗口 LivePlayer 共享状态。主窗口退出直播时 exitRoom 可能没完全释放
+  // 摄像头/视频 encoder，导致新窗口一进来就"映射"到旧 session 的画面。
+  // 这里先显式 stop 所有本地设备，确保干净起点。
+  try {
+    trtcCloud.stopLocalVideo();
+    trtcCloud.stopLocalPreview();
+    console.log('[Niko] cleared stale TRTC local device state');
+  } catch (_) {
+    // 忽略（可能尚未进房）
+  }
   // 系统状态：立即预取 + 30s 轮询（主播名字上方展示）
   void refreshWinSystemStatus();
   winSystemStatusTimer = setInterval(refreshWinSystemStatus, 30000);
@@ -3236,7 +3280,7 @@ onBeforeUnmount(() => {
             &:hover::after {
               content: attr(data-tip);
               position: absolute;
-              top: calc(100% + 6px);
+              bottom: calc(100% + 8px);
               left: 50%;
               transform: translateX(-50%);
               padding: 4px 10px;
@@ -3255,21 +3299,17 @@ onBeforeUnmount(() => {
             &:hover::before {
               content: '';
               position: absolute;
-              top: calc(100% + 1px);
+              bottom: calc(100% + 3px);
               left: 50%;
               transform: translateX(-50%);
               border: 4px solid transparent;
-              border-bottom-color: rgba(20, 22, 30, 0.95);
+              border-top-color: rgba(20, 22, 30, 0.95);
               z-index: 999;
               pointer-events: none;
             }
           }
 
-          .main-center-status-text {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.45);
-            font-variant-numeric: tabular-nums;
-          }
+          /* main-center-status-text 已按产品要求移除 */
 
           /* 名字 + 开播时长行 */
           .main-center-top-title-row {

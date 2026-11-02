@@ -78,10 +78,6 @@ request.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     (config.headers as Record<string, unknown>).Token = token;
   }
-  console.log('[NikoAuth] request', config.method?.toUpperCase(), config.url, {
-    baseURL: config.baseURL,
-    token: token ? `present(${token.length})` : 'MISSING',
-  });
   return config;
 });
 

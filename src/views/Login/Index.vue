@@ -1,11 +1,13 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-login-page">
+    <div class="tui-login-bg-fallback" aria-hidden="true"></div>
+    <!-- video 始终在 DOM 中，空 src 时浏览器不加载；拿到 Blob URL 立即解码，省掉一整轮 Vue 渲染+DOM创建 -->
     <video
       class="tui-login-bg-video"
-      :src="loginBgVideo"
-      autoplay
-      loop
+      :src="loginVideoUrl ? loginVideoUrl : undefined"
+      :autoplay="!!loginVideoUrl"
+      :loop="!!loginVideoUrl"
       muted
       playsinline
       preload="auto"
@@ -85,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, Ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, Ref } from 'vue';
 import router from '../../router';
 import { getWindowType } from '../../TUILiveKit/utils/envUtils';
 import { UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
@@ -101,7 +103,8 @@ import { USER_INFO_STORAGE_KEY } from '../../TUILiveKit/utils/userInfoStorage';
 import { NIKO_CONFIG } from '../../niko/config';
 import { useAuthStore } from '../../niko/store/auth';
 import { codeLogin, sendVerifyCode } from '../../niko/api/user';
-import loginBgVideo from '../../assets/niko-live-video.mp4';
+// 保留 import 让 webpack 把 mp4 复制到 dist-dev/media/（content hash 命名）
+import _loginBgVideo from '../../assets/niko-live-video.mp4';
 
 const { t } = useUIKit();
 const authStore = useAuthStore();
@@ -115,6 +118,27 @@ const sending = ref(false);
 
 const countdown = ref(0);
 let countdownTimer: number | null = null;
+
+// 视频 URL：优先用 preload 脚本同步注入的 Buffer（页面一 mount 就有，零延迟），
+// 其次走 webpack file:// URL 兜底
+const loginVideoUrl = ref('');
+let loginVideoBlobUrl: string | null = null;
+
+// 页面创建时立刻尝试同步 Buffer（preload 脚本已注入到 window）
+try {
+  const buf = (window as any).__LOGIN_VIDEO_BUFFER__;
+  if (buf && buf.byteLength > 0) {
+    const blob = new Blob([buf as any], { type: 'video/mp4' });
+    loginVideoBlobUrl = URL.createObjectURL(blob);
+    loginVideoUrl.value = loginVideoBlobUrl;
+    console.log('[Login] video URL ready from preload buffer');
+  } else {
+    loginVideoUrl.value = _loginBgVideo as unknown as string;
+  }
+} catch (e) {
+  console.warn('[Login] preload buffer failed, fallback to file URL:', e);
+  loginVideoUrl.value = _loginBgVideo as unknown as string;
+}
 
 const canSend = computed(() => /^1[3-9]\d{9}$/.test(mobile.value));
 
@@ -279,6 +303,10 @@ onBeforeUnmount(() => {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  if (loginVideoBlobUrl) {
+    URL.revokeObjectURL(loginVideoBlobUrl);
+    loginVideoBlobUrl = null;
+  }
 });
 
 const isMaximized: Ref<boolean> = ref(false);
@@ -309,6 +337,17 @@ function onClose() {
   height: 100%;
   overflow: hidden;
   background-color: #0b0d12;
+
+  /* 视频加载完前的深色静态背景（与视频色调协调） */
+  .tui-login-bg-fallback {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(28, 102, 229, 0.12) 0%, transparent 55%),
+      radial-gradient(ellipse at 70% 80%, rgba(90, 143, 255, 0.08) 0%, transparent 55%),
+      #0b0d12;
+  }
 
   .tui-login-bg-video {
     position: absolute;

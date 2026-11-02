@@ -14,6 +14,7 @@
       "node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/x64/**/*",
       "node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/res/**/*"
     ],
+    "afterPack": "scripts/after-pack.js",
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -40,14 +41,12 @@
       "!scripts/**",
       "!build/**",
       "!electron/**",
-      // XMagic 只打包 win/x64 + win/res，排除其他所有平台
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/mac/**",
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/linux/**",
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/android/**",
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/ios/**",
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/ia32/**",
       "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/arm64/**",
-      // TRTC SDK 的构建中间产物
       "!node_modules/trtc-electron-sdk/build/**"
     ],
     "extraResources": [
