@@ -5,7 +5,15 @@
         <span class="login-loading-text">{{ t('Logging In') }}</span>
       </div>
       <template v-else>
-      <LiveHeader @logout="handleLogout" @back-to-list="handleBackToList" :is-showing-in-child-window="true"/>
+      <LiveHeader
+        ref="headerRef"
+        @logout="handleLogout"
+        @back-to-list="handleBackToList"
+        :is-showing-in-child-window="true"
+        show-entrances
+        @open-follow-list="followListVisible = true"
+        @open-message="handleOpenMessage"
+      />
       <div class="live-pusher-main">
         <div class="main-left">
           <div class="main-left-top">
@@ -102,13 +110,25 @@
                 </svg>
                 <span>人气榜</span>
               </button>
+              <span class="live-start-time">开播时长：{{ liveDurationText }}</span>
             </div>
+            <button
+              class="more-live-btn"
+              type="button"
+              @click="toggleMoreLive"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6" />
+                <path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              更多直播
+            </button>
             <div class="main-center-top-right">
               {{ displayAudienceCount }} {{ t('People watching') }}
             </div>
           </div>
-          <div class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
-            <div v-if="currentBattleInfo?.battleId || demoPkActive" class="pk-overlay">
+          <div ref="centerRef" class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
+            <div v-if="pkActive" class="pk-overlay">
               <div class="pk-bar">
                 <div class="pk-side pk-left">
                   <span class="pk-score">{{ battleScoreMap.get(loginUserInfo?.userId) || 0 }}</span>
@@ -122,19 +142,49 @@
                 </div>
               </div>
             </div>
-            <!-- 开播后隐藏原生预览（display:none 使预览元素尺寸归零，原生窗口画面随之消失，
-                 摄像头采集/混流/推流不受影响），同位置改用 canvas 渲染摄像头帧，
-                 画面变为普通 DOM，礼物特效和用户卡片才能盖在视频上方 -->
-            <StreamMixer
-              v-if="nativeId !== null && !isGoingToLoginPage && mixerActive"
-              v-show="!isInLive"
-              :windowId="nativeId"
-              @on-user-on-seat-info-changed="onUserOnSeatInfoChanged"
-              @on-stream-layout-changed="onStreamLayoutChanged"
-              @on-stream-layout-area-changed="onStreamLayoutAreaChanged"
-            />
-            <SelfStreamPreview v-if="isInLive" :live-index-id="pendingPreLiveId" />
+            <!-- 本地混流预览用 Embedded 模式（windowId=0）直接渲染成 DOM：画面零延迟，
+                 不再是原生窗口，所以礼物特效 / 用户卡片 / 弹窗都能正常盖在视频上 -->
+            <!-- 主播 + 连线嘉宾统一布局：0人主播满屏，1人左右等分，2人及以上主播占2/3、嘉宾在右侧堆叠 -->
+            <div class="video-layout" :class="[videoLayoutClass, orientationClass]">
+              <div class="video-cell video-cell-host">
+                <StreamMixer
+                  v-if="nativeId !== null && !isGoingToLoginPage && mixerActive"
+                  :windowId="0"
+                  @on-user-on-seat-info-changed="onUserOnSeatInfoChanged"
+                  @on-stream-layout-changed="onStreamLayoutChanged"
+                  @on-stream-layout-area-changed="onStreamLayoutAreaChanged"
+                />
+              </div>
+              <div v-if="remoteGuestUsers.length" class="guest-column">
+                <div v-for="u in remoteGuestUsers" :key="u.userId" class="video-cell video-cell-guest">
+                  <div :id="guestViewId(u.userId)" class="host-guest-video"></div>
+                  <span class="host-guest-name">{{ u.nickName || u.userId }}</span>
+                  <button
+                    class="guest-audio-btn"
+                    :class="{ 'is-muted': guestAudioMuted[u.userId] }"
+                    type="button"
+                    :title="guestAudioMuted[u.userId] ? '打开对方声音' : '关闭对方声音'"
+                    @click.stop="toggleGuestAudio(u.userId)"
+                  >
+                    <svg v-if="guestAudioMuted[u.userId]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                      <path d="M16.4 8.6l5.2 6.8M21.6 8.6l-5.2 6.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                      <path d="M16 9a4.2 4.2 0 0 1 0 6M18.6 6.6a8 8 0 0 1 0 10.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
             <GiftEffect v-if="isInLive" />
+            <!-- 更多直播：与观众端一致的底部横滑长条弹窗（自带拉流预览） -->
+            <MoreLiveTray
+              :visible="moreLiveVisible"
+              @close="moreLiveVisible = false"
+              @select="handleMoreLiveSelect"
+            />
           </div>
           <div class="main-center-bottom">
             <div class="main-center-bottom-content">
@@ -143,7 +193,6 @@
                 <SpeakerVolumeSetting />
                 <div class="main-center-bottom-tools">
                   <OrientationSwitch />
-                  <LayoutSwitch :isShowingInChildWindow="true"/>
                   <SettingButton :isShowingInChildWindow="true"/>
                 </div>
               </div>
@@ -212,7 +261,7 @@
           </div>
         </div>
         <LivePusherNotification />
-        <!-- 用户信息卡片：开播后视频已是 DOM 画布，卡片可直接展示 -->
+        <!-- 用户信息卡片：视频已是 DOM，可正常盖在视频上 -->
         <UserInfoCard
           :visible="userCardVisible"
           :info="userCardInfo"
@@ -228,6 +277,37 @@
           :title="pkDialogTitle"
           :pk-id="currentPkId"
           @invited="onPkInvited"
+        />
+
+        <!-- 被别人邀请连线：接受 / 拒绝 -->
+        <div v-if="incomingPkInvite" class="niko-pk-incoming-mask">
+          <div class="niko-pk-incoming">
+            <div class="niko-pk-incoming-avatar">
+              <img v-if="incomingPkInvite.avatar" :src="incomingPkInvite.avatar" alt="" />
+              <span v-else>{{ (incomingPkInvite.nickname || '主播').slice(0, 1) }}</span>
+            </div>
+            <div class="niko-pk-incoming-title">
+              {{ incomingPkInvite.nickname || '对方主播' }} 邀请你连线
+            </div>
+            <div class="niko-pk-incoming-tip">倒计时 {{ incomingPkCountdown }}s 后自动关闭</div>
+            <div class="niko-pk-incoming-actions">
+              <button class="niko-pk-incoming-btn is-reject" type="button" @click="replyIncomingPkInvite(0)">拒绝</button>
+              <button class="niko-pk-incoming-btn is-accept" type="button" @click="replyIncomingPkInvite(1)">接受</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 关注列表：/live/anchorPrepareWhitelist（type=2 关注）用户列表 -->
+        <FollowListDialog
+          :visible="followListVisible"
+          @close="followListVisible = false"
+          @select="openFollowUserCard"
+        />
+
+        <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
+        <MessageCenter
+          :visible="messageCenterVisible"
+          @close="handleCloseMessageCenter"
         />
 
         <!-- 关播结算（对齐 web-obs-live 的结算层） -->
@@ -277,9 +357,9 @@
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import trtcCloud from '../TUILiveKit/utils/trtcCloud';
-import { TRTCVideoMirrorType, TRTCParams, TRTCAppScene, TRTCRoleType } from 'trtc-electron-sdk';
+import { TRTCVideoMirrorType, TRTCParams, TRTCAppScene, TRTCRoleType, TRTCVideoFillMode } from 'trtc-electron-sdk';
 import { releaseMediaResourcesBeforeQuit } from '../TUILiveKit/utils/appQuitCleanup';
-import TUIRoomEngine, { TUISeatMode, TUIRoomType, TRTCMediaSourceType } from '@tencentcloud/tuiroom-engine-electron';
+import TUIRoomEngine, { TUISeatMode, TUIRoomType, TRTCMediaSourceType, TUIRoomEvents, TUIVideoStreamType, TUIResolutionMode } from '@tencentcloud/tuiroom-engine-electron';
 import {
   UIKitProvider,
   useUIKit,
@@ -320,19 +400,26 @@ import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import AudiencePanel from '../niko/components/AudiencePanel.vue';
+import FollowListDialog from '../niko/components/FollowListDialog.vue';
+import MessageCenter from '../niko/components/MessageCenter.vue';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
-import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
-import SelfStreamPreview from '../niko/components/SelfStreamPreview.vue';
+import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import {
   joinLiveChat,
   leaveLiveChat,
   onLiveImMessage,
   onLiveImSettle,
   onLiveImSystem,
+  onLiveImPkInvite,
+  onLiveImPkStarted,
+  onLiveImPkEnded,
   type LiveImSystemEvent,
   type LiveSettleStats,
+  type LivePkInvite,
+  type LivePkStarted,
+  type LivePkEnded,
 } from '../niko/im/liveIm';
 import {
   isNetworkOffline,
@@ -356,7 +443,6 @@ import MicVolumeSetting from '../TUILiveKit/components/MicVolumeSetting.vue';
 import SpeakerVolumeSetting from '../TUILiveKit/components/SpeakerVolumeSetting.vue';
 import OrientationSwitch from '../TUILiveKit/components/OrientationSwitch.vue';
 import SettingButton from '../TUILiveKit/components/SettingButton.vue';
-import LayoutSwitch from '../TUILiveKit/components/LayoutSwitch.vue';
 import MusicButton from '../TUILiveKit/components/MusicButton.vue';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
 import { useSystemAudioLoopback } from '../TUILiveKit/hooks/useSystemAudioLoopback';
@@ -364,17 +450,18 @@ import useRoomEngine from '../TUILiveKit/utils/useRoomEngine';
 import { mapToRoomEngineLanguage } from '../TUILiveKit/utils/common';
 import { LIVE_NAME_MAX_UTF8_BYTES } from '../TUILiveKit/constants/tuiConstant';
 import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
-import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk } from '../niko/api/live';
-import type { PrepareLiveResult } from '../niko/api/live';
+import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk, replyPk } from '../niko/api/live';
+import type { PrepareLiveResult, AnchorPrepareWhitelistUser } from '../niko/api/live';
+import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
 const nativeId = ref<number | Uint8Array | null>(null);
-/** 是否挂载 StreamMixer（原生视频预览窗口）。关播后置 false 销毁原生窗口，否则它会一直盖在 DOM 上方 */
+/** 是否挂载 StreamMixer（DOM 混流预览）。关播后卸载，释放混流服务与渲染资源 */
 const mixerActive = ref(true);
 
 const router = useRouter();
-const { loginUserInfo } = useLoginState();
+const { loginUserInfo, login: loginIm } = useLoginState();
 const { t, language } = useUIKit();
 const loading = ref(false);
 const isToolsExpanded = ref(true);
@@ -424,6 +511,86 @@ let pkTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeSettle: (() => void) | null = null;
 let unsubscribeSystem: (() => void) | null = null;
 let unsubscribeJoinCount: (() => void) | null = null;
+let unsubscribePkInvite: (() => void) | null = null;
+let unsubscribePkStarted: (() => void) | null = null;
+let unsubscribePkEnded: (() => void) | null = null;
+
+/** 收到的 PK / 连麦邀请（被邀请方） */
+const incomingPkInvite = ref<LivePkInvite | null>(null);
+const incomingPkCountdown = ref(15);
+let incomingPkTimer: ReturnType<typeof setInterval> | null = null;
+
+const clearIncomingPkInvite = () => {
+  incomingPkInvite.value = null;
+  if (incomingPkTimer) {
+    clearInterval(incomingPkTimer);
+    incomingPkTimer = null;
+  }
+};
+
+/** 收到别人的连线邀请：展示接受/拒绝弹窗，倒计时结束自动关闭 */
+const handlePkInviteReceived = (invite: LivePkInvite) => {
+  console.log('[NikoPK] incoming invite:', invite);
+  incomingPkInvite.value = invite;
+  incomingPkCountdown.value = Math.max(1, Number(invite.waitTimeout) || 15);
+  if (incomingPkTimer) {
+    clearInterval(incomingPkTimer);
+  }
+  incomingPkTimer = setInterval(() => {
+    incomingPkCountdown.value -= 1;
+    if (incomingPkCountdown.value <= 0) {
+      clearIncomingPkInvite();
+    }
+  }, 1000);
+};
+
+/** 回复邀请：1 接受 / 0 拒绝（后端 /live/replyPk） */
+const replyIncomingPkInvite = async (status: 0 | 1) => {
+  const invite = incomingPkInvite.value;
+  if (!invite) {
+    return;
+  }
+  try {
+    await replyPk(status, invite.pkId);
+    showMessage({
+      type: MessageToastType.Success,
+      message: status === 1 ? '已接受连线邀请' : '已拒绝连线邀请',
+    });
+  } catch (error: any) {
+    console.warn('[NikoPK] reply failed:', error?.message || error);
+    showMessage({ type: MessageToastType.Error, message: status === 1 ? '接受失败' : '拒绝失败' });
+  } finally {
+    clearIncomingPkInvite();
+  }
+};
+
+/** PK 开始（双方都会收到 action 108）：只有本地主动发起 PK 时才展示 PK 条，
+ *  连麦（走同一个 invitePk 接口）接受后服务端同样下发 108，不能误判成 PK */
+const handlePkStartedEvent = (event: LivePkStarted) => {
+  console.log('[NikoPK] pk started:', event.pkId);
+  clearIncomingPkInvite();
+  if (!pkIntentActive.value) {
+    console.log('[NikoPK] co-host connected (not PK), skip PK bar');
+    return;
+  }
+  if (demoPkActive.value || currentBattleInfo.value?.battleId) {
+    return;
+  }
+  demoPkActive.value = true;
+  startPkCountdown(300);
+};
+
+/** PK 结束 / 对方退出（action 110） */
+const handlePkEndedEvent = (event: LivePkEnded) => {
+  console.log('[NikoPK] pk ended:', event.pkId);
+  pkIntentActive.value = false;
+  demoPkActive.value = false;
+  pkCountdown.value = 0;
+  if (pkTimer) {
+    clearInterval(pkTimer);
+    pkTimer = null;
+  }
+};
 /** 禁播/封禁/下播提示弹窗的 dialogId，用于区分普通「结束直播」确认框 */
 let liveStopDialogId = '';
 let liveStopNoticePending = false;
@@ -452,6 +619,7 @@ watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
 const handlePkClick = async () => {
   if (currentBattleInfo.value?.battleId || demoPkActive.value) {
     // 结束 PK（演示效果直接本地清除）
+    pkIntentActive.value = false;
     if (demoPkActive.value) {
       demoPkActive.value = false;
       pkCountdown.value = 0;
@@ -469,6 +637,7 @@ const handlePkClick = async () => {
   }
   // 不弹窗：直接查询在播主播并自动邀请第一位；
   // 没有可邀请的主播时，本地触发 PK 血条效果展示
+  pkIntentActive.value = true;
   try {
     const result: any = await getPkAnchorList('', 1, 20);
     const list: any[] = Array.isArray(result) ? result : (result?.list ?? result?.data ?? []);
@@ -488,12 +657,17 @@ const handlePkClick = async () => {
 
 /** PK 演示效果开关：没有在播主播可邀请时本地展示 PK 血条 */
 const demoPkActive = ref(false);
+/** 本地是否主动发起的是 PK（false 表示走连麦，服务端同样会下发 108，不能展示 PK 条） */
+const pkIntentActive = ref(false);
+/** PK 进行中：血条盖在视频区顶部 */
+const pkActive = computed(() => !!(currentBattleInfo.value?.battleId || demoPkActive.value));
 
 /** 连麦入口：同样走「查询开播主播」列表 */
 const openLinkMicDialog = () => {
   if (!isInLive.value || loading.value) {
     return;
   }
+  pkIntentActive.value = false;
   pkDialogTitle.value = '连麦';
   showPkDialog.value = true;
 };
@@ -531,6 +705,55 @@ const handleBackToList = () => {
   }
   router.replace({ name: 'anchor-list' });
 };
+
+/** 更多直播：复用观众端 MoreLiveTray，底部横滑长条弹窗（内部自带拉流预览） */
+const moreLiveVisible = ref(false);
+
+const toggleMoreLive = () => {
+  moreLiveVisible.value = !moreLiveVisible.value;
+};
+
+/** 主播端不跳转到其他直播间，点选卡片仅关闭弹窗 */
+const handleMoreLiveSelect = () => {
+  moreLiveVisible.value = false;
+};
+
+/** 关注列表弹窗 */
+const followListVisible = ref(false);
+/** 消息中心弹窗 */
+const messageCenterVisible = ref(false);
+/** LiveHeader 实例：关闭消息中心后刷新未读红点 */
+const headerRef = ref<any>(null);
+function handleCloseMessageCenter() {
+  messageCenterVisible.value = false;
+  headerRef.value?.refreshMessageUnread?.();
+}
+
+/** 点击关注列表里的用户：打开用户资料卡 */
+function openFollowUserCard(user: AnchorPrepareWhitelistUser) {
+  void handleUserClick({ userId: String(user.user_id), isMystery: false });
+}
+
+/** 打开消息中心：开播页本身已登录 IM，这里再兜底补登一次，避免过早点击时 IM 尚未就绪 */
+async function handleOpenMessage() {
+  try {
+    const stored = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
+    if (stored) {
+      const { sdkAppId, userId, userSig } = JSON.parse(stored);
+      // useLoginState().login 内部幂等：已登录且同 userId 直接返回
+      await loginIm({
+        sdkAppId: Number(sdkAppId),
+        userId: String(userId),
+        userSig: String(userSig),
+      });
+    }
+    messageCenterVisible.value = true;
+  } catch (error: any) {
+    console.error('[TUILiveKitWin] open message center failed:', error);
+    showMessage({ type: MessageToastType.Error, message: `消息中心打开失败：${error?.message || 'IM 登录失败'}` });
+  }
+}
+
 // 当前 SDKAppID 未开通直播房间套餐，使用 Conference 类型进房，手动维护直播状态
 const nikoIsLive = ref(false);
 const isInLive = computed(() => nikoIsLive.value || !!currentLive.value?.liveId);
@@ -550,6 +773,36 @@ const pkDialogTitle = ref('PK');
 const currentPkId = computed(() => String((currentBattleInfo.value as any)?.pkId || ''));
 /** 本场开播时间，用于结算面板计算直播时长 */
 const liveStartedAt = ref(0);
+/** 开播时长（秒）：开播成功后每秒自增 */
+const liveDurationSeconds = ref(0);
+let liveDurationTimer: ReturnType<typeof setInterval> | null = null;
+
+const stopLiveDurationTimer = () => {
+  if (liveDurationTimer) {
+    clearInterval(liveDurationTimer);
+    liveDurationTimer = null;
+  }
+};
+
+const startLiveDurationTimer = () => {
+  stopLiveDurationTimer();
+  liveDurationSeconds.value = 0;
+  liveDurationTimer = setInterval(() => {
+    liveDurationSeconds.value += 1;
+  }, 1000);
+};
+
+/** 开播时长展示：00时00分00秒 */
+const liveDurationText = computed(() => {
+  if (!isInLive.value || !liveStartedAt.value) {
+    return '00时00分00秒';
+  }
+  const total = liveDurationSeconds.value;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return `${hours}时${minutes}分${seconds}秒`;
+});
 /** 本场峰值在线人数（来自观众列表快照） */
 const peakAudienceCount = ref(0);
 /** 本场累计进房人次（来自 IM 101 进房消息；观众列表 15s 轮询会漏掉短停留观众，进房消息更可靠） */
@@ -566,7 +819,11 @@ const nikoRoomId = ref<string>('');
 // 在线人数来自 IM 群成员（TUIRoomEngine 房间不可用，TUIKit 的 audienceCount 恒为 0）
 const nikoAudienceCount = ref(0);
 
-/** 用户信息卡片（DOM 展示：开播后视频为 canvas 画布，卡片可直接盖在上方） */
+/** 视频区 DOM 容器：连线对方主播的 DOM 视频也挂在这里（absolute 定位） */
+const centerRef = ref<HTMLElement | null>(null);
+
+
+/** 用户信息卡片（DOM 展示：视频画布是 DOM，卡片可直接盖在上方） */
 const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo = ref<any>(null);
@@ -595,6 +852,470 @@ const handleUserClick = async (payload: { userId: string; isMystery: boolean }) 
     userCardLoading.value = false;
   }
 };
+
+/* ---------------- 连线对方主播（TRTC 远端视图渲染成 DOM） ---------------- */
+interface RemoteGuest {
+  userId: string;
+  nickName?: string;
+}
+
+const remoteGuestUsers = ref<RemoteGuest[]>([]);
+const guestVideoAvailable = new Set<string>();
+
+/** 远端嘉宾静音状态：key = userId，true 表示已关闭对方声音 */
+const guestAudioMuted = ref<Record<string, boolean>>({});
+
+const toggleGuestAudio = (userId: string) => {
+  const nextMuted = !guestAudioMuted.value[userId];
+  guestAudioMuted.value = { ...guestAudioMuted.value, [userId]: nextMuted };
+  roomEngine.instance
+    ?.muteRemoteAudioStream({ userId, isMute: nextMuted })
+    .catch((error: unknown) => {
+      console.warn('[Niko] muteRemoteAudioStream failed:', userId, error);
+    });
+};
+
+/** 视频区统一布局：0人主播满屏，1人左右等分，2人及以上主播2/3 + 嘉宾右侧堆叠 */
+const videoLayoutClass = computed(() => {
+  const count = remoteGuestUsers.value.length;
+  if (count <= 0) return 'video-layout-host-only';
+  if (count === 1) return 'video-layout-split';
+  return 'video-layout-side';
+});
+
+/** 横屏 / 竖屏样式类：layoutTemplate 200~599 → 横屏，>=600 → 竖屏 */
+const orientationClass = computed(() => {
+  const tpl = currentLive.value?.layoutTemplate;
+  // 未加载时按 SDK 默认（竖屏 600）处理
+  return tpl === undefined || tpl >= 600 ? 'is-portrait' : 'is-landscape';
+});
+
+/**
+ * 根据 layoutTemplate 同步摄像头采集的横竖屏模式。
+ * WinLocalMixer 只把分辨率模式同步给了 StreamLayoutService（影响混流画布比例），
+ * 但没有调用 roomEngine.setVideoResolutionMode，导致摄像头始终横屏采集，
+ * 选竖屏时画面仍是横屏 + 下方黑边。这里补上真正的摄像头分辨率模式切换。
+ * layoutTemplate: 200~599 → 横屏，>=600 → 竖屏
+ */
+const applyCameraResolutionMode = () => {
+  const tpl = currentLive.value?.layoutTemplate;
+  // 直播信息还没加载时不要强改，SDK 默认就是竖屏(600)，否则会把横屏模式覆盖成默认值
+  if (typeof tpl !== 'number') {
+    return;
+  }
+  const isPortrait = tpl >= 600;
+  const resolutionMode = isPortrait
+    ? TUIResolutionMode.kResolutionMode_Portrait
+    : TUIResolutionMode.kResolutionMode_Landscape;
+  roomEngine.instance
+    ?.setVideoResolutionMode({
+      streamType: TUIVideoStreamType.kCameraStream,
+      resolutionMode,
+    })
+    .catch((err: unknown) => {
+      console.warn('[Niko] setVideoResolutionMode failed:', err);
+    });
+};
+
+let previewRegionTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 横竖屏切换后重新绑定预览元素。
+ * 注意：IPC 模式（windowId = 0）下 SDK 只接受 HTMLElement，传 Rect 会直接
+ * 走 previewInNone() 把预览关掉（这就是传 Rect 后画面消失的原因）。
+ * 这里重新传元素本身，让 SDK 重新计算 working area / 设计器尺寸。
+ */
+const applyPreviewRegion = () => {
+  try {
+    const el = document.querySelector('.video-layout .video-cell-host .local-mixer-content') as HTMLElement | null;
+    const mmm = roomEngine.instance?.getTRTCCloud()?.getMediaMixingManager() as any;
+    if (!el || !mmm || typeof mmm.bindPreviewArea !== 'function') {
+      return;
+    }
+    mmm.bindPreviewArea(0, el)
+      .then(() => {
+        patchMediaMixingManager();
+        refillCameraSources();
+        console.log('[Niko] preview element rebound');
+      })
+      .catch((error: unknown) => {
+        console.warn('[Niko] bindPreviewArea(element) failed:', error);
+      });
+  } catch (error) {
+    console.warn('[Niko] applyPreviewRegion failed:', error);
+  }
+};
+
+const schedulePreviewRegion = () => {
+  if (previewRegionTimer) {
+    clearTimeout(previewRegionTimer);
+  }
+  previewRegionTimer = setTimeout(() => applyPreviewRegion(), 400);
+};
+
+// 混流预览挂载后：禁用设计器拖拽 + 劫持布局铺满本地画面
+watch(
+  () => mixerActive.value,
+  (active) => {
+    if (active) {
+      setTimeout(() => { disableMixerDesigner(); patchMediaMixingManager(); }, 300);
+      setTimeout(() => { disableMixerDesigner(); patchMediaMixingManager(); }, 1000);
+      setTimeout(() => { disableMixerDesigner(); patchMediaMixingManager(); }, 2000);
+    }
+  },
+  { immediate: true },
+);
+
+// layoutTemplate 变化时同步摄像头横竖屏（开播前切换才会生效，开播中 OrientationSwitch 已禁用）
+watch(
+  () => currentLive.value?.layoutTemplate,
+  () => {
+    applyCameraResolutionMode();
+    // 画布比例随横竖屏变化，已添加的摄像头源 rect 需要重铺，否则会留黑边
+    nextTick(() => refillCameraSources());
+    // 预览区域按新的横竖屏比例重新绑定
+    schedulePreviewRegion();
+  },
+  { immediate: true },
+);
+
+/**
+ * 禁用混流设计器的拖拽交互（不销毁 designer，否则 NoneStreamLayoutManager.setLayout
+ * 会因 mediaMixingDesigner 为 null / 未初始化而报 "updateWorkingArea no data"，
+ * 导致本地预览布局失效、关闭连线后摄像头无法恢复）。
+ * 设计器的拖拽遮罩默认 display:none，仅在选中媒体源时出现；这里把它的交互关掉即可。
+ */
+const disableMixerDesigner = () => {
+  try {
+    const mmm = roomEngine.instance?.getTRTCCloud()?.getMediaMixingManager() as any;
+    const designer = mmm?.mediaMixingDesigner;
+    if (designer?.container) {
+      // 让设计器容器不接收鼠标事件，避免主播误拖动画面
+      designer.container.style.pointerEvents = 'none';
+    }
+  } catch (error) {
+    console.warn('[Niko] disableMixerDesigner failed:', error);
+  }
+};
+
+// 记录最新的混流布局区域尺寸（CSS 像素），用于把本地用户画面铺满整个预览区
+let currentLayoutArea: { width: number; height: number } | null = null;
+// NoneStreamLayoutManager.centerLiveOwner 是否已被替换为铺满版本
+let centerLiveOwnerPatched = false;
+
+/**
+ * 根据 publishVideoQuality + layoutTemplate 计算混流画布的物理尺寸。
+ * 与 SDK VideoMixerState 中 V / y 计算保持一致。
+ */
+function getMixingCanvasSize(): { width: number; height: number } {
+  const quality = videoMixerState.publishVideoQuality?.value ?? 4;
+  const isPortrait = (currentLive.value?.layoutTemplate ?? 0) >= 600;
+  const qualityMap: Record<number, [number, number]> = {
+    1: [640, 360],   // 360p
+    2: [960, 540],   // 540p
+    3: [1280, 720],  // 720p
+    4: [1920, 1080], // 1080p
+  };
+  const [w, h] = qualityMap[quality] || [1920, 1080];
+  return isPortrait ? { width: h, height: w } : { width: w, height: h };
+}
+
+/**
+ * 计算把源画面铺满画布的 rect（裁剪超出部分，不留黑边）。
+ * 与 SDK 默认 be() 的“等比缩放+居中留黑边”相反，这里取较大缩放比。
+ * rotation 为 TRTCVideoRotation 枚举：0=0°, 1=90°, 2=180°, 3=270°。
+ */
+function computeFillRect(source: any, canvasW: number, canvasH: number) {
+  const srcW = source?.width || 0;
+  const srcH = source?.height || 0;
+  if (!srcW || !srcH || !canvasW || !canvasH) {
+    return null;
+  }
+  const rotation = source.rotation || 0;
+  const rotated = rotation === 1 || rotation === 3; // 90° / 270°
+  const effW = rotated ? srcH : srcW;
+  const effH = rotated ? srcW : srcH;
+  const scale = Math.max(canvasW / effW, canvasH / effH);
+  const scaledW = Math.round(effW * scale);
+  const scaledH = Math.round(effH * scale);
+  return {
+    left: Math.round((canvasW - scaledW) / 2),
+    top: Math.round((canvasH - scaledH) / 2),
+    right: Math.round((canvasW + scaledW) / 2),
+    bottom: Math.round((canvasH + scaledH) / 2),
+  };
+}
+
+/**
+ * 把摄像头 / 屏幕共享源的 rect 改为铺满画布。
+ * TRTCMediaSourceType: kCamera = 0，kScreen = 1，kImage = 2，kVideoFile = 6。
+ * 仅处理 0/1，图片/视频源保持 SDK 默认的等比缩放。
+ */
+function fillSourceRectIfNeeded(source: any) {
+  if (!source || (source.sourceType !== 0 && source.sourceType !== 1)) {
+    return;
+  }
+  const { width: cw, height: ch } = getMixingCanvasSize();
+  const fillRect = computeFillRect(source, cw, ch);
+  if (fillRect) {
+    source.rect = fillRect;
+  }
+}
+
+/**
+ * 重新铺满已添加的摄像头 / 屏幕共享源。
+ * 用于：① patch 生效前已添加的源；② 横竖屏切换后画布尺寸变化。
+ */
+function refillCameraSources() {
+  try {
+    const mmm = roomEngine.instance?.getTRTCCloud()?.getMediaMixingManager() as any;
+    if (!mmm || typeof mmm.updateMediaSource !== 'function') {
+      return;
+    }
+    const sources = videoMixerState.mediaSourceList?.value || [];
+    for (const source of sources) {
+      if (source && (source.sourceType === 0 || source.sourceType === 1)) {
+        mmm.updateMediaSource(source);
+      }
+    }
+  } catch (error) {
+    console.warn('[Niko] refillCameraSources failed:', error);
+  }
+}
+
+/**
+ * 替换 NoneStreamLayoutManager.centerLiveOwner：
+ * SDK 默认实现会按混流画布比例把本地用户 rect 居中（留黑边）。
+ * 这里改为直接撑满整个 displayArea，实现横屏铺满宽度、竖屏铺满高度。
+ * 同时劫持 setStreamLayout 作为兜底（自定义布局模式下也强制本地用户 Fill + 满 rect）。
+ */
+let patchedMediaMixingManager: any = null;
+const patchMediaMixingManager = () => {
+  try {
+    const mmm = roomEngine.instance?.getTRTCCloud()?.getMediaMixingManager() as any;
+    if (!mmm) {
+      return;
+    }
+    // 1) 替换 NoneStreamLayoutManager.centerLiveOwner（只做一次）
+    if (!centerLiveOwnerPatched && mmm.streamLayoutManager) {
+      const proto = Object.getPrototypeOf(mmm.streamLayoutManager);
+      if (proto && typeof proto.centerLiveOwner === 'function' && !proto.__nikoPatched) {
+        const originalCenterLiveOwner = proto.centerLiveOwner;
+        proto.centerLiveOwner = function patchedCenterLiveOwner(this: any) {
+          if (this.context && this.layout) {
+            const dpr = window.devicePixelRatio || 1;
+            const dw = (this.displayArea?.width || 0) * dpr;
+            const dh = (this.displayArea?.height || 0) * dpr;
+            if (dw > 0 && dh > 0) {
+              this.layout.userList = [{
+                userId: '',
+                rect: { left: 0, top: 0, right: Math.round(dw), bottom: Math.round(dh) },
+                fillMode: TRTCVideoFillMode.TRTCVideoFillMode_Fill,
+                zOrder: 0,
+              }];
+              return;
+            }
+          }
+          return originalCenterLiveOwner.call(this);
+        };
+        proto.__nikoPatched = true;
+        centerLiveOwnerPatched = true;
+        console.log('[Niko] NoneStreamLayoutManager.centerLiveOwner patched to fill area');
+      }
+    }
+    // 2) 劫持 setStreamLayout（关键）：tuikit 的 StreamLayoutService 会按混流画布比例
+    //    计算出留黑边的 rect + fillMode=Fit 传进来，SDK 此时是“手动 rect”模式，
+    //    直接照用该 rect，导致预览上下/左右黑边。这里在原型上统一改成满框 + Fill。
+    const mmmProto = Object.getPrototypeOf(mmm);
+    if (mmmProto && !mmmProto.__nikoSetStreamLayoutPatched) {
+      const originalSetStreamLayout = mmmProto.setStreamLayout;
+      if (typeof originalSetStreamLayout === 'function') {
+        mmmProto.setStreamLayout = function (layout: any) {
+          const userList = layout?.userList;
+          if (Array.isArray(userList)) {
+            let width = currentLayoutArea?.width || 0;
+            let height = currentLayoutArea?.height || 0;
+            if (!width || !height) {
+              const el = document.querySelector('.video-layout .local-mixer-content') as HTMLElement | null;
+              width = el?.clientWidth || 0;
+              height = el?.clientHeight || 0;
+            }
+            for (const item of userList) {
+              if (!item || item.userId !== '') {
+                continue;
+              }
+              item.fillMode = TRTCVideoFillMode.TRTCVideoFillMode_Fill;
+              if (width > 0 && height > 0) {
+                item.rect = { left: 0, top: 0, right: Math.round(width), bottom: Math.round(height) };
+              }
+            }
+          }
+          return originalSetStreamLayout.call(this, layout);
+        };
+        mmmProto.__nikoSetStreamLayoutPatched = true;
+        console.log('[Niko] MediaMixingManager.prototype.setStreamLayout patched');
+      }
+    }
+    // 3) 劫持 addMediaSource / updateMediaSource：把摄像头/屏幕源的 rect 从
+    //    SDK 默认的“等比缩放留黑边”改为“铺满画布裁剪”，解决竖屏时下方黑屏。
+    if (mmmProto && !mmmProto.__nikoFillSourceRectPatched) {
+      const originalAddMediaSource = mmmProto.addMediaSource;
+      const originalUpdateMediaSource = mmmProto.updateMediaSource;
+      if (typeof originalAddMediaSource === 'function') {
+        mmmProto.addMediaSource = function (source: any) {
+          fillSourceRectIfNeeded(source);
+          return originalAddMediaSource.call(this, source);
+        };
+      }
+      if (typeof originalUpdateMediaSource === 'function') {
+        mmmProto.updateMediaSource = function (source: any) {
+          fillSourceRectIfNeeded(source);
+          return originalUpdateMediaSource.call(this, source);
+        };
+      }
+      mmmProto.__nikoFillSourceRectPatched = true;
+      console.log('[Niko] MediaMixingManager.addMediaSource/updateMediaSource patched to fill canvas');
+    }
+    patchedMediaMixingManager = mmm;
+    // patch 生效前可能已添加了摄像头源，这里统一重铺一次
+    refillCameraSources();
+  } catch (error) {
+    console.warn('[Niko] patchMediaMixingManager failed:', error);
+  }
+};
+
+/* ---------------- 连线对方主播（RoomEngine 远端视频渲染成 DOM） ---------------- */
+function guestViewId(userId: string) {
+  return `niko-guest-${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
+/** 远端视频绑定：RoomEngine（IPC 模式）必须走 setRemoteVideoView + startPlayRemoteVideo，
+ *  直接调 trtcCloud.startRemoteView(userId, element) 不会渲染。 */
+async function bindGuestVideo(userId: string) {
+  await nextTick();
+  try {
+    await roomEngine.instance?.setRemoteVideoView({
+      userId,
+      streamType: TUIVideoStreamType.kCameraStream,
+      view: [guestViewId(userId)],
+    });
+    await roomEngine.instance?.startPlayRemoteVideo({
+      userId,
+      streamType: TUIVideoStreamType.kCameraStream,
+    });
+    console.log('[Niko] remote video bound:', userId, guestViewId(userId));
+  } catch (error) {
+    console.warn('[Niko] bind remote video failed:', userId, error);
+  }
+}
+
+function stopGuestVideo(userId: string) {
+  roomEngine.instance?.stopPlayRemoteVideo({
+    userId,
+    streamType: TUIVideoStreamType.kCameraStream,
+  }).catch((error: unknown) => {
+    console.warn('[Niko] stopPlayRemoteVideo failed:', userId, error);
+  });
+}
+
+function removeRemoteGuest(userId: string) {
+  remoteGuestUsers.value = remoteGuestUsers.value.filter((u) => u.userId !== userId);
+  guestVideoAvailable.delete(userId);
+  if (userId in guestAudioMuted.value) {
+    const next = { ...guestAudioMuted.value };
+    delete next[userId];
+    guestAudioMuted.value = next;
+  }
+}
+
+/** RoomEngine 远端用户进房：{ roomId, userInfo } */
+const onRemoteUserEnterRoom = ({ userInfo }: { roomId: string; userInfo?: { userId: string; userName?: string } }) => {
+  const userId = userInfo?.userId;
+  if (!userId || !isInLive.value) {
+    return;
+  }
+  if (remoteGuestUsers.value.some((u) => u.userId === userId)) {
+    return;
+  }
+  console.log('[Niko] remote user entered:', userId, userInfo?.userName);
+  remoteGuestUsers.value = [...remoteGuestUsers.value, { userId, nickName: userInfo?.userName }];
+};
+
+/** RoomEngine 远端用户视频状态变更：{ userId, streamType, hasVideo, reason } */
+const onUserVideoStateChanged = ({ userId, streamType, hasVideo }: { userId: string; streamType: number; hasVideo: boolean; reason: number }) => {
+  if (!userId) {
+    return;
+  }
+  // 只处理摄像头主路流（kCameraStream = 0）
+  if (streamType !== TUIVideoStreamType.kCameraStream) {
+    return;
+  }
+  if (!hasVideo) {
+    guestVideoAvailable.delete(userId);
+    stopGuestVideo(userId);
+    removeRemoteGuest(userId);
+    return;
+  }
+  console.log('[Niko] remote camera available:', userId);
+  guestVideoAvailable.add(userId);
+  if (!remoteGuestUsers.value.some((u) => u.userId === userId)) {
+    remoteGuestUsers.value = [...remoteGuestUsers.value, { userId }];
+  }
+  bindGuestVideo(userId);
+};
+
+/** RoomEngine 远端用户离开房间：{ roomId, userInfo } */
+const onRemoteUserLeaveRoom = ({ userInfo }: { roomId: string; userInfo?: { userId: string; userName?: string } }) => {
+  const userId = userInfo?.userId;
+  if (!userId) {
+    return;
+  }
+  stopGuestVideo(userId);
+  removeRemoteGuest(userId);
+};
+
+const clearRemoteGuests = () => {
+  remoteGuestUsers.value.forEach((u) => {
+    stopGuestVideo(u.userId);
+  });
+  remoteGuestUsers.value = [];
+  guestVideoAvailable.clear();
+  guestAudioMuted.value = {};
+};
+
+/**
+ * RoomEngine 事件注册：onMounted 执行时 TUIRoomEngine 可能还未 ready，
+ * roomEngine.instance 为 null（此时 `?.on()` 会静默跳过，导致远端进房/视频事件全部接收不到，
+ * 表现就是「连线后看不到对方」）。这里等 ready 后再绑定，并在已 ready 时幂等绑定。
+ */
+let roomEngineEventsBound = false;
+const bindRoomEngineEvents = () => {
+  const engine = roomEngine.instance;
+  if (!engine || roomEngineEventsBound) {
+    return;
+  }
+  roomEngineEventsBound = true;
+  engine.on(TUIRoomEvents.onRemoteUserEnterRoom, onRemoteUserEnterRoom);
+  engine.on(TUIRoomEvents.onRemoteUserLeaveRoom, onRemoteUserLeaveRoom);
+  engine.on(TUIRoomEvents.onUserVideoStateChanged, onUserVideoStateChanged);
+  console.log('[Niko] room engine events bound');
+};
+
+const bindRoomEngineEventsWhenReady = () => {
+  if (roomEngine.instance) {
+    bindRoomEngineEvents();
+    return;
+  }
+  TUIRoomEngine.once('ready', bindRoomEngineEvents);
+};
+
+// 嘉宾数量变化后主播区宽度改变，重新绑定预览元素并按新尺寸铺满摄像头
+watch(
+  () => remoteGuestUsers.value.length,
+  () => {
+    nextTick(() => schedulePreviewRegion());
+  },
+);
 
 const displayAudienceCount = computed(() => (nikoAudienceCount.value > 0 ? nikoAudienceCount.value : audienceCount.value));
 const onAudienceCountChange = (count: number) => {
@@ -808,6 +1529,7 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     liveStopNoticePending = false;
     nikoIsLive.value = true;
     liveStartedAt.value = Date.now();
+    startLiveDurationTimer();
     peakAudienceCount.value = 0;
     totalJoinCount.value = 0;
     settleStats.value = null;
@@ -1199,9 +1921,10 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
     nikoRoomId.value = '';
     nikoAudienceCount.value = 0;
     nikoIsLive.value = false;
+    // 关播时清理连线对方的远端视图
+    clearRemoteGuests();
     userCardVisible.value = false;
-    // 关播后卸载 StreamMixer，销毁原生视频预览窗口。
-    // 该原生窗口永远盖在 DOM 上方，不销毁会导致「关播后画面还在、结算层被盖住」。
+    // 关播后卸载 StreamMixer，停止混流预览与混流服务。
     // 卸载时 WinLocalMixer 会自动 clearMediaSource + bindPreviewArea(0,null) + stopMediaMixingServer。
     mixerActive.value = false;
     await nextTick();
@@ -1218,6 +1941,8 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
       };
     }
     liveStartedAt.value = 0;
+    stopLiveDurationTimer();
+    liveDurationSeconds.value = 0;
     stopSystemAudioLoopbackSafely();
     return true;
   } catch (error: any) {
@@ -1460,10 +2185,15 @@ const onUserOnSeatInfoChanged = (userOnSeatInfos: Array<Record<string, any>>) =>
 const onStreamLayoutChanged = (streamLayout: Record<string, any>) => {
   console.log('[TUILiveKitWin] onStreamLayoutChanged:', streamLayout);
   window.ipcRenderer.send('stream-layout', streamLayout);
+  // 布局管理器此时已创建，尝试打 centerLiveOwner 原型补丁（铺满本地画面）
+  patchMediaMixingManager();
 };
 
 const onStreamLayoutAreaChanged = (layoutArea: { left: number; top: number; right: number; bottom: number; width: number; height: number }) => {
   console.log('[TUILiveKitWin] onStreamLayoutAreaChanged:', layoutArea);
+  currentLayoutArea = { width: layoutArea.width, height: layoutArea.height };
+  // 此时混流管理器已就绪，确保 setStreamLayout 劫持已生效
+  patchMediaMixingManager();
   window.ipcRenderer.send('stream-layout-area', layoutArea);
 };
 
@@ -1502,6 +2232,10 @@ onMounted(async () => {
   unsubscribeSettle = onLiveImSettle(applySettleStats);
   // 下播 / 禁播 / 封禁 / 警告（对齐 web-obs-live）
   unsubscribeSystem = onLiveImSystem(showLiveNotice);
+  // PK / 连麦邀请：被邀请方弹窗、开始/结束状态（对齐 web-obs-live action 106/108/110）
+  unsubscribePkInvite = onLiveImPkInvite(handlePkInviteReceived);
+  unsubscribePkStarted = onLiveImPkStarted(handlePkStartedEvent);
+  unsubscribePkEnded = onLiveImPkEnded(handlePkEndedEvent);
   // 累计本场进房人次：结算页「观看人数」的本地估算源之一
   // （观众列表 15s 轮询是快照，短停留观众会漏；进房消息每人必达）
   unsubscribeJoinCount = onLiveImMessage((message) => {
@@ -1509,7 +2243,9 @@ onMounted(async () => {
       totalJoinCount.value += 1;
     }
   });
-  // 礼物特效由开播后挂载的 GiftEffect 组件自行订阅 IM 礼物消息并播放（DOM 层，直接盖在 canvas 画面上）
+  // 连线对方主播：通过 RoomEngine 事件监听远端用户（RoomEngine 可能使用子云实例，
+  // 直接监听 trtcCloud 共享单例可能收不到事件）
+  bindRoomEngineEventsWhenReady();
 
   // Setup event listeners
   setupEventListeners();
@@ -1542,6 +2278,8 @@ onMounted(async () => {
       );
     }
     loginReady.value = true;
+    // 登录后 TUIRoomEngine 已 ready：确保远端进房/视频事件已注册
+    bindRoomEngineEventsWhenReady();
   } catch (e) {
     redirectToLogin();
   }
@@ -1678,6 +2416,7 @@ onBeforeUnmount(() => {
     clearTimeout(loginRedirectTimer);
     loginRedirectTimer = null;
   }
+  stopLiveDurationTimer();
   if (pkTimer) {
     clearInterval(pkTimer);
     pkTimer = null;
@@ -1688,6 +2427,18 @@ onBeforeUnmount(() => {
   unsubscribeSystem = null;
   unsubscribeJoinCount?.();
   unsubscribeJoinCount = null;
+  unsubscribePkInvite?.();
+  unsubscribePkInvite = null;
+  unsubscribePkStarted?.();
+  unsubscribePkStarted = null;
+  unsubscribePkEnded?.();
+  unsubscribePkEnded = null;
+  clearIncomingPkInvite();
+  roomEngine.instance?.off(TUIRoomEvents.onRemoteUserEnterRoom, onRemoteUserEnterRoom);
+  roomEngine.instance?.off(TUIRoomEvents.onRemoteUserLeaveRoom, onRemoteUserLeaveRoom);
+  roomEngine.instance?.off(TUIRoomEvents.onUserVideoStateChanged, onUserVideoStateChanged);
+  roomEngineEventsBound = false;
+  clearRemoteGuests();
   hasStartedLogoutRedirect = false;
   stopSystemAudioLoopbackSafely();
   if (currentForceLogoutDialogId.value) {
@@ -1719,7 +2470,7 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 @import "../TUILiveKit/assets/mac.scss";
 
-/* PK 进度条覆盖层 */
+/* PK 血条：盖在视频区顶部（视频已是 DOM，可以正常叠加） */
 .pk-overlay {
   position: absolute;
   top: 12px;
@@ -1727,7 +2478,6 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   z-index: 10;
   width: 80%;
-  max-width: 500px;
   .pk-bar {
     display: flex;
     align-items: center;
@@ -1782,6 +2532,138 @@ onBeforeUnmount(() => {
     }
   }
 }
+/* 主播 + 连线嘉宾统一视频布局 */
+.video-layout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: #000;
+  overflow: hidden;
+}
+.video-cell-host {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.guest-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+/* 0 位嘉宾：主播满屏 */
+.video-layout-host-only .guest-column {
+  display: none;
+}
+/* 1 位嘉宾：左右等分 */
+.video-layout-split {
+  .video-cell-host { flex: 1; }
+  .guest-column { flex: 1; }
+}
+/* 2 位及以上嘉宾：主播占 2/3，嘉宾在右侧 1/3 堆叠 */
+.video-layout-side {
+  .video-cell-host { flex: 2; }
+  .guest-column { flex: 1; }
+}
+.video-cell-guest {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  & + .video-cell-guest {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+}
+.host-guest-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+.host-guest-name {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+/* 连线嘉宾声音开关（关闭其他主播声音） */
+.guest-audio-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  &.is-muted {
+    color: #ff5c5c;
+  }
+}
+/* 混流预览（SDK 把画面渲染进 .local-mixer-content，内部是 .trtc-video + video/canvas）。
+   IPC 模式下不能传 Rect 重新绑定预览，因此直接控制预览容器的位置和尺寸，并按截图比例：
+   - 竖屏：宽 50%、整高、水平居中
+   - 横屏：整宽、top 11%、高 74%
+   内部 video/canvas 用 object-fit: cover 裁掉多余部分，避免黑边。 */
+.video-layout.is-portrait :deep(.local-mixer-content) {
+  position: absolute !important;
+  left: 25% !important;
+  top: 0 !important;
+  width: 50% !important;
+  height: 100% !important;
+}
+.video-layout.is-landscape :deep(.local-mixer-content) {
+  position: absolute !important;
+  left: 0 !important;
+  top: 11% !important;
+  width: 100% !important;
+  height: 74% !important;
+}
+/* 有嘉宾（左右等分 / 右侧堆叠）时主播格子被压缩，预览直接铺满自己的格子，
+   否则竖屏 50%、横屏 top 11% 的比例是按整屏算的，会缩成一小块并留黑边 */
+.video-layout.video-layout-split :deep(.local-mixer-content),
+.video-layout.video-layout-side :deep(.local-mixer-content) {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+.video-layout :deep(.local-mixer-content .trtc-video) {
+  width: 100% !important;
+  height: 100% !important;
+}
+.video-layout :deep(.local-mixer-content .trtc-video video),
+.video-layout :deep(.local-mixer-content .trtc-video canvas) {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
 /* 连麦 / PK 工具按钮：与音乐按钮一致（图标在上、文字在下） */
 .niko-tool-btn {
   display: flex;
@@ -1835,6 +2717,89 @@ onBeforeUnmount(() => {
     opacity: 0.45;
     cursor: not-allowed;
   }
+}
+
+/* 收到连线邀请弹窗 */
+.niko-pk-incoming-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.niko-pk-incoming {
+  width: 360px;
+  padding: 32px 24px 24px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #23263a 0%, #16182a 100%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  text-align: center;
+}
+
+.niko-pk-incoming-avatar {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #7d5cff, #4a7bff);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.niko-pk-incoming-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.niko-pk-incoming-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.niko-pk-incoming-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.niko-pk-incoming-actions {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+}
+
+.niko-pk-incoming-btn {
+  flex: 1;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.niko-pk-incoming-btn:hover {
+  opacity: 0.85;
+}
+
+.niko-pk-incoming-btn.is-reject {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.niko-pk-incoming-btn.is-accept {
+  background: linear-gradient(135deg, #7d5cff, #4a7bff);
+  color: #fff;
 }
 
 /* 关播结算层：对齐 web-obs-live LiveBroadcastScreen 的 end-stats-mask 样式 */
@@ -2169,6 +3134,21 @@ onBeforeUnmount(() => {
             font-weight: 600;
           }
 
+          /* 开播时长：00时00分00秒（高亮显示） */
+          .live-start-time {
+            flex: none;
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255, 214, 0, 0.16);
+            font-size: 12px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: #ffd54a;
+            white-space: nowrap;
+          }
+
           .pusher-rank-btn {
             flex: none;
             display: inline-flex;
@@ -2193,6 +3173,33 @@ onBeforeUnmount(() => {
               cursor: not-allowed;
               opacity: 0.45;
             }
+          }
+        }
+
+        /* 更多直播：观众数左侧入口，点击在直播间内下拉展示开播中的主播 */
+        .more-live-btn {
+          flex: none;
+          margin-left: auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 10px;
+          border: none;
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.08);
+          color: rgba(255, 255, 255, 0.75);
+          font-size: 12px;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s;
+
+          svg {
+            width: 13px;
+            height: 13px;
+          }
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
           }
         }
 
