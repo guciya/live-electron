@@ -1230,6 +1230,30 @@ const patchMediaMixingManager = () => {
       mmmProto.__nikoFillSourceRectPatched = true;
       console.log('[Niko] MediaMixingManager.addMediaSource/updateMediaSource patched to fill canvas');
     }
+    // 4) ★ 劫持 stopMediaMixingServer：返回列表时 SDK WinLocalMixer.onBeforeUnmount
+    //    会调 stopMediaMixingServer()，把 server 变 Idle。下次进房时虽然 server 会自动重启
+    //    但 addMediaSource/startPublish 有时序 race（server 还没完全 Started）导致黑屏。
+    //    解决方案：让 stopMediaMixingServer 变成 no-op，server 一直保持 Started。
+    //    App 退出时 Electron 进程杀掉，server 自然就没了。
+    if (mmmProto && !mmmProto.__nikoNoopStopServerPatched) {
+      if (typeof mmmProto.stopMediaMixingServer === 'function') {
+        mmmProto.stopMediaMixingServer = async function () {
+          console.log('[Niko] stopMediaMixingServer NO-OP (server kept alive)');
+          // 确保 server 确实是 Started，如果不是就手动启一下
+          if (this.serverStatus !== 2 /* Started */) {
+            console.log('[Niko] but serverStatus=', this.serverStatus, ', forcing startMediaMixingServer...');
+            try {
+              await this.startMediaMixingServer('', 0 /* Embedded */);
+              console.log('[Niko] forced server start OK');
+            } catch (e) {
+              console.warn('[Niko] forced start failed:', e);
+            }
+          }
+        };
+        mmmProto.__nikoNoopStopServerPatched = true;
+        console.log('[Niko] MediaMixingManager.stopMediaMixingServer patched to no-op');
+      }
+    }
     patchedMediaMixingManager = mmm;
     // patch 生效前可能已添加了摄像头源，这里统一重铺一次
     refillCameraSources();
@@ -2517,6 +2541,37 @@ onMounted(async () => {
       if (!mmm) {
         console.warn('[Niko onMounted] scheduleCameraRestore: mmm is null!');
         return;
+      }
+
+      // ====== ★ 等 MediaMixingManager server 完全 ready ======
+      // 退出房间时 SDK 内部 WinLocalMixer.onBeforeUnmount 会调 stopMediaMixingServer，
+      // server 变 Idle。再进房时 WinLocalMixer.mounted → setContainer → ensureMediaServerMode
+      // 会自动 startMediaMixingServer，但这是异步的！
+      // 如果我们的 scheduleCameraRestore 在 server 还没完全 ready（没收到 success 事件）就
+      // startPublish + addMediaSource → C++ 层没有渲染服务 → 黑屏。
+      // 修复：显式 await startMediaMixingServer()，等 serverStatus 变成 Started(2)。
+      //
+      // serverStatus enum: Idle=0, Starting=1, Started=2, Lost=3
+      // serverMode: Embedded=0 (constructor 默认), Independent=1
+      const statusNames = ['Idle', 'Starting', 'Started', 'Lost'];
+      const curStatus = mmm.serverStatus;
+      console.log('[Niko onMounted] MMM serverStatus:', curStatus,
+        `(${statusNames[curStatus] || '?'})`);
+
+      if (curStatus !== 2 /* Started */) {
+        console.log('[Niko onMounted] starting MMM server and waiting for success...');
+        try {
+          // ensureMediaServerMode 内部会检查 serverStatus，Idle/Lost 才 start
+          // 直接调 startMediaMixingServer('', Embedded) 返回 Promise → 等 success 事件
+          await mmm.startMediaMixingServer('', 0 /* Embedded */);
+          console.log('[Niko onMounted] ✅ MMM server READY (Started)');
+        } catch (e) {
+          console.warn('[Niko onMounted] startMediaMixingServer failed:', e,
+            'serverStatus now:', mmm.serverStatus);
+          // 即使 start 失败也继续，后续步骤可能会触发 auto-start
+        }
+      } else {
+        console.log('[Niko onMounted] MMM server already Started ✅');
       }
 
       // ===== 和正常进房 onPreLiveConfirm (L1591-1658) 完全一致的顺序 =====
