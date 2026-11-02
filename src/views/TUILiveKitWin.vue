@@ -755,19 +755,17 @@ const onPkInvited = (anchorId: string) => {
   showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
 };
 
-/** 关闭结算面板：恢复开播前的画布调试状态（重新挂载原生预览并预热摄像头） */
+/** 关闭结算面板：恢复开播前的画布调试状态（重新挂载原生预览窗口） */
 const handleCloseSettle = () => {
   settleStats.value = null;
   mixerActive.value = true;
-  void ensureDefaultCamera();
 };
 
 /** 关闭结算面板后回到预开播弹窗，实现「重新开播」 */
 const handleRestartLive = () => {
   settleStats.value = null;
-  // 结算层「重新开播」：先恢复原生预览窗口挂载，再预热摄像头
+  // 结算层「重新开播」：恢复原生预览窗口挂载，摄像头预热等 onPreLiveConfirm 再做
   mixerActive.value = true;
-  void ensureDefaultCamera();
   showPreLiveDialog.value = true;
 };
 
@@ -1327,6 +1325,11 @@ const onUserVideoStateChanged = ({ userId, streamType, hasVideo, userInfo }: { u
   if (!userId) {
     return;
   }
+  // ⚠️ 必须检查 isInLive！RoomEngine login 后可能收到 LivePlayer 留下的旧房间事件，
+  // 直接把旧房间的房主当作连线嘉宾渲染出来 → 开播页未开播就出现连线宫格。
+  if (!isInLive.value) {
+    return;
+  }
   // 只处理摄像头主路流（kCameraStream = 0）
   if (streamType !== TUIVideoStreamType.kCameraStream) {
     return;
@@ -1359,6 +1362,11 @@ const onUserVideoStateChanged = ({ userId, streamType, hasVideo, userInfo }: { u
 const onRemoteUserLeaveRoom = ({ userInfo }: { roomId: string; userInfo?: { userId: string; userName?: string } }) => {
   const userId = userInfo?.userId;
   if (!userId) {
+    return;
+  }
+  // ⚠️ 同 onUserVideoStateChanged：旧房间的 leave 事件延迟到达时，
+  // 不能误删开播后真正的连线嘉宾。
+  if (!isInLive.value) {
     return;
   }
   stopGuestVideo(userId);
@@ -1510,12 +1518,10 @@ const handleStartLive = () => {
     });
     return;
   }
-  // 摄像头预热改为在用户真正准备开播时触发：
-  // 页面一进来就 addMediaSource 会产生 USB 摄像头 5s 超时、TIM 未就绪等大量报错，
-  // 而用户可能根本不打算开播。放在这里既不误报，也能在填标题/封面期间完成预热。
   // 关播后 StreamMixer 会被卸载，重新开播前先恢复挂载（原生预览窗口重新绑定）
+  // 摄像头预热不再在这里做：等用户点开播确认后（onPreLiveConfirm 里）再 ensureDefaultCamera，
+  // 因为那时 exitRoom + enterRoom 已确保 SDK 底层设备干净，避免 code -2/-6 冲突
   mixerActive.value = true;
-  void ensureDefaultCamera();
   showPreLiveDialog.value = true;
 };
 
@@ -1589,24 +1595,10 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // 因此不再通过 TUIRoomEngine 建房，完全对齐 web-obs-live：
     // 原生 TRTC 以主播身份进房推流 + LiteChat 加入同 ID 的 IM 群（聊天室 / 在线观众）。
 
-    // ⚠️ 关键：trtcCloud 是全局单例，TUIRoomEngine WASM 也会缓存上次进的房间。
-    // AnchorList 进直播间 → LivePlayer enterRoom(room_X, audience) → 返回 → cleanupTrtc()
-    // 是 fire-and-forget，WASM 内部还残留 room_X 的状态。
-    // 如果直接 enterTrtcRoom(新房间)，会看到旧房间的用户画面（onRemoteUserEnterRoom 漏进来）。
-    // 这里先 await exitRoom() 确保旧房间完全退出，再以 anchor 身份进新房间。
-    await new Promise<void>((resolve) => {
-      try {
-        const exitRet = trtcCloud.exitRoom();
-        if (exitRet && typeof (exitRet as any).then === 'function') {
-          (exitRet as Promise<any>).then(() => resolve(), () => resolve());
-        } else {
-          // 没有 Promise 返回时，等 300ms 让 SDK C++ 层处理完
-          setTimeout(resolve, 300);
-        }
-      } catch {
-        resolve(); // 没进房过也会报错，忽略
-      }
-    });
+    // ⚠️ 彻底清理旧房间 + 释放设备后再进新房间！
+    // 之前只是 exitRoom，camera 设备可能还被 SDK 底层持有，
+    // 导致 enterRoom 后 MediaMixingManager.addMediaSource 报 code -2/-6。
+    await ensureTrtcExitRoom();
 
     await enterTrtcRoom(trtcRoomId);
     // 进房成功后再赋值 roomId：LiveChatPanel 监听该值去登录 IM 并加群，
@@ -1624,22 +1616,14 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     } catch (clearErr: any) {
       console.warn('[Niko] clear old media sources failed:', clearErr?.message);
     }
+    // 额外兜底：确保 remoteGuestUsers 没有旧房间残留（onUserVideoStateChanged 的
+    // isInLive 守卫挡住了未开播时的填充，但已开播后旧事件如果延迟到达仍可能有风险）
+    clearRemoteGuests();
+    console.log('[Niko] cleared remote guests (old room residual)');
     // 开播前确保摄像头已加入混流，否则推出去的是黑屏
     await ensureDefaultCamera();
-    // 显式让 TRTC 启动本地视频：exitRoom 后 SDK 可能把摄像头设备 stop 了，
-    // StreamMixer addMediaSource 只加进列表，设备本身可能还是 inactive
-    try {
-      if (cameraList.value.length === 0) await getCameraList();
-      if (cameraList.value[0]) {
-        await trtcCloud.startLocalVideo({
-          videoDeviceId: cameraList.value[0].deviceId,
-          videoType: TRTCVideoStreamType.TRTCVideoStreamTypeBig,
-        });
-        console.log('[Niko] startLocalVideo ok:', cameraList.value[0].deviceName);
-      }
-    } catch (vErr: any) {
-      console.warn('[Niko] startLocalVideo failed:', vErr?.message || vErr);
-    }
+    // MediaMixingManager.addMediaSource 会自动启动 camera 设备，
+    // 无需再显式调 trtcCloud.startLocalVideo（反而可能和混流管理器冲突）
     // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
     // 这里没有走 TUIKit startLive，需要手动 startPublish，否则手机端收不到画面。
     try {
@@ -2355,23 +2339,39 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
   });
 };
 
-onMounted(async () => {
-  // trtcCloud 是全局单例。这里的 cleanup 只负责本地设备释放，
-  // 不做 exitRoom（SSO channel 会被 tear down，WASM 模块 init 时 race）。
-  // 真正的 exitRoom 兜底在 onPreLiveConfirm 里做（login 完成后、enterRoom 之前）。
+/** 彻底释放 TRTC SDK 所有本地资源（房间 + camera + mic + preview）。
+ *  LivePlayer 作为观众进房后退出时 exitRoom 是 fire-and-forget，
+ *  SDK C++ 层可能还持有旧房间状态和本地设备。必须在 enterRoom 新房间之前
+ *  先把旧房间 + 所有本地设备彻底 stop，否则 addMediaSource camera 会报
+ *  "Media source already existed"（code -2）或 "Start camera source failed"（code -6）。 */
+async function ensureTrtcExitRoom(): Promise<void> {
   try {
-    // stopLocalVideo 在 trtcCloud export 上不存在（它是 StreamMixer 的方法），
-    // 只有 stopLocalPreview() 和 muteLocalVideo() 可用。用可选链安全调用。
-    if (typeof (trtcCloud as any).stopLocalPreview === 'function') {
-      (trtcCloud as any).stopLocalPreview();
+    // 1. 先退出房间
+    const exitRet = trtcCloud.exitRoom();
+    if (exitRet && typeof (exitRet as any).then === 'function') {
+      await (exitRet as Promise<any>);
+    } else {
+      await new Promise((r) => setTimeout(r, 300));
     }
-    if (typeof (trtcCloud as any).muteLocalVideo === 'function') {
-      (trtcCloud as any).muteLocalVideo(true, TRTCVideoStreamType.TRTCVideoStreamTypeBig);
-    }
-    console.log('[Niko] mounted: muted local video + stopped preview (safe cleanup)');
-  } catch (_) {
-    console.warn('[Niko] TRTC mounted cleanup warning:', _);
+    // 2. 彻底释放所有本地设备（exitRoom 不保证完全 stop camera/mic）
+    try { (trtcCloud as any).stopLocalPreview?.(); } catch {}
+    try { (trtcCloud as any).muteLocalVideo?.(true, 0); } catch {} // 0 = TRTCVideoStreamTypeBig
+    try { (trtcCloud as any).stopLocalAudio?.(); } catch {}
+    try { (trtcCloud as any).muteLocalAudio?.(true); } catch {}
+    console.log('[Niko] ensureTrtcExitRoom: ok (room + devices released)');
+  } catch (e: any) {
+    console.log('[Niko] ensureTrtcExitRoom (ignored):', e?.message || e);
   }
+}
+
+onMounted(async () => {
+  // ⚠️ 必须在 RoomEngine login 之前确保 TRTC SDK 完全退出所有房间 + 释放本地设备！
+  // RoomEngine login 时会检查 TRTC SDK 状态，如果 SDK 还在 LivePlayer 留下的旧房间里，
+  // RoomEngine 会自动以观众身份 re-enter，从而收到旧房间的远端用户/视频事件，
+  // 触发 onUserVideoStateChanged → remoteGuestUsers 被填充 → 连线宫格布局提前出现。
+  // 同时 camera 设备不释放的话，enterRoom 后 addMediaSource 会报 code -2 / -6。
+  await ensureTrtcExitRoom();
+
   // 系统状态：立即预取 + 30s 轮询（主播名字上方展示）
   void refreshWinSystemStatus();
   winSystemStatusTimer = setInterval(refreshWinSystemStatus, 30000);
