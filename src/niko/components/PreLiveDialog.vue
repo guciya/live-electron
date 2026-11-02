@@ -62,7 +62,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue';
 import { uploadFile } from '../api/upload';
-import { getPrepareLiveInfo, createPrepareLive, type LiveCategory, type PrepareLiveResult } from '../api/live';
+import { getPrepareLiveInfo, createPrepareLive, fetchLiveCategoryList, type LiveCategory, type PrepareLiveResult } from '../api/live';
 import { resolveImageUrl } from '../config';
 import { showMessage, MessageToastType } from '../../TUILiveKit/base-component/MessageToast';
 
@@ -163,9 +163,19 @@ const handleConfirm = async () => {
 
 // 每次打开「开播设置」都拉取一次预开播信息，回显上一次的标题、封面与分类
 const loadPrepareInfo = async () => {
+  // 1) 先拉最新分类列表（/live/liveCategory，优先使用后端返回）
+  try {
+    const cats = await fetchLiveCategoryList();
+    if (Array.isArray(cats) && cats.length > 0) {
+      categories.value = cats;
+    }
+  } catch (e) {
+    console.warn('[Niko] fetchLiveCategoryList failed:', e);
+  }
+  // 2) 拉预开播信息，做字段回显；若分类列表为空且后端返回了分类列表则兜底
   try {
     const info = await getPrepareLiveInfo();
-    if (info?.live_category_list?.length) {
+    if (!categories.value.length && info?.live_category_list?.length) {
       categories.value = info.live_category_list;
     }
     if (info?.live_title) {
@@ -179,7 +189,6 @@ const loadPrepareInfo = async () => {
       form.liveCategoryId = info.live_category_id;
     }
   } catch (e) {
-    // 分类/回显加载失败不阻断开播
     console.warn('[Niko] prepareLiveInfo failed:', e);
   }
 };
@@ -240,7 +249,21 @@ watch(
   outline: none;
   &:focus { border-color: #4a90d9; }
 }
-.prelive-select option { background: #17171b; color: #fff; }
+/* 分类下拉：加大内边距 + 允许滚动 + 选项间距 */
+.prelive-select {
+  padding: 10px 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.prelive-select option {
+  background: #17171b;
+  color: #fff;
+  padding: 12px 14px;
+  margin: 2px 0;
+  border-radius: 4px;
+  min-height: 36px;
+  line-height: 1.6;
+}
 .prelive-cover {
   width: 100%;
   min-height: 160px;

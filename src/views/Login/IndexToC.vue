@@ -413,7 +413,6 @@ function onToggleMaximize() {
 }
 
 function onClose() {
-  logger.log('[LiveHeader]onClose');
   window.ipcRenderer.send('on-close-window', null);
 }
 </script>

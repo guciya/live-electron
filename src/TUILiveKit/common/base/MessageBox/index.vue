@@ -160,7 +160,6 @@ onMounted(async () => {
     padding: 0 1.5rem;
     color: $color-message-box-header;
     align-items: center;
-    box-shadow:0rem 0.4375rem 0.625rem -0.3125rem $color-message-box-shadow;
     .tui-dialog-header-title {
       font-size:1rem;
       font-style:normal;

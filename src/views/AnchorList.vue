@@ -346,7 +346,8 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { IconLive, IconLiveStart, UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
+import { IconLive, IconLiveStart, UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
+import TUIMessageBox from '../TUILiveKit/common/base/MessageBox';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
 import MaximizeIcon from '../TUILiveKit/common/icons/MaximizeIcon.vue';
@@ -366,6 +367,7 @@ import MessageCenter from '../niko/components/MessageCenter.vue';
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const { t } = useUIKit();
 const { logout: logoutIm, login: loginIm } = useLoginState();
 
 const liveList = ref<NikoLiveListItem[]>([]);

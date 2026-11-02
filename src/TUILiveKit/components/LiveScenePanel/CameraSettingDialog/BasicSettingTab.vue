@@ -12,12 +12,6 @@
         />
       </TUISelect>
     </div>
-    <div class="item-setting">
-      <span class="title">{{ t('Resolution') }}</span>
-      <TUISelect class="resolution-select" :model-value="modelValueResolution" @change="onResolutionChange">
-        <TUIOption v-for="item in resolutionList" :key="item.value" :value="item.value" :label="item.label" />
-      </TUISelect>
-    </div>
   </div>
 </template>
 
@@ -29,8 +23,6 @@ const { t } = useUIKit();
 defineProps<{
   cameraList: Array<{ deviceId: string; deviceName: string; [k: string]: unknown }>;
   modelValueCamera: string;
-  modelValueResolution: string;
-  resolutionList: Array<{ value: string; label: string }>;
   isCameraOptionDisabled: (deviceId: string) => boolean;
   /** Disable the whole camera dropdown while a camera add/switch is in flight. */
   cameraSelectDisabled?: boolean;
@@ -38,11 +30,9 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:camera', value: string): void;
-  (e: 'update:resolution', value: string): void;
 }>();
 
 const onCameraChange = (val: string) => emit('update:camera', val);
-const onResolutionChange = (val: string) => emit('update:resolution', val);
 </script>
 
 <style lang="scss" scoped>
@@ -74,8 +64,7 @@ const onResolutionChange = (val: string) => emit('update:resolution', val);
   }
 }
 
-.camera-select,
-.resolution-select {
+.camera-select {
   width: 400px;
 }
 </style>

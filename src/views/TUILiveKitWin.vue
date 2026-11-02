@@ -76,6 +76,19 @@
                 <span class="niko-tool-label">{{ (currentBattleInfo?.battleId || demoPkActive) ? '结束PK' : 'PK' }}</span>
               </button>
               <MusicButton :isShowingInChildWindow="true" />
+              <!-- 退出连线：只在连线或 PK 中显示 -->
+              <button
+                v-if="coHostConnected || pkActive"
+                class="niko-tool-btn niko-tool-btn-danger"
+                type="button"
+                :disabled="!isInLive || loading"
+                @click="handleExitConnection"
+              >
+                <svg class="niko-tool-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4.6 4.6l14.8 14.8M19.4 4.6L4.6 19.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+                </svg>
+                <span class="niko-tool-label">退出连线</span>
+              </button>
             </div>
           </div>
         </div>
@@ -127,7 +140,7 @@
               {{ displayAudienceCount }} {{ t('People watching') }}
             </div>
           </div>
-          <div ref="centerRef" class="main-center-center" :class="{ 'prelive-collapsed': showPreLiveDialog }">
+          <div ref="centerRef" class="main-center-center">
             <div v-if="pkActive" class="pk-overlay">
               <div class="pk-bar">
                 <div class="pk-side pk-left">
@@ -655,6 +668,28 @@ const handlePkClick = async () => {
   pkCountdown.value = 300;
 };
 
+/** 退出连线（连麦 / PK 都走这个） */
+const handleExitConnection = async () => {
+  // 1. PK 中：先调 exitBattle
+  if (currentBattleInfo.value?.battleId) {
+    try {
+      await exitBattle({ battleId: currentBattleInfo.value.battleId });
+    } catch (e) {
+      console.warn('[Niko] exitBattle from exitConnection failed:', e);
+    }
+  }
+  // 2. 连麦状态：退出 Host 连线（后端 + TRTC 清理）
+  if (coHostConnected.value) {
+    try {
+      await exitHostConnection();
+      showMessage({ type: MessageToastType.Success, message: '已退出连线' });
+    } catch (e) {
+      console.warn('[Niko] exitHostConnection failed:', e);
+      showMessage({ type: MessageToastType.Error, message: '退出连线失败' });
+    }
+  }
+};
+
 /** PK 演示效果开关：没有在播主播可邀请时本地展示 PK 血条 */
 const demoPkActive = ref(false);
 /** 本地是否主动发起的是 PK（false 表示走连麦，服务端同样会下发 108，不能展示 PK 条） */
@@ -677,21 +712,37 @@ const onPkInvited = (anchorId: string) => {
   showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
 };
 
-/** 关闭结算面板：恢复开播前的画布调试状态（重新挂载原生预览并预热摄像头） */
+/** 关闭结算面板：恢复开播前的画布调试状态（重新挂载原生预览） */
 const handleCloseSettle = () => {
   settleStats.value = null;
   mixerActive.value = true;
-  void ensureDefaultCamera();
+  // 注意：这里不预热 camera（不再调 void ensureDefaultCamera()）。
+  // camera 添加统一由 onPreLiveConfirm 里的 ensureDefaultCamera 处理，
+  // 预热只会和 force-clean 制造 race condition。
 };
 
 /** 关闭结算面板后回到预开播弹窗，实现「重新开播」 */
 const handleRestartLive = () => {
   settleStats.value = null;
-  // 结算层「重新开播」：先恢复原生预览窗口挂载，再预热摄像头
+  // 结算层「重新开播」：恢复原生预览窗口挂载
   mixerActive.value = true;
-  void ensureDefaultCamera();
-  showPreLiveDialog.value = true;
+  // 统一走 ensureCameraBeforePreLive：有摄像头直接弹，没有先弹 CameraSettingDialog
+  ensureCameraBeforePreLive();
 };
+
+/** 统一入口：确保有摄像头后弹 PreLiveDialog */
+function ensureCameraBeforePreLive() {
+  if (hasCameraInMixer()) {
+    showPreLiveDialog.value = true;
+    return;
+  }
+  pendingPreLiveAfterCameraAdd.value = true;
+  console.log('[Niko] ensureCameraBeforePreLive: no camera, opening CameraSettingDialog');
+  ipcBridge.sendToChild(IPCMessageType.SHOW_CHILD_PANEL, {
+    panelType: ChildPanelType.Camera,
+    initialData: {},
+  });
+}
 
 /** 确认结束直播后是否跳转回主播列表（顶部「返回列表」按钮触发） */
 let navigateToListAfterEnd = false;
@@ -762,6 +813,9 @@ const isGoingToLoginPage = ref(false);
 const loginReady = ref(false);
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
+// 等待用户添加摄像头后自动弹 PreLiveDialog 的 flag
+// 场景：用户点"开始直播"→ 没摄像头 → 弹 CameraSettingDialog → 用户加完 → 自动弹 PreLiveDialog
+const pendingPreLiveAfterCameraAdd = ref(false);
 const pendingPreLiveId = ref<string>('');
 /** 人气榜弹窗开关 */
 const popularityPanelVisible = ref(false);
@@ -1419,14 +1473,43 @@ const handleStartLive = () => {
     });
     return;
   }
-  // 摄像头预热改为在用户真正准备开播时触发：
-  // 页面一进来就 addMediaSource 会产生 USB 摄像头 5s 超时、TIM 未就绪等大量报错，
-  // 而用户可能根本不打算开播。放在这里既不误报，也能在填标题/封面期间完成预热。
   // 关播后 StreamMixer 会被卸载，重新开播前先恢复挂载（原生预览窗口重新绑定）
   mixerActive.value = true;
-  void ensureDefaultCamera();
-  showPreLiveDialog.value = true;
+  // ★ 统一入口：检查摄像头 → 有直接弹 PreLiveDialog，无先弹 CameraSettingDialog
+  ensureCameraBeforePreLive();
 };
+
+// ========== 强制清理旧 TRTC 房间 ==========
+// 从观众房（LivePlayer）跳到开播页（TUILiveKitWin）时，trtcCloud 单例里还留着旧房间状态，
+// 必须先等 exitRoom 完成再 enterRoom，否则 C++ 层会在两个房间之间混乱（连线状态残留、
+// camera add 失败、enterRoom 偶发返回 -1 等）。
+function ensureTrtcExitRoom(): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const onExitRoom = (reason: number) => {
+      if (done) return;
+      done = true;
+      trtcCloud.off('onExitRoom', onExitRoom);
+      console.log('[Niko] ensureTrtcExitRoom ok, reason:', reason);
+      resolve();
+    };
+    trtcCloud.on('onExitRoom', onExitRoom);
+    try {
+      trtcCloud.exitRoom();
+    } catch (e) {
+      console.warn('[Niko] exitRoom threw (ignored):', e);
+    }
+    // 兜底：500ms 无论如何 resolve（防止根本不在房间里时 onExitRoom 永不触发）
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        trtcCloud.off('onExitRoom', onExitRoom);
+        console.log('[Niko] ensureTrtcExitRoom timeout (assuming no previous room)');
+        resolve();
+      }
+    }, 500);
+  });
+}
 
 // 预开播弹窗确认后：用原生 trtcCloud.enterRoom 进房（与 web-obs-live 一致）
 // 不使用 TUIRoomEngine.startLive/enterRoom：
@@ -1497,23 +1580,78 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // please purchase roomkit first），kLive / kConference 均不可用，
     // 因此不再通过 TUIRoomEngine 建房，完全对齐 web-obs-live：
     // 原生 TRTC 以主播身份进房推流 + LiteChat 加入同 ID 的 IM 群（聊天室 / 在线观众）。
+    // 关键：先确保旧房间（如从 LivePlayer 观众房跳过来）已完全退出，
+    // 否则同一个 trtcCloud 单例会在两个房间之间状态混乱
+    await ensureTrtcExitRoom();
+    // 强制清理 MediaMixingManager：
+    // 只清 kCamera 类型的源（Integrated Camera 独占物理设备，必须彻底 release）。
+    // 屏幕共享 / 图片 / 视频文件等源不独占设备，保留不动。
+    // Vue state 同步清 camera 源，确保 hasCameraInMixer() 正确 → ensureDefaultCamera() 重新 add
+    // 时从 localStorage 恢复上次保存的 deviceId（YY/OBS 虚拟摄像头 / Integrated Camera）。
+    try {
+      const mmm = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
+      const cameraSources = (mmm?.sourceList || []).filter(
+        (s: any) => s.sourceType === TRTCMediaSourceType.kCamera,
+      );
+      if (cameraSources.length) {
+        console.log('[Niko] force-cleaning', cameraSources.length, 'camera source(s)');
+        for (const src of cameraSources) {
+          try { await mmm.removeMediaSource(src); } catch (_) {}
+        }
+        console.log('[Niko] force-clean camera sources done');
+      }
+      // 同步清 Vue state 里的 kCamera 源（和 SDK 保持一致）
+      const prevList = videoMixerState.mediaSourceList.value;
+      const cameraIdx = prevList.findIndex(
+        (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+      );
+      if (cameraIdx >= 0) {
+        const withoutCamera = [...prevList];
+        withoutCamera.splice(cameraIdx, 1);
+        videoMixerState.mediaSourceList.value = withoutCamera;
+        console.log('[Niko] Vue state camera source removed, remaining:', withoutCamera.length);
+      }
+    } catch (e) {
+      console.warn('[Niko] force-clean failed (ignored):', e);
+    }
+    // 关键：重置 cameraEnsurePromise，破除 race condition 锁。
+    // 上面的 force-clean 可能刚好把某个正在进行的 autoAddDefaultCamera 结果清掉了，
+    // 如果不重置，下面 ensureDefaultCamera() 会复用那个已经 resolve 的旧 promise，
+    // 导致 hasCameraInMixer 误判 / 画面黑。
+    cameraEnsurePromise = null;
+    // 等 500ms 让 C++ 层真正 close camera device（物理设备释放比较慢）
+    await new Promise((r) => setTimeout(r, 500));
     await enterTrtcRoom(trtcRoomId);
     // 进房成功后再赋值 roomId：LiveChatPanel 监听该值去登录 IM 并加群，
     // 提前赋值会让 IM 登录/加群与 TRTC 进房并发，容易互相干扰。
     // 注意这里必须用后端 room_id（不是 TRTC 的 live_index_id）
     nikoRoomId.value = imRoomId;
-    // 开播前确保摄像头已加入混流，否则推出去的是黑屏
-    await ensureDefaultCamera();
-    // 开始推流：TUIKit 的推流由本地混流管理器负责，且仅在 currentLive 存在时自动触发。
-    // 这里没有走 TUIKit startLive，需要手动 startPublish，否则手机端收不到画面。
+    // 关键：ensureDefaultCamera 之前必须先 bindPreviewArea + startPublish。
+    // 否则 StreamLayoutService 找不到容器 → camera add 成功后 SDK rollback → 画面出来又消失。
     try {
       const cloud = roomEngine.instance?.getTRTCCloud?.();
       const mixingManager = (cloud || trtcCloud).getMediaMixingManager();
       if (mixingManager) {
         await mixingManager.startPublish();
         console.log('[Niko] mediaMixing startPublish ok');
-      } else {
-        console.warn('[Niko] getMediaMixingManager returned null, skip startPublish');
+      }
+    } catch (publishErr: any) {
+      console.warn('[Niko] mediaMixing startPublish early failed:', publishErr?.message || publishErr);
+    }
+    // 强制立即 applyPreviewRegion（不等 400ms timer），确保 bindPreviewArea 完成
+    await nextTick();
+    applyPreviewRegion();
+    // 给 SDK 足够时间让 StreamLayoutService 找到容器
+    await new Promise((r) => setTimeout(r, 800));
+    // 开播前确保摄像头已加入混流，否则推出去的是黑屏
+    await ensureDefaultCamera();
+    // 再补一次 startPublish（enterRoom 后必须再调）
+    try {
+      const cloud = roomEngine.instance?.getTRTCCloud?.();
+      const mixingManager = (cloud || trtcCloud).getMediaMixingManager();
+      if (mixingManager) {
+        await mixingManager.startPublish();
+        console.log('[Niko] mediaMixing startPublish ok (after camera)');
       }
     } catch (publishErr: any) {
       console.warn('[Niko] mediaMixing startPublish failed:', publishErr?.message || publishErr);
@@ -1902,15 +2040,17 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
         }
         pendingPreLiveId.value = '';
       }
-      await endLive();
-    } catch (endErr: any) {
-      // TUIKit endLive 依赖 currentLive 状态，原生进房无 currentLive，回退到原生退房
-      console.warn('[Niko] endLive failed, fallback to exitRoom:', endErr?.message || endErr);
+      // 不走 TUIKit endLive()：它内部调 LiveListManager.stopLive() 需要 currentLive（room identifier），
+      // 但我们故意用原生 trtcCloud.enterRoom 进房（避开付费套餐校验），currentLive 永远为 null → 必报 -1001。
+      // 直接走原生 trtcCloud.exitRoom() 退房即可。
       try {
         trtcCloud.exitRoom();
+        console.log('[Niko] trtcCloud.exitRoom ok');
       } catch (exitErr) {
-        console.warn('[Niko] trtcCloud.exitRoom fallback failed:', exitErr);
+        console.warn('[Niko] trtcCloud.exitRoom threw (ignored):', exitErr);
       }
+    } catch (endErr: any) {
+      console.warn('[Niko] handleEndLive inner error:', endErr?.message || endErr);
     }
     // 退出 IM 群并重置本地状态
     try {
@@ -1924,9 +2064,20 @@ const handleEndLive = async (options: { showErrorToast?: boolean } = {}): Promis
     // 关播时清理连线对方的远端视图
     clearRemoteGuests();
     userCardVisible.value = false;
-    // 关播后卸载 StreamMixer，停止混流预览与混流服务。
-    // 卸载时 WinLocalMixer 会自动 clearMediaSource + bindPreviewArea(0,null) + stopMediaMixingServer。
-    mixerActive.value = false;
+    // 关播时只关原生预览，**不销毁 StreamMixer**！
+    // 销毁 StreamMixer 会触发 WinLocalMixer unmount → SDK clearMediaSource() → Vue state 被清空 →
+    // 左侧 LiveScenePanel 的摄像头列表被清空（这就是浏览器项目没问题但 Electron IPC 模式有问题的原因：
+    // 浏览器不用 WinLocalMixer 组件，camera 生命周期独立于 UI 挂载）。
+    // 保留 mixerActive = true 让 camera source 留在 SDK + Vue state 里，左侧还能看到。
+    // 下次进房时 force-clean 会清 SDK + Vue camera 源（释放物理设备），然后 ensureDefaultCamera
+    // 从 localStorage 恢复 deviceId 重新 addMediaSource。
+    try {
+      const mixingManager = roomEngine.instance?.getTRTCCloud().getMediaMixingManager();
+      mixingManager?.bindPreviewArea?.(0, null);
+      console.log('[Niko] handleEndLive: bindPreviewArea(0, null) ok, mixer preserved');
+    } catch (e) {
+      console.warn('[Niko] bindPreviewArea cleanup failed:', e);
+    }
     await nextTick();
     // 先展示本地统计的结算层；若后端已推送 action 118，则保留服务端数据
     const durationSeconds = liveStartedAt.value
@@ -2107,6 +2258,16 @@ watch(
   { immediate: true }
 );
 
+// 摄像头源变化时自动保存配置（用户在 CameraSettingDialog 换设备也能存）
+watch(
+  () => videoMixerState.mediaSourceList.value?.filter(
+    (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+  ).map((m: MediaSource) => String(m.sourceId)),
+  () => {
+    saveCurrentCameraFromMixer();
+  },
+);
+
 // Whether the most recent battle teardown was a "normal" end, i.e. the SDK
 // fired `BattleEvent.onBattleEnded` (countdown timed out, or the battle was
 // stopped because the remaining members dropped to <= 1). This is the ONLY
@@ -2280,14 +2441,260 @@ onMounted(async () => {
     loginReady.value = true;
     // 登录后 TUIRoomEngine 已 ready：确保远端进房/视频事件已注册
     bindRoomEngineEventsWhenReady();
+
+    // ========== 彻底重启 MediaMixingManager 单例 ==========
+    // 根因：
+    // 1) 关软件重开后 MediaMixingManager（C++ 层）可能从残留配置恢复 sourceList →
+    //    videoMixerState（SDK 模块级 ref）init 时同步了残留 camera → hasCameraInMixer()
+    //    返回 true → ensureDefaultCamera() 跳过 → SDK 不调 addMediaSource → 画面黑
+    // 2) router 离开再回来，exitRoom 没清 SDK sourceList → 同上
+    // 3) onMounted 执行时 roomEngine.instance 可能还是 null（SDK 未 ready）→ mmm=null →
+    //    旧代码里 force-clear SDK sourceList 完全被跳过
+
+    // ====== 诊断日志 ======
+    const cloud = (roomEngine.instance as any)?.getTRTCCloud?.();
+    const mmmNow = cloud?.getMediaMixingManager?.();
+    console.log('[Niko onMounted] START', {
+      roomEngineInstance: !!roomEngine.instance,
+      trtcCloud: !!cloud,
+      mediaMixingManager: !!mmmNow,
+      vueStateSources: videoMixerState.mediaSourceList.value.length,
+    });
+
+    await nextTick();
+    await new Promise((r) => setTimeout(r, 400)); // 等 WinLocalMixer 把 bindPreviewArea(container) 做好
+
+    // ====== STEP 1: 无条件清 Vue state 的 kCamera（不管 SDK ready 没） ======
+    try {
+      const prevList = videoMixerState.mediaSourceList.value;
+      const cameraSources = prevList.filter(
+        (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+      );
+      console.log('[Niko onMounted] Vue state before clear: total=', prevList.length, 'kCamera=', cameraSources.length);
+      if (cameraSources.length > 0) {
+        const withoutCamera = prevList.filter(
+          (m: MediaSource) => m.sourceType !== TRTCMediaSourceType.kCamera,
+        );
+        videoMixerState.mediaSourceList.value = withoutCamera;
+        console.log('[Niko onMounted] Vue state kCamera CLEARED');
+      }
+      // 重置锁（防止复用上次的旧 promise）
+      cameraEnsurePromise = null;
+    } catch (e) {
+      console.warn('[Niko onMounted] Vue state clear failed:', e);
+    }
+
+    // ====== STEP 2: force-clear SDK sourceList（SDK ready 时才做） ======
+    // ★ 和正常进房 onPreLiveConfirm (L1591-1616) 完全一致：
+    // 只 removeMediaSource(kCamera)，**不停 MediaMixingServer**！
+    // MediaMixingManager constructor 已 auto-start server，正常流程里 server 始终是 Started。
+    // 调 stopMediaMixingServer 会让 server 变 Idle，而 startPublish 不会自动重启，
+    // 导致 addMediaSource 时 C++ 层找不到渲染服务 → 黑屏。
+    const forceClearSdkSourceList = async (mmmm: any) => {
+      if (!mmmm?.sourceList?.length) {
+        console.log('[Niko onMounted] SDK sourceList already empty');
+        return;
+      }
+      const cameraSources = mmmm.sourceList.filter(
+        (s: any) => s.sourceType === TRTCMediaSourceType.kCamera,
+      );
+      if (!cameraSources.length) {
+        console.log('[Niko onMounted] SDK sourceList has no camera:', mmmm.sourceList.length, 'total');
+        return;
+      }
+      console.log('[Niko onMounted] force-removing', cameraSources.length, 'camera source(s) from SDK');
+      for (const src of cameraSources) {
+        try { await mmmm.removeMediaSource(src); } catch (e) {
+          console.warn('[Niko onMounted] removeMediaSource:', src?.name || src, e);
+        }
+      }
+      console.log('[Niko onMounted] SDK camera sources CLEARED (server untouched)');
+    };
+
+    const scheduleCameraRestore = async () => {
+      const cloud = (roomEngine.instance as any)?.getTRTCCloud?.();
+      const mmm = cloud?.getMediaMixingManager?.();
+      if (!mmm) {
+        console.warn('[Niko onMounted] scheduleCameraRestore: mmm is null!');
+        return;
+      }
+
+      // ===== 和正常进房 onPreLiveConfirm (L1591-1658) 完全一致的顺序 =====
+      // 正常进房流程（关键步骤）：
+      //   force-clean removeMediaSource (不停 server!)
+      //   → enterTrtcRoom()
+      //   → startPublish()
+      //   → applyPreviewRegion() / bindPreviewArea()
+      //   → await 800ms
+      //   → ensureDefaultCamera()
+      //   → startPublish() again
+      // 我们没有 enterRoom（还没开播），但其余步骤必须一致。
+
+      // 1) force-clear：只 removeMediaSource(kCamera)，server 保持 Started
+      await forceClearSdkSourceList(mmm);
+      cameraEnsurePromise = null;
+      await new Promise((r) => setTimeout(r, 500)); // 等 C++ 层释放物理设备
+
+      // 2) startPublish + bindPreviewArea（server 应该还是 Started，ensureMediaServerMode 跳过）
+      try {
+        await mmm.startPublish();
+        console.log('[Niko onMounted] startPublish ok');
+      } catch (e) {
+        console.warn('[Niko onMounted] startPublish failed:', e);
+      }
+      applyPreviewRegion();
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 800));
+      console.log('[Niko onMounted] bindPreviewArea + 800ms wait done');
+
+      // 3) ensureDefaultCamera → addMediaSource
+      await ensureDefaultCamera();
+      console.log('[Niko onMounted] ensureDefaultCamera done');
+
+      // 4) 收尾：再 startPublish（和正常进房 after camera 一样）
+      await new Promise((r) => setTimeout(r, 500));
+      try {
+        await mmm.setStreamLayout({ layoutMode: 'None' });
+        await mmm.startPublish();
+        console.log('[Niko onMounted] force setStreamLayout + startPublish done');
+      } catch (e) {
+        console.warn('[Niko onMounted] force refreshLayout failed:', e);
+      }
+      applyPreviewRegion();
+    };
+
+    // ====== STEP 3: 确保 MediaMixingManager 已 init ======
+    // 关键修复：TUIRoomEngine.once('ready') 只触发一次（SDK 初始化时），
+    // loginWithRetry 触发 SDK ready 后我们才注册自己的 once → 永远不会触发！
+    // 正确做法：roomEngine.instance 已 ready → 直接 enableLocalVideoMixer()
+    // 初始化 MediaMixingManager；roomEngine.instance 真为 null 才等 once。
+    let mmm = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
+    console.log('[Niko onMounted] before ensureMixer: roomEngine=', !!roomEngine.instance, 'mmm=', !!mmm);
+    if (!mmm && roomEngine.instance) {
+      console.log('[Niko onMounted] enabling MediaMixingManager via enableLocalVideoMixer()...');
+      try {
+        await (videoMixerState as any).enableLocalVideoMixer?.();
+        mmm = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
+        console.log('[Niko onMounted] enableLocalVideoMixer done, mmm=', !!mmm);
+      } catch (e) {
+        console.warn('[Niko onMounted] enableLocalVideoMixer failed:', e);
+      }
+    }
+
+    if (mmm) {
+      console.log('[Niko onMounted] mmm ready, running full camera restore');
+      await scheduleCameraRestore();
+    } else if (roomEngine.instance) {
+      // roomEngine 有了但 mmm 还是 null（enable 失败），再试一次 ensureDefaultCamera
+      // 因为 addMediaSource 内部也会调 enableLocalVideoMixer
+      console.warn('[Niko onMounted] mmm still null after enableLocalVideoMixer, trying direct ensureDefaultCamera');
+      try {
+        await ensureDefaultCamera();
+        console.log('[Niko onMounted] ensureDefaultCamera succeeded despite mmm being null');
+        // ensureDefaultCamera 里的 addMediaSource 会触发 enable → 此时 mmm 应该有了
+        const mmmRetry = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
+        if (mmmRetry) {
+          await new Promise((r) => setTimeout(r, 300));
+          try {
+            await mmmRetry.setStreamLayout({ layoutMode: 'None' });
+            await mmmRetry.startPublish();
+            console.log('[Niko onMounted] retry force refreshLayout done');
+          } catch (e) { console.warn('[Niko onMounted] retry refreshLayout:', e); }
+        }
+      } catch (e) {
+        console.warn('[Niko onMounted] ensureDefaultCamera also failed:', e);
+      }
+      applyPreviewRegion();
+    } else {
+      // roomEngine.instance 真的还没 ready（极罕见），等 once
+      console.warn('[Niko onMounted] roomEngine.instance is null! Deferring to TUIRoomEngine ready');
+      TUIRoomEngine.once('ready', async () => {
+        console.log('[Niko onMounted] deferred: TUIRoomEngine ready fired');
+        try {
+          await (videoMixerState as any).enableLocalVideoMixer?.();
+        } catch {}
+        await scheduleCameraRestore();
+      });
+      applyPreviewRegion();
+    }
   } catch (e) {
     redirectToLogin();
   }
 });
 
-// 自动添加默认摄像头到媒体混流（无需用户手动点击选择）
+// ==================== 摄像头持久化（保存用户上次选的摄像头/分辨率） ====================
+const CAMERA_CONFIG_KEY = 'niko_live_camera_config';
+
+interface PersistedCameraConfig {
+  deviceId: string;
+  deviceName?: string;
+  width: number;
+  height: number;
+  mirrorType?: number;
+}
+function saveCameraConfig(cam: PersistedCameraConfig) {
+  try { window.localStorage.setItem(CAMERA_CONFIG_KEY, JSON.stringify(cam)); } catch {}
+}
+function loadCameraConfig(): PersistedCameraConfig | null {
+  try {
+    const raw = window.localStorage.getItem(CAMERA_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function clearCameraConfig() {
+  try { window.localStorage.removeItem(CAMERA_CONFIG_KEY); } catch {}
+}
+
+// 摄像头列表变化时，保存当前 camera 源的最新配置
+function saveCurrentCameraFromMixer() {
+  const cam = videoMixerState.mediaSourceList.value.find(
+    (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+  );
+  if (!cam) return;
+  saveCameraConfig({
+    deviceId: String(cam.sourceId),
+    deviceName: cam.name,
+    width: cam.width || 1280,
+    height: cam.height || 720,
+    mirrorType: (cam as any).mirrorType,
+  });
+}
+
 // USB 摄像头冷启动较慢，addMediaSource 可能 5 秒超时，这里重试几次避免预览/推流无画面
 const autoAddDefaultCamera = async (retryCount = 3) => {
+  // 优先恢复用户上次保存的摄像头配置
+  const saved = loadCameraConfig();
+  if (saved) {
+    try {
+      if (cameraList.value.length === 0) await getCameraList();
+      // 确认保存的 deviceId 在当前设备列表中存在（USB 插拔可能变化）
+      const stillExists = cameraList.value.some((c) => String(c.deviceId) === String(saved.deviceId));
+      if (stillExists) {
+        const width = saved.width || 1280;
+        const height = saved.height || 720;
+        await videoMixerState.addMediaSource({
+          sourceId: saved.deviceId,
+          sourceType: TRTCMediaSourceType.kCamera,
+          name: saved.deviceName || 'Camera',
+          width,
+          height,
+          rect: { left: 0, top: 0, right: width, bottom: height },
+          mirrorType: saved.mirrorType ?? TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
+        } as MediaSource);
+        console.log('[Niko] restored saved camera:', saved.deviceName || saved.deviceId);
+        saveCurrentCameraFromMixer();
+        return;
+      } else {
+        console.warn('[Niko] saved camera device no longer exists, falling back to default');
+        clearCameraConfig();
+      }
+    } catch (err) {
+      console.warn('[Niko] restore saved camera failed, falling back to default:', err);
+      clearCameraConfig();
+    }
+  }
+
+  // 兜底：用 cameraList[0] （系统第一个摄像头）
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
       if (cameraList.value.length === 0) {
@@ -2316,10 +2723,9 @@ const autoAddDefaultCamera = async (retryCount = 3) => {
         mirrorType: TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
       } as MediaSource);
       console.log('[Niko] default camera added:', firstCamera.deviceName);
+      saveCurrentCameraFromMixer();
       return;
     } catch (err) {
-      // USB 摄像头冷启动首次 addMediaSource 超时属于正常现象，重试通常即可成功，
-      // 因此中间重试只在 log 中记录，最后一次失败才用 warn，避免未开播就刷一堆错误
       if (attempt < retryCount) {
         console.log(`[Niko] auto add default camera retry (${attempt}/${retryCount}):`, err);
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -2347,6 +2753,22 @@ const ensureDefaultCamera = (): Promise<void> => {
   }
   return cameraEnsurePromise;
 };
+
+// ★ 等待用户通过 CameraSettingDialog 添加摄像头后，自动弹 PreLiveDialog
+// handleStartLive 在无摄像头时会设 pendingPreLiveAfterCameraAdd = true + 弹 CameraSettingDialog，
+// 用户添加成功后 videoMixerState.mediaSourceList 会多出一个 kCamera 源 → 触发此 watch → 弹 PreLiveDialog
+watch(
+  () => videoMixerState.mediaSourceList.value.filter(
+    (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+  ).length,
+  (cameraCount) => {
+    if (pendingPreLiveAfterCameraAdd.value && cameraCount > 0) {
+      console.log('[Niko] camera added via dialog, auto-opening PreLiveDialog');
+      pendingPreLiveAfterCameraAdd.value = false;
+      showPreLiveDialog.value = true;
+    }
+  },
+);
 
 const handleLiveSettingConfirm = async (form: { liveName: string; coverUrl?: string }) => {
   const updatedForm = {
@@ -2464,6 +2886,27 @@ onBeforeUnmount(() => {
   if (window.ipcRenderer) {
     window.ipcRenderer.off('app-request-quit', handleAppRequestQuit);
   }
+  // onBeforeUnmount：只做最必要的清理。
+  // 历史上这里手动 removeMediaSource 会触发 SDK onMediaSourceRemoved 事件 → Vue state mediaSourceList 自动清空
+  // → 下次 TUILiveKitWin mount 时左侧空了。现在改为：
+  //   - exitRoom：确保退出 TRTC 房间
+  //   - bindPreviewArea(0, null)：关掉原生预览（防止残留画面）
+  //   - cameraEnsurePromise = null：重置锁（防止新组件 mount 时复用旧 promise）
+  //   - 不清 SDK sourceList、不清 Vue state mediaSourceList：交给 force-clean（onPreLiveConfirm 里）
+  //     在下次进房前统一处理——释放物理设备 + 清 Vue state + ensureDefaultCamera 重新 add
+  try {
+    const mmm = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
+    if (mmm?.bindPreviewArea) {
+      try { mmm.bindPreviewArea(0, null); } catch (_) {}
+    }
+  } catch (e) {
+    console.warn('[Niko onBeforeUnmount] mix cleanup failed:', e);
+  }
+  cameraEnsurePromise = null;
+  // 退出 TRTC 房间（同步）
+  try {
+    (roomEngine.instance as any)?.exitRoom?.();
+  } catch (_) {}
 });
 </script>
 
@@ -2716,6 +3159,20 @@ onBeforeUnmount(() => {
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+}
+
+.niko-tool-btn-danger {
+  color: #ff6b6b;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 107, 107, 0.18);
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.25);
+
+    .niko-tool-icon,
+    .niko-tool-label {
+      color: #ff8a8a;
+    }
   }
 }
 

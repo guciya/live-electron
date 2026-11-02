@@ -387,13 +387,11 @@ export async function fetchRecommendLiveList(
     }
   }
 
-  console.log('[RecommendLiveList] POST /live/recommendLiveList', { page, pageSize, force: !!options.force });
   const task = (request.post('/live/recommendLiveList', { page, pageSize }) as unknown as Promise<unknown>)
     .then((data) => {
       // 只打印一次原始结构，便于字段对不上时快速定位
       if (!recommendRawLogged) {
         recommendRawLogged = true;
-        console.log('[RecommendLiveList] raw response:', data);
       }
       return toList(data);
     });

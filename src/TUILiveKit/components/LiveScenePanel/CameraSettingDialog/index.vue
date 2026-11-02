@@ -39,12 +39,9 @@
           v-show="activeTab === 'basic'"
           :camera-list="cameraList"
           :model-value-camera="currentCameraId"
-          :model-value-resolution="currentResolution"
-          :resolution-list="videoResolutionList"
           :is-camera-option-disabled="isCameraOptionDisabled"
           :camera-select-disabled="cameraOpPending"
           @update:camera="onPickCamera"
-          @update:resolution="onPickResolution"
         />
 
         <!--
@@ -168,7 +165,13 @@
            model that maps to the visible state of the dialog. -->
     </div>
     <!-- Empty footer slot replaces the default Cancel/Confirm buttons. -->
-    <template #footer><span class="footer-spacer" /></template>
+    <template #footer>
+      <div class="dialog-footer">
+        <button class="dialog-btn dialog-btn-confirm" :disabled="!started" @click="handleConfirm">
+          {{ t('Confirm') }}
+        </button>
+      </div>
+    </template>
   </TUIDialog>
 </template>
 
@@ -437,24 +440,33 @@ function commitUpdate() {
 
 const onPickCamera = (val: string) => {
   currentCameraId.value = val;
-  // Reset resolution to the new camera's first supported entry. The change
-  // will be picked up by the realtime-sync watch below.
+  // Reset resolution to the new camera's first supported entry.
   currentResolution.value = videoResolutionList.value[0]?.value || '';
   // The deviceId switch implies the beauty effects also need to be reapplied
   // on the new camera. Re-emit a beauty snapshot keyed by the new id.
   reEmitBeautyForCurrentCamera();
+  // ★ 关键：下拉切换只更新本地 ref，不自动 commit！
+  // 之前 onPickCamera 里直接 commitAdd()，watch 里直接 commitUpdate() →
+  // 导致下拉选 Integrated Camera 立刻 SDK rollback -6，残留 predata。
+  // 现在所有 commit 统一在「确定」按钮里处理。
 };
 
 const onPickResolution = (val: string) => {
   currentResolution.value = val;
+  // ★ 同样：只更新本地 ref，不自动 commit
 };
 
+// 防 race 的 skip flag 保留（未来可能复用），但 watch 里不再自动 commit。
+let skipNextUpdateWatch = false;
+
+// ★ 关键：去掉自动 commit！
+// 之前 watch [currentCameraId, currentResolution, isMirror] 会自动 commitUpdate()，
+// 配合 onPickCamera 的自动 commitAdd() → 下拉一选 camera 就立刻调 SDK。
+// 现在统一在确定按钮里 commit，watch 只保留 deep: false 的语义（不做事）。
 watch(
   [currentCameraId, currentResolution, isMirror],
   () => {
-    if (!started.value) return;
-    if (!committedSource.value) return;
-    commitUpdate();
+    // no-op: commit 统一在 handleConfirm 确定按钮里处理
   },
   { flush: 'post' },
 );
@@ -478,9 +490,32 @@ watch(
 
 const handleClose = () => emits('close');
 
+/**
+ * 用户点「确定」时统一 commit。
+ * 新增模式 → commitAdd（emit addCameraMaterial）
+ * 编辑模式 → commitUpdate（emit updateCameraMaterial）
+ * 下拉切换 camera/resolution 只更新本地 ref，不自动 commit，防止 Integrated Camera
+ * 被 SDK rollback -6 后残留 predata 污染后续虚拟摄像头切换。
+ */
+const handleConfirm = () => {
+  if (!started.value) {
+    handleClose();
+    return;
+  }
+  if (committedSource.value) {
+    // 编辑模式：已有 camera 在 mixer 里 → update
+    commitUpdate();
+  } else {
+    // 新增模式：还没 committed → add
+    commitAdd();
+  }
+  handleClose();
+};
+
 onMounted(async () => {
   if (cameraList.value.length === 0) await getCameraList();
   if (props.mediaSource?.sourceId) {
+    // === 编辑模式：已有 camera 在 mixer 里 ===
     currentCameraId.value = props.mediaSource.sourceId;
     if (props.mediaSource.width !== undefined && props.mediaSource.height !== undefined) {
       currentResolution.value = `${props.mediaSource.width}x${props.mediaSource.height}`;
@@ -488,13 +523,18 @@ onMounted(async () => {
       currentResolution.value = videoResolutionList.value[0].value;
     }
     isMirror.value = props.mediaSource.mirrorType === TRTCVideoMirrorType.TRTCVideoMirrorType_Enable;
+    // 直接标记 committed，后续 watch 切换时走 commitUpdate 而非 commitAdd
+    committedSource.value = { ...buildCameraPayload() };
   } else {
-    const initialCameraId = firstAvailableCameraId.value;
-    if (initialCameraId) {
-      currentCameraId.value = initialCameraId;
+    // === 新增模式：onMounted 只设置 currentCameraId 让下拉显示默认选中，
+    // 但不自动 commitAdd。防止预选中的 Integrated Camera 被 SDK rollback (-6)
+    // 后残留 predata 污染后续虚拟摄像头切换。用户下拉选 camera 时 onPickCamera
+    // 才主动 commitAdd（如果还没 committed 的话）。
+    const firstAvailableCameraIdId = firstAvailableCameraId.value;
+    if (firstAvailableCameraIdId) {
+      currentCameraId.value = firstAvailableCameraIdId;
       currentResolution.value = videoResolutionList.value[0]?.value || '';
       isMirror.value = false;
-      commitAdd();
     }
   }
   started.value = true;
@@ -731,13 +771,48 @@ function reEmitBeautyForCurrentCamera() {
   .tui-dialog-header {
     flex-shrink: 0;
   }
-  .tui-dialog-footer {
-    display: none;
-  }
+  /* ★ 不再隐藏 footer —— 我们用 <template #footer> 放了自定义的确定/取消按钮 */
 }
 
 .footer-spacer {
   display: none;
+}
+
+/* ★ 确定按钮 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  /* border-top 已去掉 */
+}
+
+.dialog-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn-confirm {
+  background: #1677ff;
+  color: #fff;
+}
+
+.dialog-btn-confirm:hover:not(:disabled) {
+  background: #4096ff;
+}
+
+.dialog-btn-confirm:active:not(:disabled) {
+  background: #0958d9;
 }
 
 .camera-dialog-body {

@@ -286,7 +286,8 @@ function onToggleMaximize() {
 }
 
 function onClose() {
-  logger.log('[LiveHeader]onClose');
+  // ★ 直接发 IPC → main.js 统一弹独立 confirm BrowserWindow（openAppQuitConfirmDialog）
+  // 所有页面的关闭确认由 main 进程统一处理，避免页面自己弹 TUIMessageBox
   window.ipcRenderer.send('on-close-window', null);
 }
 </script>

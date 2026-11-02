@@ -20,12 +20,7 @@ function handleAuthFailure(url: string, message?: string) {
   } catch (error) {
     tokenInStore = 'store-error';
   }
-  console.warn('[NikoAuth] auth failure -> logout & redirect login:', {
-    url,
-    message,
-    tokenInStore,
-    tokenInStorage: readStoredAuthToken() ? 'yes' : 'no',
-  });
+  
   if (redirectingToLogin) {
     return;
   }
@@ -33,7 +28,6 @@ function handleAuthFailure(url: string, message?: string) {
   try {
     useAuthStore().logout();
   } catch (error) {
-    console.warn('[NikoAuth] logout failed, continue redirect to login page');
   }
   // 跳转到登录页
   import('../router').then(({ default: router }) => {
@@ -72,16 +66,13 @@ request.interceptors.request.use((config) => {
       authStore.restore();
     }
   } catch (error) {
-    console.warn('[NikoAuth] pinia store unavailable, fallback to localStorage token');
+   
   }
   if (token) {
     config.headers = config.headers ?? {};
     (config.headers as Record<string, unknown>).Token = token;
   }
-  console.log('[NikoAuth] request', config.method?.toUpperCase(), config.url, {
-    baseURL: config.baseURL,
-    token: token ? `present(${token.length})` : 'MISSING',
-  });
+ 
   return config;
 });
 
@@ -91,11 +82,7 @@ request.interceptors.response.use(
     if (body.code === 200) {
       return body.data as any;
     }
-    console.warn('[NikoAuth] response not ok:', response.config.url, {
-      code: body.code,
-      message: body.message,
-      status: response.status,
-    });
+   
     if (body.code === 401 || AUTH_ERROR_MESSAGES.some((text) => body.message?.includes(text))) {
       handleAuthFailure(String(response.config.url || ''), body.message);
     }

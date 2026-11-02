@@ -236,7 +236,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { UIKitProvider, TUIMessageBox } from '@tencentcloud/uikit-base-component-vue3';
+import { UIKitProvider, TUIMessageBox, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
 import MaximizeIcon from '../TUILiveKit/common/icons/MaximizeIcon.vue';
@@ -271,6 +271,7 @@ import trtcCloud from '../TUILiveKit/utils/trtcCloud';
 import { TRTCParams, TRTCAppScene, TRTCRoleType } from 'trtc-electron-sdk';
 import type { CoGuestUser } from '../niko/components/CoGuestGrid.vue';
 
+const { t } = useUIKit();
 const route = useRoute();
 const router = useRouter();
 

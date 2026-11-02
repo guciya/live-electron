@@ -380,6 +380,60 @@ function initiateQuitSequence() {
 }
 // ============== End of App Quit Race Condition Fix ==============
 
+/**
+ * 统一的退出确认弹窗：由 main 进程直接弹独立 confirm BrowserWindow。
+ * 好处：不依赖 renderer 页面是否监听 app-request-quit（解决了登录页/主播列表/播放器等
+ * 页面没监听 → 点关闭没确认的问题）。
+ */
+function openAppQuitConfirmDialog() {
+  if (isQuitting) return;
+
+  // confirm window 还没 ready → 走 initiateQuitSequence 等待 ready（有 retry）
+  if (!isConfirmWindowReady || !isWindowAlive(windowMap.confirm)) {
+    console.log(`${logPrefix}openAppQuitConfirmDialog: confirm window not ready, using initiateQuitSequence`);
+    initiateQuitSequence();
+    return;
+  }
+
+  // 构造 SHOW_CONFIRM_DIALOG payload 直接发给 confirm window
+  const dialogId = `app-quit-${Date.now()}`;
+  const payload = {
+    scene: 'app-quit',
+    dialogId,
+    title: '退出应用?',
+    content: '最小化到系统托盘继续运行，或直接退出应用。',
+    actions: [
+      { text: '取消', value: 'cancel', type: 0 },       // TUIButtonActionType.Normal
+      { text: '最小化到托盘', value: 'minimize-to-tray', type: 0 },
+      { text: '退出应用', value: 'quit-app', type: 2 },  // TUIButtonActionType.Dangerous
+    ],
+  };
+
+  console.log(`${logPrefix}openAppQuitConfirmDialog: showing confirm window`);
+
+  // 跟 V2 IPC router 里 confirm window 分支一样的逻辑
+  if (isWindowAlive(windowMap.confirm)) {
+    windowMap.confirm.center();
+  }
+  sendToWindow(windowMap.confirm, 'window-message', {
+    to: 'confirm',
+    type: 'showConfirmDialog',
+    from: 'main',
+    payload,
+  });
+  if (isWindowAlive(windowMap.confirm)) {
+    windowMap.confirm.show();
+  }
+
+  // 启动 force-quit timeout（跟 initiateQuitSequence 一致）
+  if (!quitTimeoutTimer) {
+    quitTimeoutTimer = setTimeout(() => {
+      console.log(`${logPrefix}quit timeout reached in openAppQuitConfirmDialog`);
+      forceQuitApp();
+    }, QUIT_TIMEOUT_MS);
+  }
+}
+
 function isWindowAlive(win) {
   return !!win && !win.isDestroyed();
 }
@@ -918,6 +972,29 @@ function bindIPCEvent() {
       return;
     }
 
+    // ★ 拦截 confirm window 发回来的退出确认响应：
+    // main.js 自己弹了 confirm window（openAppQuitConfirmDialog），响应回来直接在 main 进程处理，
+    // 不转发给 renderer（因为 renderer 页面可能没监听 app-request-quit）。
+    if (from === 'confirm' && type === 'confirmDialogAction') {
+      const scene = payload?.scene;
+      const action = payload?.action;
+      if (scene === 'app-quit') {
+        console.log(`${logPrefix}main-handled confirmDialogAction: action=${action}`);
+        clearQuitTimers();
+        if (action === 'quit-app') {
+          handleQuitConfirmed();
+        } else if (action === 'minimize-to-tray') {
+          if (isWindowAlive(windowMap.main)) windowMap.main.hide();
+          handleQuitCancel();
+        } else {
+          handleQuitCancel();
+        }
+        // 同时关闭 confirm window
+        if (isWindowAlive(windowMap.confirm)) windowMap.confirm.hide();
+        return; // ★ 不转发，main 进程已处理
+      }
+    }
+
     // Route message based on target
     if (to === 'broadcast') {
       // Broadcast to all other windows
@@ -1008,13 +1085,8 @@ function bindIPCEvent() {
   });
 
   ipcMain.on('on-close-window', (evt) => {
-    console.log(`${logPrefix}on-close-window event`);
-    // Delegate close behavior to the main window 'close' handler so that
-    // the renderer can decide whether the application should actually quit.
-    const target = BrowserWindow.fromWebContents(evt.sender);
-    if (target && !target.isDestroyed()) {
-      target.close();
-    }
+    console.log(`${logPrefix}on-close-window event → openAppQuitConfirm`);
+    openAppQuitConfirmDialog();
   });
 
   // 主播中心 / 主播中心子页使用的窗口控制通道（window-minimize 等）。
@@ -1038,10 +1110,8 @@ function bindIPCEvent() {
   });
 
   ipcMain.on('window-close', (evt) => {
-    const target = BrowserWindow.fromWebContents(evt.sender);
-    if (target && !target.isDestroyed()) {
-      target.close();
-    }
+    console.log(`${logPrefix}window-close event → openAppQuitConfirm`);
+    openAppQuitConfirmDialog();
   });
 
   // 先移除旧的 handle，避免窗口重建时重复注册报错
@@ -1991,6 +2061,28 @@ function createTray() {
 }
 
 function bindMainWindowEvent() {
+  // ★ 转发 renderer console 到 main 日志，方便排查 [Niko onMounted] 等日志
+  // Renderer console 不会自动出现在 main 进程日志里，加这个后 user 贴 main 日志就能看到 renderer 内部。
+  const forwardRendererConsole = (contents, tag) => {
+    if (!contents) return;
+    contents.on('console-message', (_event, level, message, line, sourceId) => {
+      // 只转发含 Niko / TRTC / 错误的，避免 main 日志爆炸
+      if (!message) return;
+      const isRelevant = message.includes('[Niko')
+        || message.includes('[Niko]')
+        || message.includes('TUILiveKitWin')
+        || message.includes('error')
+        || message.includes('Error')
+        || message.includes('failed')
+        || message.includes('Failed');
+      if (!isRelevant) return;
+      const prefix = `[renderer:${tag}]`;
+      if (level === 3) console.error(prefix, message, line ? `(${line})` : '');
+      else if (level === 2) console.warn(prefix, message);
+      else console.log(prefix, message);
+    });
+  };
+
   windowMap.main?.webContents.on('did-fail-load', () => {
     console.log(`${logPrefix}main window: did-fail-load, reload soon...`);
     setTimeout(() => {
@@ -2007,6 +2099,8 @@ function bindMainWindowEvent() {
     if (isWindowAlive(windowMap.main)) {
       sendToWindow(windowMap.main, 'native-window-handle', windowMap.main.getNativeWindowHandle());
     }
+    // 转发 console 后，renderer 里的 [Niko onMounted] 等日志会直接出现在 main 日志
+    forwardRendererConsole(windowMap.main?.webContents, 'main');
     initMainWindowPage();
   });
 
