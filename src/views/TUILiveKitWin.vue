@@ -496,8 +496,9 @@ import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
 const nativeId = ref<number | Uint8Array | null>(null);
-/** 是否挂载 StreamMixer（DOM 混流预览）。关播后卸载，释放混流服务与渲染资源 */
-const mixerActive = ref(true);
+/** 是否挂载 StreamMixer（DOM 混流预览）。默认 false，等用户点击「开始直播」进入 onPreLiveConfirm 后才激活。
+ * 打开开播页时只显示开播设置弹窗 + 黑色背景，不激活摄像头/混流，避免画面提前显示。 */
+const mixerActive = ref(false);
 
 const router = useRouter();
 const { loginUserInfo, login: loginIm } = useLoginState();

@@ -13,46 +13,56 @@
         </div>
       </div>
       <!-- 系统状态：电池 + WiFi 纯 SVG 图标（去文字） -->
+      <!-- 用 span 包裹 SVG + CSS tooltip（::after position:fixed z-index:99999）替代原生 title -->
+      <!-- 原生 SVG <title> tooltip 层级太低，被直播内容弹窗盖住 -->
       <div v-if="!hideSystemStatus" class="live-header-status">
-        <svg
+        <span
           v-if="batteryInfo.hasBattery"
-          class="live-status-svg"
-          width="20" height="12" viewBox="0 0 20 12"
-          :title="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
+          class="live-status-tooltip-wrap"
+          :data-tooltip="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
         >
-          <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1" />
-          <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.4)" />
-          <rect
-            v-if="liveBatteryFill > 0"
-            x="2" y="2.5"
-            :width="liveBatteryFill"
-            height="7" rx="0.8"
-            :fill="liveBatteryColor"
-          />
-          <polygon
-            v-if="batteryInfo.charging"
-            points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
-            fill="#fff" opacity="0.85"
-          />
-        </svg>
-        <svg
-          class="live-status-svg"
-          width="16" height="12" viewBox="0 0 16 12"
-          :title="liveNetworkTooltip"
+          <svg
+            class="live-status-svg"
+            width="20" height="12" viewBox="0 0 20 12"
+          >
+            <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1" />
+            <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.4)" />
+            <rect
+              v-if="liveBatteryFill > 0"
+              x="2" y="2.5"
+              :width="liveBatteryFill"
+              height="7" rx="0.8"
+              :fill="liveBatteryColor"
+            />
+            <polygon
+              v-if="batteryInfo.charging"
+              points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
+              fill="#fff" opacity="0.85"
+            />
+          </svg>
+        </span>
+        <span
+          class="live-status-tooltip-wrap"
+          :data-tooltip="liveNetworkTooltip"
         >
-          <template v-if="networkInfo.connected">
-            <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
-              :stroke="liveWifiOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
-            <path d="M 5 8.5 A 3 3 0 0 1 11 8.5"
-              :stroke="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
-            <circle cx="8" cy="10.8" r="1.1" :fill="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" />
-          </template>
-          <template v-else>
-            <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-            <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-            <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
-          </template>
-        </svg>
+          <svg
+            class="live-status-svg"
+            width="16" height="12" viewBox="0 0 16 12"
+          >
+            <template v-if="networkInfo.connected">
+              <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
+                :stroke="liveWifiOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+              <path d="M 5 8.5 A 3 3 0 0 1 11 8.5"
+                :stroke="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+              <circle cx="8" cy="10.8" r="1.1" :fill="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" />
+            </template>
+            <template v-else>
+              <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+              <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+              <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
+            </template>
+          </svg>
+        </span>
       </div>
     </div>
     <div class="right">
@@ -600,6 +610,55 @@ defineExpose({ refreshMessageUnread });
     display: inline-block;
     flex-shrink: 0;
     cursor: default;
+  }
+
+  /* CSS tooltip（::after position:fixed z-index:99999 盖过所有弹窗） */
+  .live-status-tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .live-status-tooltip-wrap::after {
+    content: attr(data-tooltip);
+    position: fixed;           /* fixed 脱离文档流，不受父容器 overflow/z-index 限制 */
+    bottom: calc(100% + 6px);  /* 显示在图标上方 */
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 99999;            /* 比任何弹窗都高 */
+    transition: opacity .12s, visibility .12s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  .live-status-tooltip-wrap:hover::after {
+    opacity: 1;
+    visibility: visible;
+  }
+  /* 小三角指向图标 */
+  .live-status-tooltip-wrap::before {
+    content: '';
+    position: fixed;
+    bottom: calc(100% + 1px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.85);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 99999;
+    transition: opacity .12s, visibility .12s;
+  }
+  .live-status-tooltip-wrap:hover::before {
+    opacity: 1;
+    visibility: visible;
   }
 
   .left {
