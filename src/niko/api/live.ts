@@ -4,6 +4,13 @@ import { toList, type NikoLiveListItem } from './liveList';
 export interface LiveCategory {
   id: string | number;
   name: string;
+  selected_icon?: string;
+  unselected_icon?: string;
+}
+
+/** 获取直播分类列表（/live/liveCategory） */
+export function fetchLiveCategoryList(): Promise<LiveCategory[]> {
+  return request.post('/live/liveCategory') as unknown as Promise<LiveCategory[]>;
 }
 
 export interface PrepareLiveInfo {
@@ -197,18 +204,40 @@ export interface AudienceCardInfo {
   contribution?: number;
   is_attention?: number | boolean;
   is_mystery?: number | boolean;
+  is_anchor?: boolean;
+  is_manager?: boolean;
+  is_black_list?: boolean;
+  is_allow_speak?: boolean;
+  is_allow_private_chat?: boolean;
   user_level_info?: {
+    level_id?: number;
     level_name?: string;
     level_color?: string;
     level_icon?: string;
+    level_gif_icon?: string;
     level_card_icon?: string;
+    level_experience?: number;
+    level_total_experience?: number;
+  };
+  user_anchor_info?: {
+    level_id?: number;
+    level_name?: string;
+    level_color?: string;
+    level_icon?: string;
+    level_gif_icon?: string;
+    level_card_icon?: string;
+    level_experience?: number;
+    level_total_experience?: number;
   };
   vip_info?: {
     vip_name?: string;
     vip_icon?: string;
-  };
+  } | null;
   adorn?: {
-    frame?: { frame_image?: string; image_type?: number };
+    frame?: { frame_image?: string; image_type?: number } | null;
+    pretty_account?: { icon?: string } | null;
+    appellation?: { icon?: string } | null;
+    profile_card?: { card_image?: string } | null;
   };
   [key: string]: any;
 }

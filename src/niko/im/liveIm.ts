@@ -248,7 +248,7 @@ function buildExtra(data: any): LiveImMessage['extra'] {
   const medalInfo = data.adorn?.medal_info || {};
   return {
     levelColor: String(levelInfo.level_color || ''),
-    levelCardIcon: String(levelInfo.level_icon || levelInfo.level_card_icon || levelInfo.level_gif_icon || ''),
+    levelCardIcon: String(levelInfo.level_gif_icon || levelInfo.level_card_icon || levelInfo.level_icon || ''),
     medalImage: String(medalInfo.medal_image || ''),
     isManager: !!data.is_manager,
     isSuper: !!data.is_super,

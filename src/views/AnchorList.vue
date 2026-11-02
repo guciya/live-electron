@@ -63,6 +63,20 @@
             </svg>
             <span>公会入驻</span>
           </button>
+          <button class="anchor-text-btn" type="button" @click="showQrDialog('recharge')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <path d="M2 10h20" />
+            </svg>
+            <span>充值中心</span>
+          </button>
+          <button class="anchor-text-btn" type="button" @click="showQrDialog('anchorAuth')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+            <span>主播认证</span>
+          </button>
           <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="9.5" cy="7.5" r="3.5" />
@@ -306,6 +320,25 @@
 
       <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
       <MessageCenter :visible="messageCenterVisible" @close="messageCenterVisible = false" />
+
+      <!-- 充值中心 / 主播认证 二维码弹窗 -->
+      <div v-if="qrVisible" class="qr-mask" @click.self="closeQrDialog">
+        <div class="qr-dialog">
+          <div class="qr-dialog-header">
+            <span class="qr-dialog-title">{{ qrTitle }}</span>
+            <span class="qr-dialog-env"></span>
+            <button class="qr-dialog-close" type="button" @click="closeQrDialog">×</button>
+          </div>
+          <div class="qr-dialog-body">
+            <img
+              class="qr-img"
+              :src="'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(qrUrl)"
+              :alt="qrTitle"
+            />
+            <div class="qr-tip">手机扫码进入{{ qrTitle }}</div>
+          </div>
+        </div>
+      </div>
     </div>
   </UIKitProvider>
 </template>
@@ -350,6 +383,26 @@ const userAvatar = computed(() => {
 const userInitial = computed(() => (userInfo.value?.nickname || userInfo.value?.userShowId || 'N').slice(0, 1).toUpperCase());
 /** 是否主播（/api/user/personalInfo 的 is_anchor）：非主播隐藏开播入口 */
 const isAnchor = computed(() => authStore.isAnchor);
+
+/** 二维码弹窗（充值中心 / 主播认证） */
+const qrVisible = ref(false);
+const qrTitle = ref('');
+const qrUrl = ref('');
+const qrEnvLabel = computed(() => (NIKO_CONFIG.apiBaseUrl.includes('test') ? '测试环境' : '正式环境'));
+
+function showQrDialog(kind: 'recharge' | 'anchorAuth') {
+  if (kind === 'recharge') {
+    qrTitle.value = '充值中心';
+    qrUrl.value = NIKO_CONFIG.rechargeCenterUrl;
+  } else {
+    qrTitle.value = '主播认证';
+    qrUrl.value = NIKO_CONFIG.anchorAuthUrl;
+  }
+  qrVisible.value = true;
+}
+function closeQrDialog() {
+  qrVisible.value = false;
+}
 
 /**
  * 加载主播列表（数据源：/live/recommendLiveList，业务域 + 登录 Token）。
@@ -1846,5 +1899,62 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============ 充值/认证 二维码弹窗 ============ */
+.qr-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.qr-dialog {
+  width: 440px;
+  background: #101013;
+  border: 1px solid #232329;
+  border-radius: 12px;
+  overflow: hidden;
+  color: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+}
+.qr-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #232329;
+}
+.qr-dialog-title { font-size: 16px; font-weight: 600; }
+.qr-dialog-env {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+.qr-dialog-close {
+  background: none; border: none; color: rgba(255,255,255,0.45); font-size: 22px; cursor: pointer;
+  &:hover { color: #fff; }
+}
+.qr-dialog-body {
+  padding: 24px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.qr-img {
+  width: 240px; height: 240px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px;
+  display: block;
+}
+.qr-tip { font-size: 13px; color: rgba(255,255,255,0.7); }
+.qr-link {
+  font-size: 12px; color: rgba(255,255,255,0.35);
+  word-break: break-all; text-align: center;
 }
 </style>

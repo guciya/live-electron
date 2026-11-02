@@ -12,6 +12,20 @@
           <i class="statistics-space" v-if="index < statisticsInfoList.length - 1"></i>
         </div>
       </div>
+      <!-- WiFi 网络信号：仅开播页显示 -->
+      <div v-if="networkLevel >= 0" class="wifi-signal" :class="'wifi-level-' + networkLevel">
+        <svg class="wifi-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <!-- 信号格 1 (最远) -->
+          <path d="M2 9c5-5 15-5 20 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" :opacity="networkLevel >= 1 ? 1 : 0.2" />
+          <!-- 信号格 2 -->
+          <path d="M5 12c3.5-3.5 10.5-3.5 14 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" :opacity="networkLevel >= 2 ? 1 : 0.2" />
+          <!-- 信号格 3 -->
+          <path d="M8 15c2-2 6-2 8 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" :opacity="networkLevel >= 3 ? 1 : 0.2" />
+          <!-- 圆点 -->
+          <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+        </svg>
+        <span class="wifi-label">{{ networkLabel }}</span>
+      </div>
     </div>
     <div class="right">
       <button class="back-list-btn" type="button" @click="emit('backToList')">
@@ -208,6 +222,31 @@ const statistics = ref<TRTCStatistics>({
 
 const frameRate = computed(() => {
   return statistics.value.localStatisticsArray?.[0]?.frameRate || 0;
+});
+
+/**
+ * 网络信号等级（0-3）：根据 TRTC rtt/丢包 综合判断
+ *   3 = 优  (rtt < 100 且 丢包 < 2%)
+ *   2 = 良  (rtt < 200 且 丢包 < 5%)
+ *   1 = 差  (rtt < 400 或 丢包 < 10%)
+ *   0 = 极差 (否则)
+ *  -1 = 未开播 / 无统计数据
+ */
+const networkLevel = computed<number>(() => {
+  const s = statistics.value;
+  if (!s || !s.rtt) return -1;
+  const rtt = s.rtt;
+  const upLoss = s.upLoss || 0;
+  const downLoss = s.downLoss || 0;
+  const loss = Math.max(upLoss, downLoss);
+  if (rtt < 100 && loss < 2) return 3;
+  if (rtt < 200 && loss < 5) return 2;
+  if (rtt < 400 && loss < 10) return 1;
+  return 0;
+});
+const networkLabel = computed<string>(() => {
+  const labels = ['网络极差', '网络较差', '网络良好', '网络优秀'];
+  return labels[networkLevel.value] || '';
 });
 
 const statisticsInfoList = computed(() => [
@@ -584,6 +623,31 @@ defineExpose({ refreshMessageUnread });
       background-color: var(--text-color-primary, #ffffff);
       margin-right: 0.5rem;
     }
+  }
+
+  /* WiFi 网络信号 */
+  .wifi-signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-left: 0.75rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.06);
+    &.wifi-level-3 { color: #3fc78f; background: rgba(63, 199, 143, 0.12); }
+    &.wifi-level-2 { color: #ffc84a; background: rgba(255, 200, 74, 0.12); }
+    &.wifi-level-1 { color: #ff8c4a; background: rgba(255, 140, 74, 0.12); }
+    &.wifi-level-0 { color: #ff5454; background: rgba(255, 84, 84, 0.12); }
+  }
+  .wifi-icon {
+    width: 1rem;
+    height: 1rem;
+  }
+  .wifi-label {
+    font-weight: 400;
   }
 
   .language-switch {

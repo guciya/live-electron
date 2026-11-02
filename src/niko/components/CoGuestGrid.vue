@@ -156,7 +156,7 @@ const CoSlot = defineComponent({
       const isAnchor = props.user.userId === props.anchorUserId;
       return h(
         'div',
-        { class: ['cogrid-slot', props.isMain ? 'cogrid-main-slot' : 'cogrid-side-slot', isAnchor ? 'is-anchor' : ''] },
+        { class: ['cogrid-slot'] },
         [
           h('video', {
             ref: onVideoEl,
@@ -166,7 +166,7 @@ const CoSlot = defineComponent({
             playsinline: true,
           }),
           props.user.nickname
-            ? h('div', { class: 'cogrid-label' }, [isAnchor ? h('span', { class: 'cogrid-badge cogrid-badge-anchor' }, '主播') : null, props.user.nickname])
+            ? h('div', { class: 'cogrid-label' }, [isAnchor ? h('span', { class: 'cogrid-badge cogrid-badge-anchor' }, '主播') : null, ''])
             : null,
           // 放大按钮：不在主画面时才显示（在主画面里点击等于切回侧边栏，但保留一个按钮也行，这里侧边栏才显示）
           !props.isMain
@@ -242,6 +242,9 @@ const CoSlot = defineComponent({
   &.is-single {
     .cogrid-main {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      > .cogrid-slot { flex: 1; width: 100%; }
     }
   }
 
@@ -250,6 +253,10 @@ const CoSlot = defineComponent({
     .cogrid-main {
       flex: 0 0 70%;
       min-width: 0;
+      // 让唯一的 slot 填满这个容器
+      display: flex;
+      flex-direction: column;
+      > .cogrid-slot { flex: 1; width: 100%; }
     }
     .cogrid-side {
       flex: 1;
@@ -257,6 +264,8 @@ const CoSlot = defineComponent({
       flex-direction: column;
       gap: 0.375rem;
       min-width: 0;
+      // 让每个 slot 均分高度
+      > .cogrid-slot { flex: 1; min-height: 96px; }
     }
   }
 }
@@ -269,20 +278,6 @@ const CoSlot = defineComponent({
   border-radius: 0.5rem;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
-
-  &.cogrid-main-slot {
-    flex: 1; // 填满 cogrid-main
-    width: 100%;
-  }
-
-  &.cogrid-side-slot {
-    flex: 1;
-    min-height: 96px;
-  }
-
-  &.is-anchor {
-    border-color: rgba(255, 122, 162, 0.35); // 主播 slot 用粉色边框微标记
-  }
 }
 
 .cogrid-video {

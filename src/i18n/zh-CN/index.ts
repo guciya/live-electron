@@ -277,7 +277,7 @@ const demoResource = {
   'Save as new name': '保存为新名称',
   Mirror: '镜像',
   Resolution: '分辨率',
-  'We support you to add rich sources': '我们支持您添加形式丰富的画面源',
+  'We support you to add rich sources': '请添加摄像头画面源',
   Add: '添加',
   'Add Screen Share': '添加屏幕共享',
   'Add Image': '添加图片',

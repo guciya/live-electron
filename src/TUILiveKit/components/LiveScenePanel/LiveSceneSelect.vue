@@ -67,10 +67,10 @@ const SCENE_MENU_SYNC_EVENT = 'live-scene-panel:menu-sync';
 
 const defaultMaterialList = computed(() => [
   { icon: CameraIcon, title: t('Add Camera'), type: TRTCMediaSourceType.kCamera },
-  { icon: ScreenIcon, title: t('Add Screen Share'), type: TRTCMediaSourceType.kScreen },
-  { icon: ImageIcon, title: t('Add Image'), type: TRTCMediaSourceType.kImage },
-  { icon: VideoIcon, title: t('Add Online Video'), type: TRTCMediaSourceType.kOnlineVideo },
-  { icon: VideoIcon, title: t('Add Local Video'), type: TRTCMediaSourceType.kVideoFile },
+  // { icon: ScreenIcon, title: t('Add Screen Share'), type: TRTCMediaSourceType.kScreen },
+  // { icon: ImageIcon, title: t('Add Image'), type: TRTCMediaSourceType.kImage },
+  // { icon: VideoIcon, title: t('Add Online Video'), type: TRTCMediaSourceType.kOnlineVideo },
+  // { icon: VideoIcon, title: t('Add Local Video'), type: TRTCMediaSourceType.kVideoFile },
 ]);
 
 const isDropdownVisible = ref(false);
