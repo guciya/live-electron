@@ -165,9 +165,7 @@ const CoSlot = defineComponent({
             muted: true,
             playsinline: true,
           }),
-          props.user.nickname
-            ? h('div', { class: 'cogrid-label' }, [isAnchor ? h('span', { class: 'cogrid-badge cogrid-badge-anchor' }, '主播') : null, props.user.nickname])
-            : null,
+          // cogrid-label（昵称 + 主播徽章）已按产品要求移除
           // 放大按钮：不在主画面时才显示（在主画面里点击等于切回侧边栏，但保留一个按钮也行，这里侧边栏才显示）
           !props.isMain
             ? h(
@@ -267,8 +265,8 @@ const CoSlot = defineComponent({
   min-height: 0;
   overflow: hidden;
   border-radius: 0.5rem;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border: none;
 
   &.cogrid-main-slot {
     flex: 1; // 填满 cogrid-main
@@ -281,7 +279,7 @@ const CoSlot = defineComponent({
   }
 
   &.is-anchor {
-    border-color: rgba(255, 122, 162, 0.35); // 主播 slot 用粉色边框微标记
+    border: none;
   }
 }
 

@@ -12,6 +12,48 @@
           <i class="statistics-space" v-if="index < statisticsInfoList.length - 1"></i>
         </div>
       </div>
+      <!-- 系统状态：电池 + WiFi 纯 SVG 图标（去文字） -->
+      <div class="live-header-status">
+        <svg
+          v-if="batteryInfo.hasBattery"
+          class="live-status-svg"
+          width="20" height="12" viewBox="0 0 20 12"
+          :title="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
+        >
+          <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1" />
+          <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.4)" />
+          <rect
+            v-if="liveBatteryFill > 0"
+            x="2" y="2.5"
+            :width="liveBatteryFill"
+            height="7" rx="0.8"
+            :fill="liveBatteryColor"
+          />
+          <polygon
+            v-if="batteryInfo.charging"
+            points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
+            fill="#fff" opacity="0.85"
+          />
+        </svg>
+        <svg
+          class="live-status-svg"
+          width="16" height="12" viewBox="0 0 16 12"
+          :title="liveNetworkTooltip"
+        >
+          <template v-if="networkInfo.connected">
+            <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
+              :stroke="liveWifiOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+            <path d="M 5 8.5 A 3 3 0 0 1 11 8.5"
+              :stroke="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+            <circle cx="8" cy="10.8" r="1.1" :fill="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" />
+          </template>
+          <template v-else>
+            <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+            <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+            <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
+          </template>
+        </svg>
+      </div>
     </div>
     <div class="right">
       <button class="back-list-btn" type="button" @click="emit('backToList')">
@@ -96,6 +138,9 @@
           </button>
         </div>
         <div v-if="showUserControl" class="user-control-container">
+          <div class="user-control-item-foot" :title="'充值中心'" @click="openRecharge">
+            <span class="user-control-label">充值中心</span>
+          </div>
           <div class="user-control-item-foot" :title="t('User Profile')" @click="openProfile">
             <span class="user-control-label">{{ t('User Profile') }}</span>
           </div>
@@ -126,6 +171,9 @@
     @save="onSaveProfileDialog"
     @close="onCancelProfileDialog"
   />
+
+  <!-- Recharge Center Dialog -->
+  <RechargeDialog v-model:visible="showRechargeDialog" />
 </template>
 
 <script lang="ts" setup>
@@ -149,6 +197,7 @@ import vClickOutside from '../../utils/vClickOutside';
 import { isWindowPlatform } from '../../utils/platform';
 import { mapToRoomEngineLanguage } from '../../utils/common';
 import UserProfileDialog from './UserProfileDialog.vue';
+import RechargeDialog from './RechargeDialog.vue';
 import { ChildPanelType, ipcBridge, IPCMessageType, toPlainIpcPayload } from '../../ipc';
 import logger from '../../utils/logger';
 
@@ -180,6 +229,7 @@ const { loginUserInfo, setSelfInfo } = useLoginState();
 const showUserControl = ref(false);
 const showLanguageMenu = ref(false);
 const showProfileDialog = ref(false);
+const showRechargeDialog = ref(false);
 const isWindowsPlatform = isWindowPlatform();
 
 // Construct userInfo for UserProfileDialog
@@ -210,20 +260,75 @@ const frameRate = computed(() => {
   return statistics.value.localStatisticsArray?.[0]?.frameRate || 0;
 });
 
-const statisticsInfoList = computed(() => [
-  {
-    text: t('CPU'),
-    value: statistics.value.appCpu + '%',
-  },
-  {
-    text: t('RAM'),
-    value: statistics.value.appMemoryUsageInMB + 'MB',
-  },
-  {
-    text: t('Frame Rate'),
-    value: String(frameRate.value || 0),
+// ============== 系统状态：电池电量 + 网络（WiFi / 以太网） ==============
+const batteryInfo = ref({ hasBattery: false, level: 100, charging: false });
+const networkInfo = ref({ connected: false, type: '', ssid: '', signal: 0 });
+
+const refreshSystemStatus = async () => {
+  try {
+    if (window.ipcRenderer?.invoke) {
+      const [battery, network] = await Promise.all([
+        window.ipcRenderer.invoke('get-battery-info'),
+        window.ipcRenderer.invoke('get-network-info'),
+      ]);
+      if (battery) batteryInfo.value = battery;
+      if (network) networkInfo.value = network;
+    }
+  } catch (e) {
+    // 忽略单次轮询失败
   }
-]);
+};
+
+const batteryText = computed(() => {
+  if (!batteryInfo.value.hasBattery) return '';
+  const icon = batteryInfo.value.charging ? '⚡' : '';
+  return `${icon}${batteryInfo.value.level}%`;
+});
+
+const networkText = computed(() => {
+  if (!networkInfo.value.connected) return '网络未连接';
+  if (networkInfo.value.type === 'wifi') {
+    const name = networkInfo.value.ssid || 'WiFi';
+    return `${name} ${networkInfo.value.signal}%`;
+  }
+  return '有线连接';
+});
+
+const statisticsInfoList = computed(() => {
+  const list = [
+    {
+      text: t('CPU'),
+      value: statistics.value.appCpu + '%',
+    },
+    {
+      text: t('RAM'),
+      value: statistics.value.appMemoryUsageInMB + 'MB',
+    },
+    {
+      text: t('Frame Rate'),
+      value: String(frameRate.value || 0),
+    },
+  ];
+  // 电量/网络不再以文字显示，改为右侧纯 SVG 图标
+  return list;
+});
+
+// ===== SVG 图标用计算属性 =====
+const BATTERY_INNER_MAX = 13;
+const liveBatteryFill = computed(() => {
+  const lv = Math.max(0, Math.min(100, batteryInfo.value.level));
+  return Math.round((lv / 100) * BATTERY_INNER_MAX * 10) / 10;
+});
+const liveBatteryColor = computed(() =>
+  batteryInfo.value.level <= 20 ? '#ef4444' : '#22c55e'
+);
+const liveWifiOn = computed(() => (networkInfo.value.signal || 0) >= 50);
+const liveWifiNearOn = computed(() => (networkInfo.value.signal || 0) >= 5);
+const liveNetworkTooltip = computed(() => {
+  if (!networkInfo.value.connected) return '网络未连接';
+  if (networkInfo.value.type === 'wifi') return `WiFi: ${networkInfo.value.ssid || ''}（信号 ${networkInfo.value.signal}%）`;
+  return '以太网';
+});
 
 const languageOptions = [
   { label: '简体中文', value: 'zh-CN' },
@@ -323,6 +428,14 @@ function selectLanguage(newLanguage: string) {
 }
 
 /**
+ * Open recharge center dialog
+ */
+function openRecharge() {
+  showUserControl.value = false;
+  showRechargeDialog.value = true;
+}
+
+/**
  * Open user profile dialog
  */
 function openProfile() {
@@ -389,6 +502,7 @@ function handleLogOut() {
  */
 const messageUnread = ref(0);
 let unreadTimer: ReturnType<typeof setInterval> | null = null;
+let systemStatusTimer: ReturnType<typeof setInterval> | null = null;
 
 const refreshMessageUnread = async () => {
   try {
@@ -411,6 +525,9 @@ onMounted(async () => {
   ipcBridge.on(IPCMessageType.UPDATE_USER_PROFILE, onSaveProfileDialog);
   void refreshMessageUnread();
   unreadTimer = setInterval(refreshMessageUnread, 10000);
+  // 电池电量 + WiFi：30s 轮询，首次立即拉取
+  void refreshSystemStatus();
+  systemStatusTimer = setInterval(refreshSystemStatus, 30000);
 });
 
 onBeforeUnmount(() => {
@@ -419,6 +536,10 @@ onBeforeUnmount(() => {
   if (unreadTimer) {
     clearInterval(unreadTimer);
     unreadTimer = null;
+  }
+  if (systemStatusTimer) {
+    clearInterval(systemStatusTimer);
+    systemStatusTimer = null;
   }
 });
 
@@ -461,6 +582,20 @@ defineExpose({ refreshMessageUnread });
   -webkit-app-region: drag;
   background-color: var(--bg-color-topbar);
   cursor: move;
+
+  /* 电池/WiFi 纯 SVG 图标（与 AnchorList 风格一致） */
+  .live-header-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 32px;
+    -webkit-app-region: no-drag;
+  }
+  .live-status-svg {
+    display: inline-block;
+    flex-shrink: 0;
+    cursor: default;
+  }
 
   .left {
     margin-left: 8px;
@@ -550,8 +685,9 @@ defineExpose({ refreshMessageUnread });
     }
   }
 
+  /* CPU/RAM/Frame Rate 统计文字已按产品要求隐藏 */
   .statistics {
-    display: flex;
+    display: none !important;
     position: relative;
     align-items: center;
     &-container {

@@ -82,9 +82,49 @@
         <div class="main-center">
           <div class="main-center-top">
             <div class="main-center-top-left">
-              <span class="live-title" :title="currentLive?.liveName || liveParams.liveName">
-                {{ currentLive?.liveName || liveParams.liveName }}
-              </span>
+              <!-- 电量 + WiFi 状态组（主播名字上方，鼠标悬停展示详情） -->
+              <div class="main-center-status-row">
+                <div
+                  v-if="winBatteryInfo.hasBattery"
+                  class="main-center-status-wrap main-center-battery"
+                  :data-tip="winBatteryTooltip"
+                >
+                  <svg width="18" height="11" viewBox="0 0 20 12" aria-hidden="true">
+                    <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" />
+                    <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.45)" />
+                    <rect v-if="winBatteryFill > 0" x="2" y="2.5" :width="winBatteryFill" height="7" rx="0.8" :fill="winBatteryColor" />
+                    <polygon v-if="winBatteryInfo.charging" points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5" fill="#fff" opacity="0.85" />
+                  </svg>
+                </div>
+                <div
+                  class="main-center-status-wrap main-center-wifi"
+                  :data-tip="winNetworkTooltip"
+                >
+                  <svg width="15" height="11" viewBox="0 0 16 12" aria-hidden="true">
+                    <template v-if="winNetworkInfo.connected">
+                      <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
+                        :stroke="winWifiOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                      <path d="M 5 8.5 A 3 3 0 0 1 11 8.5"
+                        :stroke="winWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                      <circle cx="8" cy="10.8" r="1.1" :fill="winWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" />
+                    </template>
+                    <template v-else>
+                      <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.25)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                      <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.25)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                      <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
+                    </template>
+                  </svg>
+                </div>
+                <span class="main-center-status-text">
+                  {{ winBatteryInfo.hasBattery ? `${winBatteryInfo.level}%` : '' }}
+                  {{ winNetworkInfo.connected && winNetworkInfo.type === 'wifi' ? ` · ${winNetworkInfo.signal}%` : '' }}
+                </span>
+              </div>
+              <!-- 原来的直播标题/开播时长行 -->
+              <div class="main-center-top-title-row">
+                <span class="live-title" :title="currentLive?.liveName || liveParams.liveName">
+                  {{ currentLive?.liveName || liveParams.liveName }}
+                </span>
               <!-- <LiveSettingButton
                 v-if="loginUserInfo?.userId && !isGoingToLoginPage"
                 :live-name="liveParams.liveName"
@@ -111,7 +151,8 @@
                 <span>人气榜</span>
               </button>
               <span class="live-start-time">开播时长：{{ liveDurationText }}</span>
-            </div>
+              </div><!-- /main-center-top-title-row -->
+            </div><!-- /main-center-top-left -->
             <button
               class="more-live-btn"
               type="button"
@@ -465,6 +506,44 @@ const { loginUserInfo, login: loginIm } = useLoginState();
 const { t, language } = useUIKit();
 const loading = ref(false);
 const isToolsExpanded = ref(true);
+
+// ============== 系统状态：电量 + 网络（放到主播名字上方展示） ==============
+const winBatteryInfo = ref({ hasBattery: false, level: 100, charging: false });
+const winNetworkInfo = ref({ connected: false, type: '', ssid: '', signal: 0 });
+let winSystemStatusTimer: ReturnType<typeof setInterval> | null = null;
+
+const winBatteryFill = computed(() => {
+  const lv = Math.max(0, Math.min(100, winBatteryInfo.value.level));
+  return Math.round((lv / 100) * 13 * 10) / 10;
+});
+const winBatteryColor = computed(() =>
+  winBatteryInfo.value.level <= 20 ? '#ef4444' : '#22c55e'
+);
+const winWifiOn = computed(() => (winNetworkInfo.value.signal || 0) >= 50);
+const winWifiNearOn = computed(() => (winNetworkInfo.value.signal || 0) >= 5);
+const winBatteryTooltip = computed(() =>
+  `电量 ${winBatteryInfo.value.level}%${winBatteryInfo.value.charging ? '（充电中）' : ''}`
+);
+const winNetworkTooltip = computed(() => {
+  if (!winNetworkInfo.value.connected) return '网络未连接';
+  if (winNetworkInfo.value.type === 'wifi') return `WiFi: ${winNetworkInfo.value.ssid || ''}（信号 ${winNetworkInfo.value.signal}%）`;
+  return '以太网';
+});
+
+async function refreshWinSystemStatus() {
+  try {
+    if ((window as any).ipcRenderer?.invoke) {
+      const [battery, network] = await Promise.all([
+        (window as any).ipcRenderer.invoke('get-battery-info'),
+        (window as any).ipcRenderer.invoke('get-network-info'),
+      ]);
+      if (battery) winBatteryInfo.value = battery;
+      if (network) winNetworkInfo.value = network;
+    }
+  } catch {
+    /* 忽略单次轮询失败 */
+  }
+}
 
 const props = defineProps<{
   liveId?: string;
@@ -1132,22 +1211,25 @@ const patchMediaMixingManager = () => {
       if (typeof originalSetStreamLayout === 'function') {
         mmmProto.setStreamLayout = function (layout: any) {
           const userList = layout?.userList;
+          let width = currentLayoutArea?.width || 0;
+          let height = currentLayoutArea?.height || 0;
+          if (!width || !height) {
+            const el = document.querySelector('.video-layout .local-mixer-content') as HTMLElement | null;
+            width = el?.clientWidth || 0;
+            height = el?.clientHeight || 0;
+          }
+          // 画布尺寸还没就绪 — 跳过这次调用，等 DOM ready 后 SDK 会再次触发。
+          // 避免 SDK 内部打 "view is null, no container HTML element" 的 warning。
+          if (!width || !height) {
+            return;
+          }
           if (Array.isArray(userList)) {
-            let width = currentLayoutArea?.width || 0;
-            let height = currentLayoutArea?.height || 0;
-            if (!width || !height) {
-              const el = document.querySelector('.video-layout .local-mixer-content') as HTMLElement | null;
-              width = el?.clientWidth || 0;
-              height = el?.clientHeight || 0;
-            }
             for (const item of userList) {
               if (!item || item.userId !== '') {
                 continue;
               }
               item.fillMode = TRTCVideoFillMode.TRTCVideoFillMode_Fill;
-              if (width > 0 && height > 0) {
-                item.rect = { left: 0, top: 0, right: Math.round(width), bottom: Math.round(height) };
-              }
+              item.rect = { left: 0, top: 0, right: Math.round(width), bottom: Math.round(height) };
             }
           }
           return originalSetStreamLayout.call(this, layout);
@@ -2220,6 +2302,10 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
+  // 系统状态：立即预取 + 30s 轮询（主播名字上方展示）
+  void refreshWinSystemStatus();
+  winSystemStatusTimer = setInterval(refreshWinSystemStatus, 30000);
+
   // Subscribe to live ended event
   subscribeEvent(LiveListEvent.onLiveEnded, handleLiveEnded);
 
@@ -2409,6 +2495,10 @@ const handleLiveSettingConfirm = async (form: { liveName: string; coverUrl?: str
 };
 
 onBeforeUnmount(() => {
+  if (winSystemStatusTimer) {
+    clearInterval(winSystemStatusTimer);
+    winSystemStatusTimer = null;
+  }
   unsubscribeEvent(LiveListEvent.onLiveEnded, handleLiveEnded);
   unsubscribeBattleEvent(BattleEvent.onBattleStarted, handleBattleStartedForCover);
   unsubscribeBattleEvent(BattleEvent.onBattleEnded, handleBattleEndedForCover);
@@ -3111,27 +3201,90 @@ onBeforeUnmount(() => {
         position: relative;
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: stretch;
         width: 100%;
-        height: 54px;
-        padding: 0 18px;
+        min-height: 54px;
+        padding: 8px 18px;
         box-sizing: border-box;
         color: $text-color1;
 
         .main-center-top-left {
           @include text-size-16;
           display: flex;
-          align-items: center;
-          gap: 8px;
+          flex-direction: column;
+          justify-content: center;
+          gap: 4px;
           flex: 1;
           min-width: 0;
 
-          .live-title {
+          /* 电量 + WiFi 状态行（主播名字上方） */
+          .main-center-status-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex: none;
+            -webkit-app-region: no-drag;
+          }
+
+          .main-center-status-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            cursor: default;
+
+            /* CSS tooltip：hover 时显示 data-tip 内容 */
+            &:hover::after {
+              content: attr(data-tip);
+              position: absolute;
+              top: calc(100% + 6px);
+              left: 50%;
+              transform: translateX(-50%);
+              padding: 4px 10px;
+              border-radius: 5px;
+              background: rgba(20, 22, 30, 0.95);
+              color: #fff;
+              font-size: 12px;
+              font-weight: 400;
+              white-space: nowrap;
+              z-index: 999;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+              border: 1px solid rgba(255, 255, 255, 0.12);
+              pointer-events: none;
+            }
+
+            &:hover::before {
+              content: '';
+              position: absolute;
+              top: calc(100% + 1px);
+              left: 50%;
+              transform: translateX(-50%);
+              border: 4px solid transparent;
+              border-bottom-color: rgba(20, 22, 30, 0.95);
+              z-index: 999;
+              pointer-events: none;
+            }
+          }
+
+          .main-center-status-text {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.45);
+            font-variant-numeric: tabular-nums;
+          }
+
+          /* 名字 + 开播时长行 */
+          .main-center-top-title-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-weight: 600;
+
+            .live-title {
+              min-width: 0;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              font-weight: 600;
+            }
           }
 
           /* 开播时长：00时00分00秒（高亮显示） */
@@ -3207,10 +3360,16 @@ onBeforeUnmount(() => {
           @include text-size-12;
           flex-shrink: 0;
           margin-left: 12px;
-          padding: 3px 10px;
+          padding: 4px 10px;
           border-radius: 12px;
           background: rgba(43, 127, 255, 0.14);
           color: #8cc4ff;
+          /* 父级 align-items: stretch，右侧按钮自身保持垂直水平居中 */
+          align-self: center;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1.4;
         }
 
         &::after {

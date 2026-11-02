@@ -41,7 +41,7 @@ onMounted(() => {
   const storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
   let userInfo;
   if (!storedUserInfo) {
-    // 未登录：直接跳转登录页，不再用 debug 配置生成测试用户（避免闪直播页）
+    // 未登录：直接跳转登录页
     gotoLogin();
     return;
   } else {

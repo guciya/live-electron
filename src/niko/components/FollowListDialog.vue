@@ -223,28 +223,51 @@ function handleSelect(user: AnchorPrepareWhitelistUser) {
 }
 
 .follow-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   align-content: flex-start;
-  gap: 0.875rem;
+  gap: 0.75rem;
 }
 
 .follow-card {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  width: 240px;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.75rem;
-  background: #1c1d25;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.875rem;
+  background: linear-gradient(135deg, #1e2029 0%, #181920 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #1c66e5, #5a8fff);
+    opacity: 0;
+    transition: opacity 0.22s ease;
+  }
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.14);
+    transform: translateY(-3px);
+    box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(28, 102, 229, 0.3);
+    border-color: rgba(28, 102, 229, 0.35);
+    background: linear-gradient(135deg, #22252f 0%, #1b1d25 100%);
+
+    &::before {
+      opacity: 1;
+    }
+  }
+
+  &:active {
+    transform: translateY(-1px);
   }
 }
 

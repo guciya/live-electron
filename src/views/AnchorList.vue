@@ -5,6 +5,77 @@
         <div class="anchor-header-left">
           <img class="logo-icon" src="../assets/niko-logo.png" alt="Niko直播" />
           <span class="logo-title">Niko直播</span>
+          <!-- 系统状态：电池 + WiFi（仿 Win11 托盘图标 + 自定义 CSS tooltip） -->
+          <div class="anchor-status-group">
+            <!-- Win11 风格电池图标 -->
+            <div
+              v-if="batteryInfo.hasBattery"
+              class="anchor-status-wrap anchor-battery-wrap"
+              :data-tip="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
+            >
+              <svg
+                class="anchor-status-svg anchor-battery"
+                width="20"
+                height="12"
+                viewBox="0 0 20 12"
+              >
+                <!-- 外壳 + 右侧凸起 -->
+                <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" />
+                <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.45)" />
+                <!-- 内部填充条（根据电量比例） -->
+                <rect
+                  v-if="batteryFillWidth > 0"
+                  x="2"
+                  y="2.5"
+                  :width="batteryFillWidth"
+                  height="7"
+                  rx="0.8"
+                  :fill="batteryColor"
+                />
+                <!-- 充电中：叠一层闪电（缩小型） -->
+                <polygon
+                  v-if="batteryInfo.charging"
+                  points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
+                  fill="#fff"
+                  opacity="0.85"
+                />
+              </svg>
+            </div>
+            <!-- WiFi 图标：简洁版（2 根弧 + 天线点，根据信号着色） -->
+            <div
+              class="anchor-status-wrap anchor-wifi-wrap"
+              :data-tip="networkTooltip"
+            >
+              <svg
+                class="anchor-status-svg anchor-wifi"
+                width="16"
+                height="12"
+                viewBox="0 0 16 12"
+              >
+                <template v-if="networkInfo.connected">
+                  <!-- 中弧（≥50% 亮） -->
+                  <path
+                    d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
+                    :stroke="wifiLevel(2) ? WIFI_ON : WIFI_OFF"
+                    stroke-width="1.3" fill="none" stroke-linecap="round"
+                  />
+                  <!-- 近弧（≥5% 亮） -->
+                  <path
+                    d="M 5 8.5 A 3 3 0 0 1 11 8.5"
+                    :stroke="wifiLevel(1) ? WIFI_ON : WIFI_OFF"
+                    stroke-width="1.3" fill="none" stroke-linecap="round"
+                  />
+                  <!-- 天线点 -->
+                  <circle cx="8" cy="10.8" r="1.1" :fill="wifiLevel(1) ? WIFI_ON : WIFI_OFF" />
+                </template>
+                <template v-else>
+                  <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                  <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
+                  <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
+                </template>
+              </svg>
+            </div>
+          </div>
         </div>
 
         <div class="anchor-header-right">
@@ -47,6 +118,13 @@
             </svg>
             <span>提现</span>
           </button>
+          <button class="anchor-text-btn" type="button" @click="openRechargePage">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+            <span>充值中心</span>
+          </button>
           <button class="anchor-text-btn" type="button" @click="openSettlePage('family')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 10.5 12 3l9 7.5" />
@@ -86,6 +164,7 @@
             </svg>
             <span>退出登录</span>
           </button>
+          <!-- 系统状态：电池 + WiFi 已移到左侧 anchor-header-left -->
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize">
               <svg-icon :icon="MinimizeIcon"></svg-icon>
@@ -668,6 +747,8 @@ const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
 const SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/settle`;
 // 提现页（生产域）
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
+// 充值中心：h5-wpp（N 币充值 + 帮Ta充 + 微信/支付宝支付）
+const WPP_URL = `${H5_ORIGIN}/wpp/`;
 
 /** 软件内打开 H5 业务页并下发 SSO token（协议对齐 H5 主项目 ssoBridge） */
 function openExternalWithSso(
@@ -712,6 +793,11 @@ function openSettlePage(kind: 'family' | 'guild') {
 
 function openWithdrawPage() {
   openExternalWithSso(WITHDRAW_URL, '提现');
+}
+
+function openRechargePage() {
+  // 充值中心走 h5-wpp 项目，Electron 已有登录态，直接 SSO 传 token 过去（跳过登录页）
+  openExternalWithSso(WPP_URL, '充值中心');
 }
 
 function onUserAvatarError() {
@@ -766,6 +852,11 @@ onMounted(() => {
   silentTimer = window.setInterval(() => {
     void refreshSilently();
   }, 2 * 1000);
+  // 系统状态（电量 + WiFi）：首次加载立即拉一次，然后 30 秒轮询
+  void refreshSystemStatus();
+  systemStatusTimer = window.setInterval(() => {
+    void refreshSystemStatus();
+  }, 30 * 1000);
 });
 
 // keep-alive 场景下返回列表（组件未销毁、只被重新激活）也要立即刷新
@@ -784,10 +875,77 @@ watch(
   },
 );
 
+// ============== 系统状态：电池电量 + 网络（WiFi / 以太网） ==============
+const batteryInfo = ref({ hasBattery: false, level: 100, charging: false });
+const networkInfo = ref({ connected: false, type: '', ssid: '', signal: 0 });
+
+const refreshSystemStatus = async () => {
+  try {
+    // 启动首次可先读 App.vue 预存缓存（快速显示）
+    const cache = (window as any).__INITIAL_SYSTEM_STATUS__;
+    if (cache && Date.now() - cache.ts < 10_000) {
+      if (cache.battery) batteryInfo.value = cache.battery;
+      if (cache.network && cache.network.signal > 0) networkInfo.value = cache.network;
+    }
+    // 每次都重新 invoke（确保 WiFi 信号是最新的，不被缓存的 signal=0 卡住）
+    if (window.ipcRenderer?.invoke) {
+      const [battery, network] = await Promise.all([
+        window.ipcRenderer.invoke('get-battery-info'),
+        window.ipcRenderer.invoke('get-network-info'),
+      ]);
+      if (battery) batteryInfo.value = battery;
+      if (network) networkInfo.value = network;
+    }
+  } catch (e) {
+    // 忽略单次轮询失败
+  }
+};
+
+// 电池图标（Win11 托盘风格）：外壳内连续填充条，宽度 = 电量比例
+// 内部填充区域：x=2 到 x=18.5（可用宽 16.5），但要留右边空隙给外壳
+// 实际：内部从 x=2 开始，最大宽 = 14（到外壳内壁 16-1=15，再留 1）
+const BATTERY_INNER_MAX_WIDTH = 13; // 外壳内径可用最大宽
+const batteryFillWidth = computed(() => {
+  const level = Math.max(0, Math.min(100, batteryInfo.value.level));
+  return Math.round((level / 100) * BATTERY_INNER_MAX_WIDTH * 10) / 10;
+});
+const batteryColor = computed(() => {
+  if (batteryInfo.value.level <= 20) return '#ef4444'; // 红（低电）
+  return '#22c55e';                                     // 绿
+});
+
+// WiFi 图标（Win11 托盘风格）：3 层同心弧 + 底部天线点
+const WIFI_ON = '#22c55e';                   // 绿（已连接）
+const WIFI_OFF = 'rgba(255,255,255,0.22)';  // 灰（未点亮）
+
+// level: 1=最近小弧, 2=中弧, 3=最远大弧。返回该层是否应该点亮（布尔）
+function wifiLevel(level: number): boolean {
+  const signal = networkInfo.value.signal || 0;
+  if (level === 1) return signal >= 5;    // 只要有信号就亮最近的
+  if (level === 2) return signal >= 50;   // 中间弧 ≥50%
+  return signal >= 80;                    // 最远弧 ≥80%
+}
+
+// hover 提示 tooltip（保留）
+const networkTooltip = computed(() => {
+  if (!networkInfo.value.connected) return '网络未连接';
+  if (networkInfo.value.type === 'wifi') {
+    return `WiFi: ${networkInfo.value.ssid || ''}（信号 ${networkInfo.value.signal}%）`;
+  }
+  return '以太网（有线连接）';
+});
+
+// 系统状态轮询定时器句柄
+let systemStatusTimer: number | null = null;
+
 onBeforeUnmount(() => {
   if (silentTimer !== null) {
     window.clearInterval(silentTimer);
     silentTimer = null;
+  }
+  if (systemStatusTimer !== null) {
+    window.clearInterval(systemStatusTimer);
+    systemStatusTimer = null;
   }
   previewObserver?.disconnect();
   previewHandles.forEach((handle) => handle.destroy());
@@ -1014,6 +1172,44 @@ onBeforeUnmount(() => {
       color: var(--text-color-primary, #ffffff);
       background-color: rgba(255, 255, 255, 0.1);
     }
+  }
+
+  /* 电池/WiFi 状态组：自定义 CSS tooltip（no-drag 下原生 title 经常不显示） */
+  .anchor-status-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 32px;
+    -webkit-app-region: no-drag;
+  }
+
+  .anchor-status-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: default;
+  }
+
+  /* 自定义 tooltip：hover 时显示 data-tip 内容 */
+  .anchor-status-wrap:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #fff;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.85);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .anchor-status-svg {
+    display: inline-block;
+    flex-shrink: 0;
   }
 
   .anchor-start-live-btn {

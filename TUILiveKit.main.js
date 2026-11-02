@@ -9,7 +9,7 @@ const {
   shell,
   net,
 } = require('electron');
-const { exec, spawn } = require('child_process');
+const { exec, spawn, execSync } = require('child_process');
 const path = require('path');
 const zlib = require('zlib');
 const EventEmitter = require('events');
@@ -1482,6 +1482,89 @@ function bindIPCEvent() {
       }
     }
   });
+
+  // ============== 系统状态：电池电量 + WiFi ==============
+  // 通过 ipcRenderer.invoke('get-battery-info') / invoke('get-wifi-info') 轮询获取
+  ipcMain.handle('get-battery-info', () => {
+    const defaultInfo = { hasBattery: false, level: 100, charging: false };
+    if (process.platform !== 'win32') {
+      return defaultInfo;
+    }
+    try {
+      const out = execSync('wmic path Win32_Battery get EstimatedChargeRemaining,BatteryStatus /value', {
+        encoding: 'utf8',
+        timeout: 3000,
+      }).toString();
+      const levelMatch = out.match(/EstimatedChargeRemaining=(\d+)/);
+      const statusMatch = out.match(/BatteryStatus=(\d+)/);
+      if (!levelMatch) {
+        return defaultInfo;
+      }
+      const level = Math.max(0, Math.min(100, parseInt(levelMatch[1], 10)));
+      // BatteryStatus: 2=on AC/charging, 1=discharging, others (3..7) also charging-related
+      const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+      const charging = status === 2 || status === 6 || status === 7 || status === 8 || status === 9;
+      return { hasBattery: true, level, charging };
+    } catch (e) {
+      console.warn(`${logPrefix}get-battery-info failed:`, e.message);
+      return defaultInfo;
+    }
+  });
+
+  ipcMain.handle('get-network-info', () => {
+    const defaultInfo = { connected: false, type: '', ssid: '', signal: 0 };
+    if (process.platform !== 'win32') {
+      return defaultInfo;
+    }
+    try {
+      // PowerShell EncodedCommand 检测 WiFi/以太网（避免 shell 引号嵌套问题）
+      const psScript = [
+        '$ProgressPreference = \'SilentlyContinue\'',
+        '$adapters = Get-NetAdapter -Physical | Where-Object { $_.Status -eq \'Up\' }',
+        'if (-not $adapters) { exit 0 }',
+        '$wifi = $adapters | Where-Object { $_.InterfaceDescription -match \'Wi-Fi|WiFi|Wireless|802.11\' -or $_.InterfaceAlias -match \'WLAN|Wi-Fi\' } | Select-Object -First 1',
+        'if ($wifi) {',
+        '  $signal = 0',
+        '  $ssid = \'\'',
+        '  $wlan = netsh wlan show interfaces 2>$null',
+        '  foreach ($line in $wlan) {',
+        '    if ($line -match \'(?:Signal|信号)\\s*:\\s*(\\d+)%\') { $signal = [int]$Matches[1]; break }',
+        '  }',
+        '  foreach ($line in $wlan) {',
+        '    if ($line -match \'(?:SSID)\\s*:\\s*(.+)\') { $ssid = $Matches[1].Trim(); break }',
+        '  }',
+        '  Write-Output (\'WIFI|\' + $ssid + \'|\' + $signal)',
+        '} else {',
+        '  Write-Output \'ETHERNET\'',
+        '}',
+      ].join('\n');
+      // PowerShell EncodedCommand 检测 WiFi/以太网
+      const psCmd = Buffer.from(psScript, 'utf16le').toString('base64');
+      let psOut = execSync(
+        `powershell -NoProfile -EncodedCommand ${psCmd}`,
+        { encoding: 'utf8', timeout: 10000, windowsHide: true },
+      ).toString();
+      // PowerShell 有时混入 CLIXML 进度对象，只取第一个有效行
+      const m = psOut.match(/(?:WIFI\|[^\n\r]*|ETHERNET)/);
+      psOut = (m ? m[0] : psOut).trim();
+      if (psOut.startsWith('WIFI|')) {
+        const parts = psOut.split('|');
+        return {
+          connected: true,
+          type: 'wifi',
+          ssid: parts[1] || '',
+          signal: parts[2] ? parseInt(parts[2], 10) : 0,
+        };
+      }
+      if (psOut === 'ETHERNET') {
+        return { connected: true, type: 'ethernet', ssid: '', signal: 0 };
+      }
+      console.warn('[TUILiveKit.main] get-network-info unexpected psOut:', psOut);
+    } catch (e) {
+      console.warn('[TUILiveKit.main] get-network-info failed:', e.message);
+    }
+    return defaultInfo;
+  });
 }
 
 function unbindIPCMainEvent() {
@@ -1508,6 +1591,8 @@ function unbindIPCMainEvent() {
   ipcMain.removeAllListeners('confirm-window-ready');
   ipcMain.removeAllListeners('gift-overlay-play');
   ipcMain.removeAllListeners('gift-overlay-hide');
+  ipcMain.removeHandler('get-battery-info');
+  ipcMain.removeHandler('get-network-info');
 }
 
 let initMainWindowTimer = null;

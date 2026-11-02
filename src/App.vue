@@ -13,6 +13,18 @@ useAppRequestQuit();
 onMounted(() => {
   const appVersion = packageConfig.version.replace('-build', '.');
   void setStableWindowTitle(appVersion);
+
+  // 启动时立即预取电池/WiFi，登录进入后 AnchorList 可直接使用（不等待 IPC 轮询）
+  if ((window as any).ipcRenderer?.invoke) {
+    Promise.all([
+      (window as any).ipcRenderer.invoke('get-battery-info'),
+      (window as any).ipcRenderer.invoke('get-network-info'),
+    ]).then(([battery, network]) => {
+      (window as any).__INITIAL_SYSTEM_STATUS__ = { battery, network, ts: Date.now() };
+    }).catch(() => {
+      /* 忽略首次失败，AnchorList 自己也会轮询 */
+    });
+  }
 });
 </script>
 

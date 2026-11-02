@@ -1,7 +1,15 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-login-page">
-    <video class="tui-login-bg-video" :src="loginBgVideo" autoplay loop muted playsinline></video>
+    <video
+      class="tui-login-bg-video"
+      :src="loginBgVideo"
+      autoplay
+      loop
+      muted
+      playsinline
+      preload="auto"
+    ></video>
     <div class="tui-login-header">
       <div class="window-tool tui-window-header">
         <button class="tui-live-icon" @click="onMinimize">
@@ -304,12 +312,18 @@ function onClose() {
 
   .tui-login-bg-video {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 50%;
+    left: 50%;
+    width: 106%;
+    height: 106%;
+    transform: translate(-50%, -50%);
     object-fit: cover;
+    object-position: center center;
     z-index: 0;
+    overflow: hidden;
+    /* 提示浏览器提前创建合成层，加速视频首帧渲染 */
+    will-change: transform;
+    background-color: #0b0d12;
   }
 
   .tui-login-header,
