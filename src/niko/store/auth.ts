@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import { getUserPersonalInfo, type NikoPersonalInfo } from '../api/user';
 
 export interface NikoUserInfo {
   /** 后端 user_id，同时作为 TRTC userId 与 IM userID */
@@ -60,17 +59,10 @@ export const useAuthStore = defineStore('niko-auth', {
   state: () => ({
     token: '' as string,
     userInfo: null as NikoUserInfo | null,
-    /** 用户个人信息（/api/user/personalInfo），登录成功后拉取 */
-    personalInfo: null as NikoPersonalInfo | null,
-    personalInfoLoading: false,
   }),
 
   getters: {
     isLogin: (state): boolean => !!state.token && !!state.userInfo,
-    /** 是否主播：决定是否展示开播入口 */
-    isAnchor: (state): boolean => state.personalInfo?.is_anchor === true,
-    /** 已加入的公会/家族 id（公会|家族页需要） */
-    organizationId: (state): number | undefined => state.personalInfo?.organization_info?.id,
   },
 
   actions: {
@@ -91,50 +83,13 @@ export const useAuthStore = defineStore('niko-auth', {
       }
       this.token = token;
       this.userInfo = userInfo;
-      this.personalInfo = null;
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, userInfo }));
-    },
-
-    /**
-     * 拉取用户个人信息（登录成功后调用；页面启动时若还没有也会补拉一次）。
-     * @param force true = 忽略缓存强制刷新
-     */
-    async loadPersonalInfo(force = false): Promise<NikoPersonalInfo | null> {
-      if (!this.token) {
-        return null;
-      }
-      if (this.personalInfo && !force) {
-        return this.personalInfo;
-      }
-      if (personalInfoRequest) {
-        return personalInfoRequest;
-      }
-      this.personalInfoLoading = true;
-      personalInfoRequest = getUserPersonalInfo()
-        .then((info) => {
-          this.personalInfo = info;
-          return info;
-        })
-        .catch((error) => {
-          console.warn('[niko/auth] load personal info failed:', error);
-          return null;
-        })
-        .finally(() => {
-          this.personalInfoLoading = false;
-          personalInfoRequest = null;
-        });
-      return personalInfoRequest;
     },
 
     logout() {
       this.token = '';
       this.userInfo = null;
-      this.personalInfo = null;
-      personalInfoRequest = null;
       window.localStorage.removeItem(STORAGE_KEY);
     },
   },
 });
-
-/** 个人信息请求去重（多个窗口/多次调用只发一次） */
-let personalInfoRequest: Promise<NikoPersonalInfo | null> | null = null;

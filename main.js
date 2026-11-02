@@ -1,27 +1,6 @@
 const { app, ipcMain, globalShortcut, Menu, BrowserWindow } = require('electron');
 const { TUILiveKitMain } = require('./TUILiveKit.main');
 
-// ====== Electron / Chromium 级性能优化（零风险，不影响功能） ======
-// 这些开关必须在 app.whenReady() 之前设置才生效
-
-// ① 禁用 Chromium 的 background throttling（窗口不在前台时，Chromium 会把 JS 计时器降频 1s/次）
-// 直播/IM/推送在后台也需要实时响应，不能被 throttle
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-
-// ② 关闭 Chromium 的 overlay scrollbars（滚动条动画占 CPU）
-app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar');
-
-// ③ GPU / V8 优化：大页面/视频编码场景下提高 GPU 刷新率
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('force-high-performance-gpu');
-
-// ④ 禁用 Chromium 内置的 site isolation 预编译（减少启动时的 IPC 开销）
-app.commandLine.appendSwitch('disable-site-isolation-trials');
-
-// ⑤ V8 JIT 优化：大内存 + 大量 JS 执行的场景
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192');
-
 // Ensure single instance: prevent multiple app instances from running simultaneously,
 // which would otherwise compete for camera/microphone/screen-capture devices and TRTC userId.
 const gotTheLock = app.requestSingleInstanceLock();

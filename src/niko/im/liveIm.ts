@@ -68,31 +68,6 @@ export interface LiveImSystemEvent {
 }
 
 /**
- * 收到 PK / 连麦邀请（对齐 web-obs-live ChatRoom：message_type=6, message_action=106）
- */
-export interface LivePkInvite {
-  pkId: string;
-  anchorId: string;
-  nickname: string;
-  avatar: string;
-  /** 邀请等待时长（秒） */
-  waitTimeout: number;
-  raw: Record<string, any>;
-}
-
-/** PK 已开始（message_action=108），双方都需要展示 PK 条 */
-export interface LivePkStarted {
-  pkId: string;
-  raw: Record<string, any>;
-}
-
-/** PK 结束 / 对方退出（message_action=110） */
-export interface LivePkEnded {
-  pkId: string;
-  raw: Record<string, any>;
-}
-
-/**
  * 复用 TUIKit 已经登录好的 IM 实例（对齐 web-obs-live 的加群/监听逻辑）。
  *
  * 关键背景：之前这里用 LiteChat.create + chat.login 另起一套 IM 会话，
@@ -118,9 +93,6 @@ const messageListeners = new Set<(message: LiveImMessage) => void>();
 const memberListeners = new Set<(members: LiveImMember[]) => void>();
 const giftListeners = new Set<(gift: LiveImGift) => void>();
 const settleListeners = new Set<(stats: LiveSettleStats) => void>();
-const pkInviteListeners = new Set<(invite: LivePkInvite) => void>();
-const pkStartedListeners = new Set<(event: LivePkStarted) => void>();
-const pkEndedListeners = new Set<(event: LivePkEnded) => void>();
 const systemListeners = new Set<(event: LiveImSystemEvent) => void>();
 
 /** 进房提示去重：同一个人在该时间窗内只提示一次（action 101 与群系统通知会重复推送） */
@@ -198,8 +170,6 @@ function emitMembers(members: LiveImMember[]): void {
 }
 
 function emitMessage(message: LiveImMessage): void {
-  // 调试：打印最终渲染用的消息，确认 extra 里的 roleIcon/levelCardIcon/medalImage 等字段
-  console.log('[NikoIM] emit kind=' + message.kind + ' from=' + message.fromUserId, JSON.stringify(message.extra || {}).slice(0, 400));
   messageListeners.forEach((listener) => listener(message));
 }
 
@@ -250,8 +220,7 @@ function buildExtra(data: any): LiveImMessage['extra'] {
   const medalInfo = data.adorn?.medal_info || {};
   return {
     levelColor: String(levelInfo.level_color || ''),
-    // 优先用 level_gif_icon（动图效果更好），兜底静态 level_icon / level_card_icon
-    levelCardIcon: String(levelInfo.level_gif_icon || levelInfo.level_icon || levelInfo.level_card_icon || ''),
+    levelCardIcon: String(levelInfo.level_icon || levelInfo.level_card_icon || levelInfo.level_gif_icon || ''),
     medalImage: String(medalInfo.medal_image || ''),
     isManager: !!data.is_manager,
     isSuper: !!data.is_super,
@@ -435,48 +404,6 @@ function handleCustomMessage(custom: any, raw: any): void {
     }
     return;
   }
-  // PK / 连麦邀请（对齐 web-obs-live：message_type 6, message_action 106）
-  if (action === 106) {
-    const data = custom?.message_data || {};
-    const pkId = String(data.pk_id ?? data.pkId ?? '');
-    if (!pkId) {
-      console.log('[NikoIM] ignore invalid pk invite:', data);
-      return;
-    }
-    // 仅当消息带合法时间戳时才做过期过滤，避免 time 缺失时把有效邀请丢掉
-    const time = Number(raw?.time || 0);
-    if (time > 0 && messageAge(raw) > 60) {
-      console.log('[NikoIM] ignore expired pk invite:', pkId, messageAge(raw), 's');
-      return;
-    }
-    const invite: LivePkInvite = {
-      pkId,
-      anchorId: String(data.anchor_id ?? data.anchorId ?? ''),
-      nickname: String(data.nickname ?? ''),
-      avatar: resolveImageUrl(String(data.avatar ?? '')),
-      waitTimeout: Number(data.wait_timeout ?? 15) || 15,
-      raw: data,
-    };
-    console.log('[NikoIM] pk invite received:', invite);
-    pkInviteListeners.forEach((listener) => listener(invite));
-    return;
-  }
-  // PK 开始（包含自己接受后服务端下发的开始消息）
-  if (action === 108) {
-    const data = custom?.message_data || {};
-    const pkId = String(data.pk_id ?? data.pkId ?? '');
-    console.log('[NikoIM] pk started:', pkId, data);
-    pkStartedListeners.forEach((listener) => listener({ pkId, raw: data }));
-    return;
-  }
-  // PK 结束 / 对方退出
-  if (action === 110) {
-    const data = custom?.message_data || {};
-    const pkId = String(data.pk_id ?? data.pkId ?? '');
-    console.log('[NikoIM] pk ended:', pkId, data);
-    pkEndedListeners.forEach((listener) => listener({ pkId, raw: data }));
-    return;
-  }
   // 其他系统动作不展示，避免刷屏
 }
 
@@ -510,9 +437,6 @@ function parseCustomMessage(raw: any): any {
 }
 
 function handleRawMessage(raw: any): void {
-  // 调试：打印 IM 原始消息，确认 roleIcon/levelCardIcon/medalImage/isAnchor/isSuper/isManager 等动态字段
-  console.log('[NikoIM] raw msg:', raw);
-
   // 系统助手 C2C 消息（下播 / 封禁通知），to 为用户自身，必须在群过滤之前处理
   if (raw?.type === 'TIMTextElem' && String(raw?.from || '') === 'system_aide') {
     const text = String(raw?.payload?.text || '');
@@ -754,24 +678,6 @@ export function onLiveImGift(listener: (gift: LiveImGift) => void): () => void {
 export function onLiveImSystem(listener: (event: LiveImSystemEvent) => void): () => void {
   systemListeners.add(listener);
   return () => systemListeners.delete(listener);
-}
-
-/** 收到 PK / 连麦邀请（被邀请方），返回取消订阅函数 */
-export function onLiveImPkInvite(listener: (invite: LivePkInvite) => void): () => void {
-  pkInviteListeners.add(listener);
-  return () => pkInviteListeners.delete(listener);
-}
-
-/** PK 开始事件（双方都会收到 action 108） */
-export function onLiveImPkStarted(listener: (event: LivePkStarted) => void): () => void {
-  pkStartedListeners.add(listener);
-  return () => pkStartedListeners.delete(listener);
-}
-
-/** PK 结束 / 对方退出事件 */
-export function onLiveImPkEnded(listener: (event: LivePkEnded) => void): () => void {
-  pkEndedListeners.add(listener);
-  return () => pkEndedListeners.delete(listener);
 }
 
 /** 直播结算订阅（关播后展示结算面板），返回取消订阅函数 */

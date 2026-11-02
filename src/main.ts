@@ -20,57 +20,21 @@ import { beauty as beautyJaJP } from './i18n/ja-JP/beauty';
 import { beauty as beautyKoKR } from './i18n/ko-KR/beauty';
 
 import App from './App.vue'
-import { useAuthStore, readStoredAuthToken } from './niko/store/auth'
+import { useAuthStore } from './niko/store/auth'
 import { USER_INFO_STORAGE_KEY } from './TUILiveKit/utils/userInfoStorage'
 import { showMessage, MessageToastType } from './TUILiveKit/base-component/MessageToast'
 import { NIKO_CONFIG } from './niko/config'
-import { getUserPersonalInfo } from './niko/api/user'
 import './niko/utils/time'
 
-// 托盘菜单业务入口：URL 全部由渲染进程按环境（.env.test / .env.production）拼接，主进程不感知域名
+// 托盘菜单业务入口：「公会|家族 / 提现」暂未开放提示；「家族入驻 / 公会入驻」内部窗口打开入驻页
+// （URL 由渲染进程按环境拼接，主进程不感知环境域名）
 window.ipcRenderer?.on('show-feature-pending', (_event: unknown, label: string) => {
   showMessage({ type: MessageToastType.Info, message: `${label}功能暂未开放，敬请期待` });
 });
-// 家族入驻 / 公会入驻：h5-organization-settled（HashRouter），统一落到入驻首页 #/settle
 window.ipcRenderer?.on('open-settle-page', (_event: unknown, title: string) => {
   window.ipcRenderer?.send('open-internal-url', {
-    url: `${NIKO_CONFIG.h5WebBase}/organization-settled/#/settle`,
+    url: `${NIKO_CONFIG.h5WebBase}/os/#/settle`,
     title: title || '入驻申请',
-    sso: {
-      token: readStoredAuthToken(),
-      origin: NIKO_CONFIG.h5WebBase,
-    },
-  });
-});
-// 提现：按当前环境打开 withdraw 子应用
-window.ipcRenderer?.on('open-withdraw-page', () => {
-  window.ipcRenderer?.send('open-internal-url', {
-    url: `${NIKO_CONFIG.h5WebBase}/withdraw/`,
-    title: '提现',
-    sso: {
-      token: readStoredAuthToken(),
-      origin: NIKO_CONFIG.h5WebBase,
-    },
-  })
-})
-
-// 公会|家族：组织页需要组织 id，用个人信息接口的 organization_info.id 带过去
-window.ipcRenderer?.on('open-organization-page', async () => {
-  let organizationId: number | undefined;
-  try {
-    const info = await getUserPersonalInfo();
-    organizationId = info?.organization_info?.id ?? undefined;
-  } catch (error) {
-    console.warn('[main] load personal info before opening organization page failed:', error);
-  }
-  window.ipcRenderer?.send('open-internal-url', {
-    url: `${NIKO_CONFIG.h5WebBase}/organization/`,
-    title: '公会|家族',
-    sso: {
-      token: readStoredAuthToken(),
-      origin: NIKO_CONFIG.h5WebBase,
-      organizationId,
-    },
   });
 });
 

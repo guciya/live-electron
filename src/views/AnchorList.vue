@@ -5,77 +5,6 @@
         <div class="anchor-header-left">
           <img class="logo-icon" src="../assets/niko-logo.png" alt="Niko直播" />
           <span class="logo-title">Niko直播</span>
-          <!-- 系统状态：电池 + WiFi（仿 Win11 托盘图标 + 自定义 CSS tooltip） -->
-          <div class="anchor-status-group">
-            <!-- Win11 风格电池图标 -->
-            <div
-              v-if="batteryInfo.hasBattery"
-              class="anchor-status-wrap anchor-battery-wrap"
-              :data-tip="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
-            >
-              <svg
-                class="anchor-status-svg anchor-battery"
-                width="20"
-                height="12"
-                viewBox="0 0 20 12"
-              >
-                <!-- 外壳 + 右侧凸起 -->
-                <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" />
-                <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.45)" />
-                <!-- 内部填充条（根据电量比例） -->
-                <rect
-                  v-if="batteryFillWidth > 0"
-                  x="2"
-                  y="2.5"
-                  :width="batteryFillWidth"
-                  height="7"
-                  rx="0.8"
-                  :fill="batteryColor"
-                />
-                <!-- 充电中：叠一层闪电（缩小型） -->
-                <polygon
-                  v-if="batteryInfo.charging"
-                  points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
-                  fill="#fff"
-                  opacity="0.85"
-                />
-              </svg>
-            </div>
-            <!-- WiFi 图标：简洁版（2 根弧 + 天线点，根据信号着色） -->
-            <div
-              class="anchor-status-wrap anchor-wifi-wrap"
-              :data-tip="networkTooltip"
-            >
-              <svg
-                class="anchor-status-svg anchor-wifi"
-                width="16"
-                height="12"
-                viewBox="0 0 16 12"
-              >
-                <template v-if="networkInfo.connected">
-                  <!-- 中弧（≥50% 亮） -->
-                  <path
-                    d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
-                    :stroke="wifiLevel(2) ? WIFI_ON : WIFI_OFF"
-                    stroke-width="1.3" fill="none" stroke-linecap="round"
-                  />
-                  <!-- 近弧（≥5% 亮） -->
-                  <path
-                    d="M 5 8.5 A 3 3 0 0 1 11 8.5"
-                    :stroke="wifiLevel(1) ? WIFI_ON : WIFI_OFF"
-                    stroke-width="1.3" fill="none" stroke-linecap="round"
-                  />
-                  <!-- 天线点 -->
-                  <circle cx="8" cy="10.8" r="1.1" :fill="wifiLevel(1) ? WIFI_ON : WIFI_OFF" />
-                </template>
-                <template v-else>
-                  <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-                  <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-                  <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
-                </template>
-              </svg>
-            </div>
-          </div>
         </div>
 
         <div class="anchor-header-right">
@@ -118,14 +47,7 @@
             </svg>
             <span>提现</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="openRechargePage">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-            <span>充值中心</span>
-          </button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('family')">
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('家族入驻')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 10.5 12 3l9 7.5" />
               <path d="M5 9.5V21h14V9.5" />
@@ -133,22 +55,13 @@
             </svg>
             <span>家族入驻</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="openSettlePage('guild')">
+          <button class="anchor-text-btn" type="button" @click="openSettlePage('公会入驻')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="4" y="3" width="16" height="18" rx="1" />
               <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" />
               <path d="M10 21v-3h4v3" />
             </svg>
             <span>公会入驻</span>
-          </button>
-          <button class="anchor-text-btn" type="button" @click="anchorAuthVisible = true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" />
-              <rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" />
-              <path d="M14 14h3v3M17 21h4M14 17h3" />
-            </svg>
-            <span>主播认证</span>
           </button>
           <button class="anchor-start-live-btn" type="button" @click="handleOpenFollowList">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -173,7 +86,6 @@
             </svg>
             <span>退出登录</span>
           </button>
-          <!-- 系统状态：电池 + WiFi 已移到左侧 anchor-header-left -->
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize">
               <svg-icon :icon="MinimizeIcon"></svg-icon>
@@ -302,8 +214,8 @@
         </div>
       </main>
 
-      <!-- 悬浮圆形开播按钮：页面底部居中（仅主播展示） -->
-      <button v-if="isAnchor" class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
+      <!-- 悬浮圆形开播按钮：页面底部居中 -->
+      <button class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
         <IconLiveStart class="anchor-fab-icon" />
         <span>开播</span>
       </button>
@@ -394,38 +306,6 @@
 
       <!-- 消息中心：基于 TUIChatEngine C2C 单聊 -->
       <MessageCenter :visible="messageCenterVisible" @close="messageCenterVisible = false" />
-
-      <!-- 充值中心：二维码弹窗（替代内嵌 RechargeDialog，跟主播认证同款 UI） -->
-      <div v-if="rechargeVisible" class="anchor-auth-mask" @click.self="rechargeVisible = false">
-        <div class="anchor-auth-panel">
-          <button class="anchor-auth-close" type="button" aria-label="关闭" @click="rechargeVisible = false">×</button>
-          <div class="anchor-auth-title">充值中心</div>
-          <div class="anchor-auth-qr-wrap">
-            <img :src="rechargeQrUrl" class="anchor-auth-qr" alt="充值中心二维码" />
-          </div>
-          <div class="anchor-auth-tip">
-            使用手机微信扫描二维码，在浏览器中打开充值中心完成充值
-          </div>
-        </div>
-      </div>
-
-      <!-- 主播认证二维码弹窗 -->
-      <div v-if="anchorAuthVisible" class="anchor-auth-mask" @click.self="anchorAuthVisible = false">
-        <div class="anchor-auth-panel">
-          <button class="anchor-auth-close" type="button" aria-label="关闭" @click="anchorAuthVisible = false">×</button>
-          <div class="anchor-auth-title">主播认证</div>
-          <div class="anchor-auth-qr-wrap">
-            <img
-              :src="anchorAuthQrUrl"
-              class="anchor-auth-qr"
-              alt="主播认证二维码"
-            />
-          </div>
-          <div class="anchor-auth-tip">
-            使用手机微信扫描二维码，在浏览器中打开认证中心完成主播认证
-          </div>
-        </div>
-      </div>
     </div>
   </UIKitProvider>
 </template>
@@ -444,7 +324,7 @@ import { isMacPlatform } from '../TUILiveKit/utils/platform';
 import { showMessage, MessageToastType } from '../TUILiveKit/base-component/MessageToast';
 import { NIKO_CONFIG, resolveImageUrl } from '../niko/config';
 import { USER_INFO_STORAGE_KEY } from '../TUILiveKit/utils/userInfoStorage';
-import { fetchAttentionLiveList, fetchRecommendLiveList, getAnchorCenter } from '../niko/api/live';
+import { fetchAttentionLiveList, fetchRecommendLiveList } from '../niko/api/live';
 import { type NikoLiveListItem } from '../niko/api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../niko/utils/flvPlayer';
 import { useAuthStore } from '../niko/store/auth';
@@ -468,8 +348,6 @@ const userAvatar = computed(() => {
   return resolveImageUrl(userInfo.value.avatar);
 });
 const userInitial = computed(() => (userInfo.value?.nickname || userInfo.value?.userShowId || 'N').slice(0, 1).toUpperCase());
-/** 是否主播（/api/user/personalInfo 的 is_anchor）：非主播隐藏开播入口 */
-const isAnchor = computed(() => authStore.isAnchor);
 
 /**
  * 加载主播列表（数据源：/live/recommendLiveList，业务域 + 登录 Token）。
@@ -482,7 +360,7 @@ async function loadList(force = false, silent = false) {
     apiError.value = '';
   }
   try {
-    const result = await fetchRecommendLiveList(1, 200, { force });
+    const result = await fetchRecommendLiveList(1, 20, { force });
     liveList.value = result.list;
     total.value = result.total;
     // 刷新后下播的主播不再保留预览播放器
@@ -621,7 +499,7 @@ async function loadFollowList() {
   followLoading.value = true;
   followError.value = '';
   try {
-    const result = await fetchAttentionLiveList(1, 500);
+    const result = await fetchAttentionLiveList(0, 0);
     followList.value = result.list;
   } catch (error) {
     followList.value = [];
@@ -723,72 +601,6 @@ function enterFollowLive(item: NikoLiveListItem) {
 // AnchorList 主窗口默认不走 IM 登录，这里先用本地登录凭据补登一次再打开
 const messageCenterVisible = ref(false);
 const messageCenterOpening = ref(false);
-const rechargeVisible = ref(false);
-
-// ===== 充值中心二维码（跟主播认证同款） =====
-const rechargeCopied = ref(false);
-const rechargeQrUrl = computed(() => {
-  const url = NIKO_CONFIG.rechargeCenterUrl;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(url)}`;
-});
-function copyRechargeUrl() {
-  const url = NIKO_CONFIG.rechargeCenterUrl;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(() => {
-      rechargeCopied.value = true;
-      setTimeout(() => { rechargeCopied.value = false; }, 2000);
-    }).catch(() => fallbackCopyRecharge(url));
-  } else {
-    fallbackCopyRecharge(url);
-  }
-}
-function fallbackCopyRecharge(text: string) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  document.body.appendChild(ta);
-  ta.select();
-  try { document.execCommand('copy'); rechargeCopied.value = true; } catch {}
-  document.body.removeChild(ta);
-  setTimeout(() => { rechargeCopied.value = false; }, 2000);
-}
-function openRechargeExternal() {
-  openExternalWithSso(NIKO_CONFIG.rechargeCenterUrl, '充值中心');
-  rechargeVisible.value = false;
-}
-
-// ===== 主播认证二维码 =====
-const anchorAuthVisible = ref(false);
-const anchorAuthCopied = ref(false);
-/** 二维码图片 URL：用在线 qrserver 生成（需联网，纯 CDN 无需 npm 包） */
-const anchorAuthQrUrl = computed(() => {
-  const url = NIKO_CONFIG.anchorAuthUrl;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(url)}`;
-});
-function copyAnchorAuthUrl() {
-  const url = NIKO_CONFIG.anchorAuthUrl;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(() => {
-      anchorAuthCopied.value = true;
-      setTimeout(() => { anchorAuthCopied.value = false; }, 2000);
-    }).catch(() => fallbackCopy(url));
-  } else {
-    fallbackCopy(url);
-  }
-}
-function fallbackCopy(text: string) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  document.body.appendChild(ta);
-  ta.select();
-  try { document.execCommand('copy'); anchorAuthCopied.value = true; } catch {}
-  document.body.removeChild(ta);
-  setTimeout(() => { anchorAuthCopied.value = false; }, 2000);
-}
-function openAnchorAuthExternal() {
-  openExternalWithSso(NIKO_CONFIG.anchorAuthUrl, '主播认证');
-  anchorAuthVisible.value = false;
-}
-
 async function handleOpenMessage() {
   if (messageCenterOpening.value) return;
   messageCenterOpening.value = true;
@@ -839,52 +651,33 @@ async function confirmLogout() {
   router.replace({ name: 'login' });
 }
 
-// 站外业务页 SSO 配置：三个内嵌 H5 项目读取登录态的方式不同，主进程会一次性写入所有 key：
-//   - h5-tixian（/withdraw）：sessionStorage['token']
-//   - h5-organization（/organization）：localStorage['token'] + sessionStorage['organizationInfoObj']
-//   - h5-organization-settled：localStorage['guild_token']（兜底 sessionStorage['niko-auth'].token）
-//   - 公共：sessionStorage / localStorage['niko-auth']（JSON: { token }）
-//   另外兼容 postMessage 握手（data.type === 'SSO_TOKEN'）
+// 站外业务页 SSO 配置：与 H5 主项目 ssoBridge.ts 协议对齐，让子应用（os / withdraw / organization）
+// 用同一套接收逻辑拿到 token。其他项目接入时只需要：
+//   1. 监听 window message，data.type === 'SSO_TOKEN' 时取 data.token
+//   2. 或从 sessionStorage / localStorage 读 'niko-auth'（key 与 H5 主项目一致）
 const H5_ORIGIN = NIKO_CONFIG.h5WebBase;
 
 // 公会|家族：组织页（带尾斜杠，子应用相对路径资源才不会 404）
 const ORGANIZATION_URL = `${H5_ORIGIN}/organization/`;
-// 家族入驻 / 公会入驻：h5-organization-settled（vite base = /organization-settled，HashRouter）
-// 两个入口统一落到入驻首页 #/settle，由页面内自行选择家族/公会
-const SETTLE_URL = `${H5_ORIGIN}/organization-settled/#/settle`;
+// 家族入驻 / 公会入驻：同一个入驻页（生产域；测试域 test-h5.nikolive.cn 未部署该子应用）
+const SETTLE_URL = `${H5_ORIGIN}/os/#/settle`;
 // 提现页（生产域）
 const WITHDRAW_URL = `${H5_ORIGIN}/withdraw/`;
 
 /** 软件内打开 H5 业务页并下发 SSO token（协议对齐 H5 主项目 ssoBridge） */
-function openExternalWithSso(
-  url: string,
-  title: string,
-  extra: { organizationId?: number } = {},
-) {
+function openExternalWithSso(url: string, title: string) {
   window.ipcRenderer?.send('open-internal-url', {
     url,
     title,
     sso: {
       token: authStore.token || '',
       origin: H5_ORIGIN,
-      // 公会页需要组织 id（sessionStorage['organizationInfoObj']），由主播中心接口带出
-      organizationId: extra.organizationId,
     },
   });
 }
 
-async function openOrganizationPage() {
-  // 优先用个人信息接口下发的 organization_info.id（organization_mode 决定公会/家族）
-  let organizationId: number | undefined = authStore.organizationId;
-  if (!organizationId) {
-    try {
-      const anchorData = await getAnchorCenter();
-      organizationId = anchorData?.organization_info?.id ?? anchorData?.organization_id ?? undefined;
-    } catch (error) {
-      console.warn('[AnchorList] getAnchorCenter failed before opening organization page:', error);
-    }
-  }
-  openExternalWithSso(ORGANIZATION_URL, '公会|家族', { organizationId });
+function openOrganizationPage() {
+  openExternalWithSso(ORGANIZATION_URL, '公会|家族');
 }
 
 /** 跳转到主播中心页面 */
@@ -892,17 +685,12 @@ function goAnchorCenter() {
   router.push({ name: 'anchor-center' });
 }
 
-function openSettlePage(kind: 'family' | 'guild') {
-  openExternalWithSso(SETTLE_URL, kind === 'guild' ? '公会入驻' : '家族入驻');
+function openSettlePage(title: string) {
+  openExternalWithSso(SETTLE_URL, title);
 }
 
 function openWithdrawPage() {
   openExternalWithSso(WITHDRAW_URL, '提现');
-}
-
-function openRechargePage() {
-  // 充值中心：内嵌弹窗，不跳外链
-  rechargeVisible.value = true;
 }
 
 function onUserAvatarError() {
@@ -947,8 +735,6 @@ async function refreshSilently() {
 }
 
 onMounted(() => {
-  // 恢复登录态的会话没有登录回调，这里补拉一次个人信息（is_anchor / organization_info）
-  void authStore.loadPersonalInfo();
   void loadList();
   // 挂载后立刻强制静默拉一次：无论是首次进入还是从直播间/其他页面返回，
   // 列表数据都马上是最新的，不用等第一次 2 秒轮询
@@ -957,11 +743,6 @@ onMounted(() => {
   silentTimer = window.setInterval(() => {
     void refreshSilently();
   }, 2 * 1000);
-  // 系统状态（电量 + WiFi）：首次加载立即拉一次，然后 30 秒轮询
-  void refreshSystemStatus();
-  systemStatusTimer = window.setInterval(() => {
-    void refreshSystemStatus();
-  }, 30 * 1000);
 });
 
 // keep-alive 场景下返回列表（组件未销毁、只被重新激活）也要立即刷新
@@ -980,77 +761,10 @@ watch(
   },
 );
 
-// ============== 系统状态：电池电量 + 网络（WiFi / 以太网） ==============
-const batteryInfo = ref({ hasBattery: false, level: 100, charging: false });
-const networkInfo = ref({ connected: false, type: '', ssid: '', signal: 0 });
-
-const refreshSystemStatus = async () => {
-  try {
-    // 启动首次可先读 App.vue 预存缓存（快速显示）
-    const cache = (window as any).__INITIAL_SYSTEM_STATUS__;
-    if (cache && Date.now() - cache.ts < 10_000) {
-      if (cache.battery) batteryInfo.value = cache.battery;
-      if (cache.network && cache.network.signal > 0) networkInfo.value = cache.network;
-    }
-    // 每次都重新 invoke（确保 WiFi 信号是最新的，不被缓存的 signal=0 卡住）
-    if (window.ipcRenderer?.invoke) {
-      const [battery, network] = await Promise.all([
-        window.ipcRenderer.invoke('get-battery-info'),
-        window.ipcRenderer.invoke('get-network-info'),
-      ]);
-      if (battery) batteryInfo.value = battery;
-      if (network) networkInfo.value = network;
-    }
-  } catch (e) {
-    // 忽略单次轮询失败
-  }
-};
-
-// 电池图标（Win11 托盘风格）：外壳内连续填充条，宽度 = 电量比例
-// 内部填充区域：x=2 到 x=18.5（可用宽 16.5），但要留右边空隙给外壳
-// 实际：内部从 x=2 开始，最大宽 = 14（到外壳内壁 16-1=15，再留 1）
-const BATTERY_INNER_MAX_WIDTH = 13; // 外壳内径可用最大宽
-const batteryFillWidth = computed(() => {
-  const level = Math.max(0, Math.min(100, batteryInfo.value.level));
-  return Math.round((level / 100) * BATTERY_INNER_MAX_WIDTH * 10) / 10;
-});
-const batteryColor = computed(() => {
-  if (batteryInfo.value.level <= 20) return '#ef4444'; // 红（低电）
-  return '#22c55e';                                     // 绿
-});
-
-// WiFi 图标（Win11 托盘风格）：3 层同心弧 + 底部天线点
-const WIFI_ON = '#22c55e';                   // 绿（已连接）
-const WIFI_OFF = 'rgba(255,255,255,0.22)';  // 灰（未点亮）
-
-// level: 1=最近小弧, 2=中弧, 3=最远大弧。返回该层是否应该点亮（布尔）
-function wifiLevel(level: number): boolean {
-  const signal = networkInfo.value.signal || 0;
-  if (level === 1) return signal >= 5;    // 只要有信号就亮最近的
-  if (level === 2) return signal >= 50;   // 中间弧 ≥50%
-  return signal >= 80;                    // 最远弧 ≥80%
-}
-
-// hover 提示 tooltip（保留）
-const networkTooltip = computed(() => {
-  if (!networkInfo.value.connected) return '网络未连接';
-  if (networkInfo.value.type === 'wifi') {
-    return `WiFi: ${networkInfo.value.ssid || ''}（信号 ${networkInfo.value.signal}%）`;
-  }
-  return '以太网（有线连接）';
-});
-
-// 系统状态轮询定时器句柄
-let systemStatusTimer: number | null = null;
-
 onBeforeUnmount(() => {
   if (silentTimer !== null) {
     window.clearInterval(silentTimer);
     silentTimer = null;
-  }
-  if (systemStatusTimer !== null) {
-    window.clearInterval(systemStatusTimer);
-    systemStatusTimer = null;
   }
   previewObserver?.disconnect();
   previewHandles.forEach((handle) => handle.destroy());
@@ -1277,44 +991,6 @@ onBeforeUnmount(() => {
       color: var(--text-color-primary, #ffffff);
       background-color: rgba(255, 255, 255, 0.1);
     }
-  }
-
-  /* 电池/WiFi 状态组：自定义 CSS tooltip（no-drag 下原生 title 经常不显示） */
-  .anchor-status-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: 32px;
-    -webkit-app-region: no-drag;
-  }
-
-  .anchor-status-wrap {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    cursor: default;
-  }
-
-  /* 自定义 tooltip：hover 时显示 data-tip 内容 */
-  .anchor-status-wrap:hover::after {
-    content: attr(data-tip);
-    position: absolute;
-    left: 50%;
-    top: calc(100% + 8px);
-    transform: translateX(-50%);
-    padding: 4px 10px;
-    font-size: 12px;
-    color: #fff;
-    white-space: nowrap;
-    background: rgba(0, 0, 0, 0.85);
-    border-radius: 4px;
-    pointer-events: none;
-    z-index: 9999;
-  }
-
-  .anchor-status-svg {
-    display: inline-block;
-    flex-shrink: 0;
   }
 
   .anchor-start-live-btn {
@@ -1944,9 +1620,8 @@ onBeforeUnmount(() => {
 .follow-panel {
   display: flex;
   flex-direction: column;
-  width: min(1440px, calc(50vw - 3rem));
-  height: 80vh;
-  max-height: calc(100vh - 3rem);
+  width: min(1100px, calc(100vw - 4rem));
+  max-height: calc(100vh - 6rem);
   background: var(--bg-color-dialog, #22252b);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -2043,14 +1718,12 @@ onBeforeUnmount(() => {
 }
 
 .follow-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.875rem;
 }
 
 .follow-card {
-  flex: 0 0 190px;
   overflow: hidden;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);
@@ -2148,106 +1821,4 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* ===== 主播认证二维码弹窗 ===== */
-.anchor-auth-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 130;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
-}
-
-.anchor-auth-panel {
-  position: relative;
-  width: 440px;
-  padding: 24px 24px 20px;
-  background: linear-gradient(180deg, #1e1e26 0%, #16161c 100%);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  color: #fff;
-  text-align: center;
-}
-
-.anchor-auth-close {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  font-size: 18px;
-  line-height: 24px;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.06);
-  border: none;
-  border-radius: 50%;
-  transition: background-color .15s, color .15s;
-}
-.anchor-auth-close:hover { color: #fff; background: rgba(255, 255, 255, 0.15); }
-
-.anchor-auth-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 16px;
-}
-
-.anchor-auth-qr-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 14px;
-  background: #fff;
-  border-radius: 12px;
-  margin: 0 auto 14px;
-  width: fit-content;
-}
-
-.anchor-auth-qr {
-  width: 200px;
-  height: 200px;
-  display: block;
-  image-rendering: pixelated;
-}
-
-.anchor-auth-tip {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-  line-height: 1.6;
-  margin-bottom: 16px;
-}
-
-.anchor-auth-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.anchor-auth-btn-copy,
-.anchor-auth-btn-open {
-  flex: 1;
-  padding: 10px 0;
-  font-size: 13px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all .15s;
-  border: none;
-}
-
-.anchor-auth-btn-copy {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-.anchor-auth-btn-copy:hover { background: rgba(255, 255, 255, 0.14); }
-
-.anchor-auth-btn-open {
-  background: linear-gradient(135deg, #4a90d9, #3a78b8);
-  color: #fff;
-  font-weight: 600;
-}
-.anchor-auth-btn-open:hover { background: linear-gradient(135deg, #5aa0e9, #4a88c8); }
 </style>

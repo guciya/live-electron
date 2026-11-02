@@ -305,19 +305,19 @@ const RENDERABLE_KEYS = new Set<string>([
 
 const tabList = computed<Array<{ key: TabKey; label: string }>>(() => {
   const list: Array<{ key: TabKey; label: string }> = [{ key: 'basic', label: t('Basic settings') }];
-  // const ec = effectConstantRef.value;
-  // if (!ec) return list;
-  // // Follow the natural key order returned by `getEffectConstant()`. The plugin
-  // // builds that object strictly in `beauty_level_config.json` order (e.g. for
-  // // S1-04: beautyTemplate -> beauty -> imageQuality -> lut -> advancedBeauty ->
-  // // advancedMakeup -> lightMakeup -> makeup -> motion -> segment), so the tab
-  // // order automatically matches the configured order and adapts to beautyLevel
-  // // changes without code edits. Only keys we can render are surfaced.
-  // for (const key of Object.keys(ec)) {
-  //   if (RENDERABLE_KEYS.has(key) && ec[key]) {
-  //     list.push({ key: key as TabKey, label: resolveLabel(ec[key]) });
-  //   }
-  // }
+  const ec = effectConstantRef.value;
+  if (!ec) return list;
+  // Follow the natural key order returned by `getEffectConstant()`. The plugin
+  // builds that object strictly in `beauty_level_config.json` order (e.g. for
+  // S1-04: beautyTemplate -> beauty -> imageQuality -> lut -> advancedBeauty ->
+  // advancedMakeup -> lightMakeup -> makeup -> motion -> segment), so the tab
+  // order automatically matches the configured order and adapts to beautyLevel
+  // changes without code edits. Only keys we can render are surfaced.
+  for (const key of Object.keys(ec)) {
+    if (RENDERABLE_KEYS.has(key) && ec[key]) {
+      list.push({ key: key as TabKey, label: resolveLabel(ec[key]) });
+    }
+  }
   return list;
 });
 

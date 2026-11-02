@@ -438,12 +438,13 @@ onBeforeUnmount(() => {
 
 .niko-chat-line {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px 8px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.32);
+  word-break: break-all;
 }
 
 /* 身份角标 / 等级牌 / 勋章：与 H5 弹幕一致的图标尺寸 */
@@ -459,31 +460,13 @@ onBeforeUnmount(() => {
   height: 20px;
 }
 
-/* 用户名区：图标们不收缩 */
-.niko-chat-user {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .niko-chat-name {
   color: #ffd479;
   font-weight: 600;
 }
 
-/* 礼物标签：固定 */
-.niko-chat-tag,
-.niko-chat-tag--gift {
-  flex: none;
-}
-
-/* 消息文本：允许换行 */
 .niko-chat-text {
   color: var(--uikit-color-text-primary, #fff);
-  word-break: break-all;
-  line-height: 1.4;
 }
 
 /* 进房提示：灰蓝色小字，避免和弹幕抢视觉 */

@@ -727,7 +727,7 @@ const demoResource = {
   and: '和',
   'Terms of Use': '用户协议',
   'Log In': '登录',
-  'Logging In': '加载中...',
+  'Logging In': '登录中',
   'Please accept the privacy policy!': '请同意用户隐私协议！',
   'Please enter your SDK secret key!': '请输入 SDK 密钥',
   'Please enter your user ID!': '请输入用户 ID!',

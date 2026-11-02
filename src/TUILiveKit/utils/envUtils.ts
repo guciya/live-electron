@@ -28,10 +28,13 @@ export async function getWindowType(): Promise<string> {
 
 export async function getAppPath() {
   if (!(window as any).APP_PATH) {
+    console.log('[util]getAppPath from main process ...');
     const appPath = await window.ipcRenderer.invoke('app-path');
     if (appPath) {
       (window as any).APP_PATH = appPath;
+      logger.log('[util]getAppPath from main process success');
     } else {
+      logger.error('[util]getAppPath from main process success');
       const errorMessage = 'query APP_PATH failed';
       logger.error('[util]getAppPath:', errorMessage);
       throw new Error(errorMessage);
@@ -45,5 +48,6 @@ export async function getWindowID(): Promise<Uint8Array|number> {
     const windowID = await window.ipcRenderer.invoke('window-id');
     (window as any).nativeWindowHandle = windowID;
   }
+  console.debug('[envUtils] getWindowID:', window.nativeWindowHandle);
   return window.nativeWindowHandle;
 }

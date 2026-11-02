@@ -119,19 +119,6 @@ window.ipcRenderer.on('window-type', (event: any, type: string) => {
 });
 
 router.beforeEach((to) => {
-  // Loading 路由：直接在路由守卫里判断登录态，跳过 Loading 组件渲染 + onMounted 跳转的额外耗时
-  if (to.name === 'loading') {
-    try {
-      const storedUserInfo = window.localStorage.getItem(USER_INFO_STORAGE_KEY);
-      if (!storedUserInfo) {
-        return { name: 'login' };
-      }
-    } catch (e) {
-      console.warn('[router] Failed to read localStorage:', e);
-      return { name: 'login' };
-    }
-  }
-
   if (isMacPlatform() && to.name === 'tui-live-kit-main') {
     return { name: 'tui-livekit-mac' };
   }

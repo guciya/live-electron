@@ -12,58 +12,6 @@
           <i class="statistics-space" v-if="index < statisticsInfoList.length - 1"></i>
         </div>
       </div>
-      <!-- 系统状态：电池 + WiFi 纯 SVG 图标（去文字） -->
-      <!-- 用 span 包裹 SVG + CSS tooltip（::after position:fixed z-index:99999）替代原生 title -->
-      <!-- 原生 SVG <title> tooltip 层级太低，被直播内容弹窗盖住 -->
-      <div v-if="!hideSystemStatus" class="live-header-status">
-        <span
-          v-if="batteryInfo.hasBattery"
-          class="live-status-tooltip-wrap"
-          :data-tooltip="`电量 ${batteryInfo.level}%${batteryInfo.charging ? '（充电中）' : ''}`"
-        >
-          <svg
-            class="live-status-svg"
-            width="20" height="12" viewBox="0 0 20 12"
-          >
-            <rect x="0.5" y="1" width="16" height="10" rx="2" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1" />
-            <rect x="16.5" y="3.5" width="2" height="5" rx="0.6" fill="rgba(255,255,255,0.4)" />
-            <rect
-              v-if="liveBatteryFill > 0"
-              x="2" y="2.5"
-              :width="liveBatteryFill"
-              height="7" rx="0.8"
-              :fill="liveBatteryColor"
-            />
-            <polygon
-              v-if="batteryInfo.charging"
-              points="9,3.5 7,6.8 8.5,6.8 7.8,9.5 12.5,5.8 10.8,5.8 11.5,3.5"
-              fill="#fff" opacity="0.85"
-            />
-          </svg>
-        </span>
-        <span
-          class="live-status-tooltip-wrap"
-          :data-tooltip="liveNetworkTooltip"
-        >
-          <svg
-            class="live-status-svg"
-            width="16" height="12" viewBox="0 0 16 12"
-          >
-            <template v-if="networkInfo.connected">
-              <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5"
-                :stroke="liveWifiOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
-              <path d="M 5 8.5 A 3 3 0 0 1 11 8.5"
-                :stroke="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" stroke-width="1.3" fill="none" stroke-linecap="round" />
-              <circle cx="8" cy="10.8" r="1.1" :fill="liveWifiNearOn ? '#22c55e' : 'rgba(255,255,255,0.2)'" />
-            </template>
-            <template v-else>
-              <path d="M 2.5 5.5 A 5.5 5.5 0 0 1 13.5 5.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-              <path d="M 5 8.5 A 3 3 0 0 1 11 8.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3" fill="none" stroke-linecap="round" />
-              <circle cx="8" cy="10.8" r="1.1" fill="#ef4444" />
-            </template>
-          </svg>
-        </span>
-      </div>
     </div>
     <div class="right">
       <button class="back-list-btn" type="button" @click="emit('backToList')">
@@ -71,30 +19,6 @@
           <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span>返回列表</span>
-      </button>
-      <!-- 关注列表 / 消息：仅开播页启用（放在「返回列表」右侧） -->
-      <button
-        v-if="showEntrances"
-        class="back-list-btn header-entry-btn"
-        type="button"
-        @click="emit('openFollowList')"
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 20s-7-4.35-7-9a4 4 0 017-2.65A4 4 0 0119 11c0 4.65-7 9-7 9z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>关注列表</span>
-      </button>
-      <button
-        v-if="showEntrances"
-        class="back-list-btn header-entry-btn"
-        type="button"
-        @click="emit('openMessage')"
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M4 5.5h16v11H8.5L4 20V5.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>消息</span>
-        <span v-if="messageUnread > 0" class="header-entry-badge">{{ messageUnread > 99 ? '99+' : messageUnread }}</span>
       </button>
       <div
         class="language-switch"
@@ -148,9 +72,6 @@
           </button>
         </div>
         <div v-if="showUserControl" class="user-control-container">
-          <div class="user-control-item-foot" :title="'充值中心'" @click="openRecharge">
-            <span class="user-control-label">充值中心</span>
-          </div>
           <div class="user-control-item-foot" :title="t('User Profile')" @click="openProfile">
             <span class="user-control-label">{{ t('User Profile') }}</span>
           </div>
@@ -181,9 +102,6 @@
     @save="onSaveProfileDialog"
     @close="onCancelProfileDialog"
   />
-
-  <!-- Recharge Center Dialog -->
-  <RechargeDialog v-model:visible="showRechargeDialog" />
 </template>
 
 <script lang="ts" setup>
@@ -191,8 +109,6 @@ import { onMounted, onBeforeUnmount, ref, computed, type Ref } from 'vue';
 import { useUIKit, IconArrowStrokeSelectDown } from '@tencentcloud/uikit-base-component-vue3';
 import { showMessage, MessageToastType } from '../../base-component/MessageToast';
 import TUIRoomEngine from '@tencentcloud/tuiroom-engine-electron';
-import { TUILogin } from '@tencentcloud/tui-core-lite';
-import { TUIChatEngine } from '@tencentcloud/chat-uikit-engine-lite';
 import { useLoginState, Avatar } from 'tuikit-atomicx-vue3-electron';
 import type { TRTCStatistics } from 'trtc-electron-sdk';
 import SvgIcon from '../../common/base/SvgIcon.vue';
@@ -207,7 +123,6 @@ import vClickOutside from '../../utils/vClickOutside';
 import { isWindowPlatform } from '../../utils/platform';
 import { mapToRoomEngineLanguage } from '../../utils/common';
 import UserProfileDialog from './UserProfileDialog.vue';
-import RechargeDialog from './RechargeDialog.vue';
 import { ChildPanelType, ipcBridge, IPCMessageType, toPlainIpcPayload } from '../../ipc';
 import logger from '../../utils/logger';
 
@@ -218,23 +133,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  // 开播页专用：在「返回列表」右侧展示关注列表 / 消息入口
-  showEntrances: {
-    type: Boolean,
-    default: false,
-  },
-  // 开播页隐藏电量/WiFi 图标（主播列表页保留）
-  hideSystemStatus: {
-    type: Boolean,
-    default: false,
-  },
 });
 
 const emit = defineEmits<{
   logout: [];
   backToList: [];
-  openFollowList: [];
-  openMessage: [];
 }>();
 
 const { t, language, setLanguage } = useUIKit();
@@ -244,7 +147,6 @@ const { loginUserInfo, setSelfInfo } = useLoginState();
 const showUserControl = ref(false);
 const showLanguageMenu = ref(false);
 const showProfileDialog = ref(false);
-const showRechargeDialog = ref(false);
 const isWindowsPlatform = isWindowPlatform();
 
 // Construct userInfo for UserProfileDialog
@@ -275,75 +177,20 @@ const frameRate = computed(() => {
   return statistics.value.localStatisticsArray?.[0]?.frameRate || 0;
 });
 
-// ============== 系统状态：电池电量 + 网络（WiFi / 以太网） ==============
-const batteryInfo = ref({ hasBattery: false, level: 100, charging: false });
-const networkInfo = ref({ connected: false, type: '', ssid: '', signal: 0 });
-
-const refreshSystemStatus = async () => {
-  try {
-    if (window.ipcRenderer?.invoke) {
-      const [battery, network] = await Promise.all([
-        window.ipcRenderer.invoke('get-battery-info'),
-        window.ipcRenderer.invoke('get-network-info'),
-      ]);
-      if (battery) batteryInfo.value = battery;
-      if (network) networkInfo.value = network;
-    }
-  } catch (e) {
-    // 忽略单次轮询失败
+const statisticsInfoList = computed(() => [
+  {
+    text: t('CPU'),
+    value: statistics.value.appCpu + '%',
+  },
+  {
+    text: t('RAM'),
+    value: statistics.value.appMemoryUsageInMB + 'MB',
+  },
+  {
+    text: t('Frame Rate'),
+    value: String(frameRate.value || 0),
   }
-};
-
-const batteryText = computed(() => {
-  if (!batteryInfo.value.hasBattery) return '';
-  const icon = batteryInfo.value.charging ? '⚡' : '';
-  return `${icon}${batteryInfo.value.level}%`;
-});
-
-const networkText = computed(() => {
-  if (!networkInfo.value.connected) return '网络未连接';
-  if (networkInfo.value.type === 'wifi') {
-    const name = networkInfo.value.ssid || 'WiFi';
-    return `${name} ${networkInfo.value.signal}%`;
-  }
-  return '有线连接';
-});
-
-const statisticsInfoList = computed(() => {
-  const list = [
-    {
-      text: t('CPU'),
-      value: statistics.value.appCpu + '%',
-    },
-    {
-      text: t('RAM'),
-      value: statistics.value.appMemoryUsageInMB + 'MB',
-    },
-    {
-      text: t('Frame Rate'),
-      value: String(frameRate.value || 0),
-    },
-  ];
-  // 电量/网络不再以文字显示，改为右侧纯 SVG 图标
-  return list;
-});
-
-// ===== SVG 图标用计算属性 =====
-const BATTERY_INNER_MAX = 13;
-const liveBatteryFill = computed(() => {
-  const lv = Math.max(0, Math.min(100, batteryInfo.value.level));
-  return Math.round((lv / 100) * BATTERY_INNER_MAX * 10) / 10;
-});
-const liveBatteryColor = computed(() =>
-  batteryInfo.value.level <= 20 ? '#ef4444' : '#22c55e'
-);
-const liveWifiOn = computed(() => (networkInfo.value.signal || 0) >= 50);
-const liveWifiNearOn = computed(() => (networkInfo.value.signal || 0) >= 5);
-const liveNetworkTooltip = computed(() => {
-  if (!networkInfo.value.connected) return '网络未连接';
-  if (networkInfo.value.type === 'wifi') return `WiFi: ${networkInfo.value.ssid || ''}（信号 ${networkInfo.value.signal}%）`;
-  return '以太网';
-});
+]);
 
 const languageOptions = [
   { label: '简体中文', value: 'zh-CN' },
@@ -443,14 +290,6 @@ function selectLanguage(newLanguage: string) {
 }
 
 /**
- * Open recharge center dialog
- */
-function openRecharge() {
-  showUserControl.value = false;
-  showRechargeDialog.value = true;
-}
-
-/**
  * Open user profile dialog
  */
 function openProfile() {
@@ -511,78 +350,20 @@ function handleLogOut() {
   emit('logout');
 }
 
-/**
- * 未读私信红点：统计 C2C 会话未读数（直播间群消息不计入）。
- * 10s 轮询 + 打开消息中心后由父组件调用 refreshMessageUnread 立即刷新。
- */
-const messageUnread = ref(0);
-let unreadTimer: ReturnType<typeof setInterval> | null = null;
-let systemStatusTimer: ReturnType<typeof setInterval> | null = null;
-
-const refreshMessageUnread = async () => {
-  try {
-    const chat = (TUILogin as any).getContext?.()?.chat || (TUIChatEngine as any)?.chat;
-    if (!chat?.getConversationList) {
-      return;
-    }
-    const res = await chat.getConversationList();
-    const list: any[] = res?.data?.conversationList || [];
-    messageUnread.value = list
-      .filter((conv) => String(conv.conversationID || '').startsWith('C2C'))
-      .reduce((sum, conv) => sum + Number(conv.unreadCount || 0), 0);
-  } catch (error) {
-    // IM 尚未就绪 / 登录切换中，忽略
-  }
-};
-
 onMounted(async () => {
   trtcCloud.on('onStatistics', onStatistics);
   ipcBridge.on(IPCMessageType.UPDATE_USER_PROFILE, onSaveProfileDialog);
-  void refreshMessageUnread();
-  unreadTimer = setInterval(refreshMessageUnread, 10000);
-  // 电池电量 + WiFi：30s 轮询，首次立即拉取
-  void refreshSystemStatus();
-  systemStatusTimer = setInterval(refreshSystemStatus, 30000);
 });
 
 onBeforeUnmount(() => {
   trtcCloud.off('onStatistics', onStatistics);
   ipcBridge.off(IPCMessageType.UPDATE_USER_PROFILE, onSaveProfileDialog);
-  if (unreadTimer) {
-    clearInterval(unreadTimer);
-    unreadTimer = null;
-  }
-  if (systemStatusTimer) {
-    clearInterval(systemStatusTimer);
-    systemStatusTimer = null;
-  }
 });
-
-defineExpose({ refreshMessageUnread });
 
 </script>
 
 <style lang="scss" scoped>
 @import "../../assets/variable.scss";
-.header-entry-btn {
-  position: relative;
-}
-.header-entry-badge {
-  position: absolute;
-  top: -6px;
-  right: -8px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: #ff3b30;
-  color: #fff;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-  font-weight: 600;
-  pointer-events: none;
-}
 .live-header {
   width: 100%;
   display: flex;
@@ -597,69 +378,6 @@ defineExpose({ refreshMessageUnread });
   -webkit-app-region: drag;
   background-color: var(--bg-color-topbar);
   cursor: move;
-
-  /* 电池/WiFi 纯 SVG 图标（与 AnchorList 风格一致） */
-  .live-header-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: 32px;
-    -webkit-app-region: no-drag;
-  }
-  .live-status-svg {
-    display: inline-block;
-    flex-shrink: 0;
-    cursor: default;
-  }
-
-  /* CSS tooltip（::after position:fixed z-index:99999 盖过所有弹窗） */
-  .live-status-tooltip-wrap {
-    position: relative;
-    display: inline-flex;
-  }
-  .live-status-tooltip-wrap::after {
-    content: attr(data-tooltip);
-    position: fixed;           /* fixed 脱离文档流，不受父容器 overflow/z-index 限制 */
-    bottom: calc(100% + 6px);  /* 显示在图标上方 */
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 4px 10px;
-    background: rgba(0, 0, 0, 0.85);
-    color: #fff;
-    font-size: 12px;
-    line-height: 1.4;
-    border-radius: 6px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    visibility: hidden;
-    z-index: 99999;            /* 比任何弹窗都高 */
-    transition: opacity .12s, visibility .12s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
-  .live-status-tooltip-wrap:hover::after {
-    opacity: 1;
-    visibility: visible;
-  }
-  /* 小三角指向图标 */
-  .live-status-tooltip-wrap::before {
-    content: '';
-    position: fixed;
-    bottom: calc(100% + 1px);
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: rgba(0, 0, 0, 0.85);
-    pointer-events: none;
-    opacity: 0;
-    visibility: hidden;
-    z-index: 99999;
-    transition: opacity .12s, visibility .12s;
-  }
-  .live-status-tooltip-wrap:hover::before {
-    opacity: 1;
-    visibility: visible;
-  }
 
   .left {
     margin-left: 8px;
@@ -749,9 +467,8 @@ defineExpose({ refreshMessageUnread });
     }
   }
 
-  /* CPU/RAM/Frame Rate 统计文字已按产品要求隐藏 */
   .statistics {
-    display: none !important;
+    display: flex;
     position: relative;
     align-items: center;
     &-container {

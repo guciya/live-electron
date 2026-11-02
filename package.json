@@ -8,13 +8,6 @@
   "build": {
     "appId": "com.niko.live",
     "productName": "Niko直播",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/trtc-electron-sdk/build/Release/**/*",
-      "node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/x64/**/*",
-      "node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/res/**/*"
-    ],
-    "afterPack": "scripts/after-pack.js",
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -25,29 +18,7 @@
       "!release/**",
       "!release-test/**",
       "!release-test3/**",
-      "!**/*.md",
-      "!**/*.ts",
-      "!**/*.map",
-      "!**/*.d.ts",
-      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,HISTORY.md}",
-      "!**/node_modules/.cache/**",
-      "!**/node_modules/{.github,.git,.gitignore,.npmrc}/**",
-      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples,demo,demos,benchmark,benchmarks}/**/*",
-      "!**/node_modules/*/{.eslintrc,.prettierrc,.editorconfig,.babelrc,.stylelintrc,tsconfig.json,ava.config.*,jest.config.*}",
-      "!**/{.eslintrc,.prettierrc,.editorconfig,.babelrc,.stylelintrc,.nvmrc,.node-version,.gitattributes,.gitmodules,.gitignore}",
-      "!**/{tsconfig.json,jsconfig.json,package-lock.json,pnpm-lock.yaml,yarn.lock,shrinkwrap.yaml,.npmrc}",
-      "!src/**",
-      "!public/**",
-      "!scripts/**",
-      "!build/**",
-      "!electron/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/mac/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/linux/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/android/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/ios/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/ia32/**",
-      "!node_modules/trtc-electron-plugin-xmagic/plugin/XMagic/win/arm64/**",
-      "!node_modules/trtc-electron-sdk/build/**"
+      "!release-test4/**"
     ],
     "extraResources": [
       {
@@ -64,11 +35,6 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "NikoLive-Setup-${version}.${ext}",
-      "electronLanguages": [
-        "zh-CN",
-        "en-US"
       ]
     },
     "nsis": {
@@ -76,17 +42,23 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
-      "differentialPackage": false,
-      "perMachine": false,
-      "runAfterFinish": true,
-      "packElevateHelper": false
+      "installerHeaderIcon": "build/icon.ico"
     },
-    "compression": "maximum",
-    "removePackageScripts": true,
-    "removePackageKeywords": true,
-    "nodeGypRebuild": false,
-    "npmRebuild": false
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.social-networking",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "icon": "build/icon.icns"
+    }
   },
   "scripts": {
     "serve": "vue-cli-service serve",

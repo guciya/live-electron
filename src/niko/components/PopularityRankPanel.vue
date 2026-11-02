@@ -361,8 +361,8 @@ onUnmounted(stopRushTimer);
 .rank-panel {
   display: flex;
   flex-direction: column;
-  width: 34rem;
-  max-height: 94%;
+  width: 26rem;
+  max-height: 92%;
   overflow: hidden;
   color: #fff;
   /* 与用户信息卡 / 更多直播一致的深色卡片底色 */

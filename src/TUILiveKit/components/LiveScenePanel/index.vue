@@ -272,26 +272,6 @@ const handleRenameMaterial = (material: MediaSource) => {
   showChildPanel(ChildPanelType.Rename, mediaSourceToPlainPayload(material));
 };
 
-/** 根据 TRTCMediaMixingErrorCode 返回友好的、可操作的中文提示。
- *  错误码定义见 trtc-electron-sdk/liteav/extensions/MediaMixingManager/types.d.ts */
-function friendlyMediaMixingError(errorCode: number | undefined): string | null {
-  if (errorCode === undefined || errorCode === null) return null;
-  switch (errorCode) {
-    case -5: // CameraNotAuthorized
-      return t('Camera not authorized. Please grant camera permission in Windows Settings > Privacy');
-    case -6: // CameraIsOccupied
-      return t('Camera is occupied. Please close other apps that are using the camera (WeChat/QQ/OBS/etc) and try again');
-    case -7: // CameraDisconnected
-      return t('Camera is disconnected. Please check the camera connection and try again');
-    case -2: // InvalidParams
-      return t('Invalid camera params. Please select a different resolution or camera');
-    case -9001: // InsertTimeout
-      return t('Camera add timed out. Please try again or select a different camera');
-    default:
-      return null; // 未覆盖的错误码返回 null，走通用提示
-  }
-}
-
 /**
  * Add a MediaSource to the mixer, surfacing a source-type-specific error Toast
  * on failure. Extracted so both the ADD path and the UPDATE-fallback path (when
@@ -309,20 +289,16 @@ async function addMediaSourceWithToast(source: Record<string, any>) {
   let addFailed = false;
   try {
     await videoMixerState.addMediaSource(source as MediaSource);
-  } catch (err: any) {
+  } catch (err) {
     addFailed = true;
-    // TRTC addMediaSource reject 时 error 对象有 code 属性（TRTCMediaMixingErrorCode 枚举值）
-    const errCode: number | undefined = typeof err?.code === 'number' ? err.code : undefined;
-    const codeTag = errCode !== undefined ? ` [code=${errCode}]` : '';
-    logger.error('addMediaSource failed' + codeTag, err);
-
-    // 优先用错误码映射的友好文案（可操作），否则退回通用提示
-    let message = friendlyMediaMixingError(errCode) ?? t('Failed to add media source');
-    if (source.sourceType === TRTCMediaSourceType.kCamera && message === t('Failed to add media source')) {
+    logger.error('addMediaSource failed', err);
+    let message = t('Failed to add media source');
+    if (source.sourceType === TRTCMediaSourceType.kCamera) {
       message = t('Failed to add camera');
     } else if (source.sourceType === TRTCMediaSourceType.kScreen) {
       message = t('Failed to add screen share');
     } else if (source.sourceType === TRTCMediaSourceType.kImage) {
+      // Defensive branch: image sources are currently added locally, not via IPC.
       message = t('Failed to add image');
     } else if (source.sourceType === TRTCMediaSourceType.kVideoFile) {
       message = t('Failed to add local video');
@@ -458,14 +434,12 @@ async function onUpdateMediaSource(payload: Record<string, any>) {
       }
       // Hoisted so the finally below can report success/failure to the child.
       let updateOk = true;
-      let updateErrCode: number | undefined;
       try {
         try {
           await videoMixerState.updateMediaSource(existing, config);
-        } catch (err: any) {
+        } catch (err) {
           updateOk = false;
-          updateErrCode = typeof err?.code === 'number' ? err.code : undefined;
-          logger.error('updateMediaSource failed' + (updateErrCode !== undefined ? ` [code=${updateErrCode}]` : ''), err);
+          logger.error('updateMediaSource failed', err);
         }
         if (isCameraSwitch && updateOk) {
           // Camera deviceId switch succeeded: migrate beauty properties from old to
@@ -487,10 +461,9 @@ async function onUpdateMediaSource(payload: Record<string, any>) {
           // removeCameraAfterFailedSwitch is likely hidden behind the overlay
           // dialog). The panel stays open so the user can pick another working
           // camera.
-          const friendly = friendlyMediaMixingError(updateErrCode);
           ipcBridge.sendToChild(IPCMessageType.CAMERA_ADD_FAILED, {
             cameraId: newCameraId,
-            message: friendly ?? t('Failed to add camera'),
+            message: t('Failed to add camera'),
           });
         }
       } finally {

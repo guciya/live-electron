@@ -49,7 +49,7 @@ function handleAuthFailure(url: string, message?: string) {
 
 export const request = axios.create({
   timeout: 20000,
-  headers: { 'Content-Type': 'application/json', platform: 'h5' },
+  headers: { 'Content-Type': 'application/json', platform: 'pc' },
 });
 
 request.interceptors.request.use((config) => {
@@ -78,6 +78,10 @@ request.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     (config.headers as Record<string, unknown>).Token = token;
   }
+  console.log('[NikoAuth] request', config.method?.toUpperCase(), config.url, {
+    baseURL: config.baseURL,
+    token: token ? `present(${token.length})` : 'MISSING',
+  });
   return config;
 });
 
