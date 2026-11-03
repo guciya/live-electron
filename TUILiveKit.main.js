@@ -930,7 +930,7 @@ async function createWindow(width = 1366, height = 668) {
   // ============ 启动动画：加载 splash.html，并在主窗口首屏就绪后收起 ============
   const splashStartedAt = Date.now();
   // 最短展示时长，保证动画完整播完（对应 splash.html 里的入场/进度条节奏）
-  const SPLASH_MIN_MS = 2400;
+  const SPLASH_MIN_MS = 2200;
   let mainRevealed = false;
   const revealMainWindow = () => {
     if (mainRevealed) {
