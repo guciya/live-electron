@@ -3,8 +3,8 @@
     <div class="anchor-list-page">
       <header class="anchor-header tui-window-header">
         <div class="anchor-header-left">
-          <img class="logo-icon" src="../assets/niko-logo.png" alt="Niko直播" />
-          <span class="logo-title">Niko直播</span>
+          <img class="logo-icon" src="../assets/niko-logo.png" alt="Niko直播伴侣" />
+          <span class="logo-title">Niko直播伴侣</span>
         </div>
 
         <div class="anchor-header-right">

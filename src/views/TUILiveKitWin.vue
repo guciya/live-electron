@@ -2,7 +2,42 @@
   <UIKitProvider theme="dark">
     <div class="tui-livekit-win" :class="{ 'is-logout-transitioning': isGoingToLoginPage }">
       <div v-if="!loginReady" class="login-loading">
-        <span class="login-loading-text">{{ t('Logging In') }}</span>
+        <!-- 科幻背景层：深空 + 网格 + 扫描线 + 粒子 -->
+        <div class="ll-bg">
+          <canvas ref="llStarEl" class="ll-stars"></canvas>
+          <div class="ll-grid"></div>
+          <div class="ll-scan"></div>
+          <div class="ll-vignette"></div>
+        </div>
+
+        <!-- 中心 loading 核心 -->
+        <div class="ll-core">
+          <div class="ll-ring ll-ring--outer"></div>
+          <div class="ll-ring ll-ring--inner"></div>
+          <div class="ll-ring ll-ring--corner"></div>
+
+          <div class="ll-center">
+            <div class="ll-pulse"></div>
+            <div class="ll-label">
+              <span class="ll-label-main">欢迎来到 Niko直播伴侣</span>
+              <span class="ll-label-sub">SIGNAL ESTABLISHED</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部信息条 -->
+        <div class="ll-footer">
+          <div class="ll-bar">
+            <span class="ll-bar-fill"></span>
+          </div>
+          <div class="ll-meta">
+            <span class="ll-meta-item">SYS://BOOTING</span>
+            <span class="ll-meta-dot"></span>
+            <span class="ll-meta-item">UPLINK OK</span>
+            <span class="ll-meta-dot"></span>
+            <span class="ll-meta-item">SINK://READY</span>
+          </div>
+        </div>
       </div>
       <template v-else>
       <LiveHeader
@@ -850,6 +885,70 @@ const isInLive = computed(() => nikoIsLive.value || !!currentLive.value?.liveId)
 const isGoingToLoginPage = ref(false);
 // 登录完成前不渲染子组件，避免 TRTC 未初始化时拉直播列表/连麦候选报错
 const loginReady = ref(false);
+
+// ================ login-loading 星空 canvas ================
+const llStarEl = ref<HTMLCanvasElement | null>(null);
+let _llStarRaf = 0;
+function startLandingStars() {
+  const canvas = llStarEl.value;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  let w = 0, h = 0;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    w = canvas.clientWidth;
+    h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+  }
+  resize();
+  const ro = new ResizeObserver(resize);
+  ro.observe(canvas);
+
+  // 粒子
+  const N = 120;
+  const stars = Array.from({ length: N }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    r: Math.random() * 1.4 + 0.3,
+    a: Math.random() * 0.8 + 0.2,
+    v: Math.random() * 0.04 + 0.01, // 纵向缓慢漂移（视角前进感）
+    tw: Math.random() * Math.PI * 2,
+  }));
+
+  function frame() {
+    ctx.clearRect(0, 0, w, h);
+    for (const s of stars) {
+      s.y += s.v * 0.016;
+      s.tw += 0.02;
+      if (s.y > 1.02) s.y = -0.02;
+      const twinkle = 0.6 + Math.sin(s.tw) * 0.4;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(170, 210, 255, ${s.a * twinkle})`;
+      ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    _llStarRaf = requestAnimationFrame(frame);
+  }
+  frame();
+
+  // loginReady 变 true 后停止（UI 会卸载这个 canvas）
+  const stopWhenReady = watch(loginReady, (ready) => {
+    if (ready) {
+      cancelAnimationFrame(_llStarRaf);
+      ro.disconnect();
+      stopWhenReady();
+    }
+  });
+}
+
+// 给 loginReady 一个延迟开启：等 TRTC 初始化 + 用户数据拉好，同时至少展示 800ms 动画让视觉连贯
+watch(loginReady, (ready) => {
+  if (ready) cancelAnimationFrame(_llStarRaf);
+});
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
 // 等待用户添加摄像头后自动弹 PreLiveDialog 的 flag
@@ -2452,6 +2551,9 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
+  // ====== 0) 启动科幻 loading 星空动画 ======
+  startLandingStars();
+
   // ====== 第一步：确保 TRTCCloud 旧房间彻底退出 ======
   // 从 LivePlayer（观众房）或其他页面跳过来时，trtcCloud 单例可能还残留旧房间状态
   // （连线用户、远端视频回调等），必须在任何初始化（IM login / RoomEngine 绑定 / MediaMixing）
@@ -3593,15 +3695,282 @@ onBeforeUnmount(() => {
   --live-shell-bg: #050506;
   background-color: var(--live-shell-bg);
 
+    /* ================ 科幻登录 Loading（流浪地球风） ================ */
   .login-loading {
+    position: relative;
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    .login-loading-text {
-      font-size: 1rem;
-      color: #fff;
-      opacity: 0.8;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 50% 45%, #0e1a30 0%, #05070f 45%, #01020a 100%);
+
+    /* ---- 背景层 ---- */
+    .ll-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .ll-stars {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 透视网格（地面感） */
+    .ll-grid {
+      position: absolute;
+      left: -50%;
+      right: -50%;
+      bottom: 0;
+      height: 60%;
+      background-image:
+        linear-gradient(rgba(80, 180, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(80, 180, 255, 0.08) 1px, transparent 1px);
+      background-size: 48px 48px;
+      transform: perspective(600px) rotateX(60deg);
+      transform-origin: center bottom;
+      animation: gridShift 6s linear infinite;
+      mask-image: linear-gradient(to top, #000 30%, transparent 80%);
+      -webkit-mask-image: linear-gradient(to top, #000 30%, transparent 80%);
+    }
+
+    @keyframes gridShift {
+      from { background-position: 0 0; }
+      to   { background-position: 0 48px; }
+    }
+
+    /* 横向扫描线 */
+    .ll-scan {
+      position: absolute;
+      left: 0; right: 0;
+      height: 120px;
+      background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(22, 180, 255, 0.10) 40%,
+        rgba(22, 180, 255, 0.25) 50%,
+        rgba(22, 180, 255, 0.10) 60%,
+        transparent 100%
+      );
+      filter: blur(2px);
+      animation: scanDown 3.8s linear infinite;
+    }
+
+    @keyframes scanDown {
+      from { top: -120px; }
+      to   { top: 100%; }
+    }
+
+    /* 暗角 vignette */
+    .ll-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at center,
+        transparent 40%,
+        rgba(0, 0, 0, 0.7) 80%,
+        rgba(0, 0, 0, 0.95) 100%
+      );
+    }
+
+    /* ---- 中心加载核心 ---- */
+    .ll-core {
+      position: relative;
+      width: 240px;
+      height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ll-ring {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* 外圈：双层渐变弧 + 反向慢转 */
+    .ll-ring--outer {
+      width: 240px;
+      height: 240px;
+      background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        rgba(30, 210, 255, 0.9) 35deg,
+        transparent 70deg,
+        transparent 180deg,
+        rgba(130, 255, 180, 0.7) 220deg,
+        transparent 260deg,
+        transparent 320deg,
+        rgba(80, 140, 255, 0.5) 350deg,
+        transparent 360deg
+      );
+      filter: drop-shadow(0 0 10px rgba(30, 210, 255, 0.4));
+      animation: spin 7s linear infinite reverse;
+      -webkit-mask: radial-gradient(circle, transparent 70%, #000 72%);
+              mask: radial-gradient(circle, transparent 70%, #000 72%);
+    }
+
+    /* 内圈：正向中速 + 能量刻度 */
+    .ll-ring--inner {
+      width: 170px;
+      height: 170px;
+      background:
+        repeating-conic-gradient(
+          from 0deg,
+          rgba(100, 220, 255, 0.6) 0deg 3deg,
+          transparent 3deg 12deg
+        );
+      animation: spin 5s linear infinite;
+      -webkit-mask: radial-gradient(circle, transparent 85%, #000 87%);
+              mask: radial-gradient(circle, transparent 85%, #000 87%);
+    }
+
+    /* 四角 HUD 装饰方 */
+    .ll-ring--corner {
+      width: 140px;
+      height: 140px;
+      border-radius: 0;
+      animation: spin 12s linear infinite;
+      background:
+        linear-gradient(90deg, rgba(30, 210, 255, 0.8) 4px, transparent 4px),
+        linear-gradient(90deg, transparent calc(100% - 4px), rgba(30, 210, 255, 0.8) calc(100% - 4px)),
+        linear-gradient(0deg, rgba(30, 210, 255, 0.8) 4px, transparent 4px),
+        linear-gradient(0deg, transparent calc(100% - 4px), rgba(30, 210, 255, 0.8) calc(100% - 4px));
+      background-repeat: no-repeat;
+      background-position: top left, top right, top left, bottom left;
+      background-size: 20px 100%, 20px 100%, 100% 20px, 100% 20px;
+      filter: drop-shadow(0 0 6px rgba(30, 210, 255, 0.6));
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* 中心 */
+    .ll-center {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ll-pulse {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #6ae5ff;
+      box-shadow:
+        0 0 0 0 rgba(106, 229, 255, 0.7),
+        0 0 20px rgba(106, 229, 255, 0.9);
+      animation: pulseRing 1.8s ease-out infinite;
+    }
+
+    @keyframes pulseRing {
+      0%   { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(106, 229, 255, 0.7); }
+      70%  { transform: scale(1.0); box-shadow: 0 0 0 18px rgba(106, 229, 255, 0); }
+      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(106, 229, 255, 0); }
+    }
+
+    .ll-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      animation: labelPop 0.9s ease-out 0.2s both;
+    }
+
+    @keyframes labelPop {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .ll-label-main {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #7ef3ff;
+      text-shadow: 0 0 10px rgba(126, 243, 255, 0.5);
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+    }
+
+    .ll-label-sub {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: rgba(170, 230, 255, 0.6);
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+    }
+
+    /* ---- 底部信息条 ---- */
+    .ll-footer {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      animation: labelPop 0.9s ease-out 0.4s both;
+    }
+
+    .ll-bar {
+      width: 220px;
+      height: 2px;
+      background: rgba(126, 243, 255, 0.12);
+      overflow: hidden;
+      border-radius: 1px;
+    }
+
+    .ll-bar-fill {
+      display: block;
+      width: 45%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(126, 243, 255, 0.9) 40%,
+        rgba(130, 255, 180, 0.7) 70%,
+        transparent
+      );
+      animation: barSlide 1.8s ease-in-out infinite;
+    }
+
+    @keyframes barSlide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(320%); }
+    }
+
+    .ll-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: rgba(126, 243, 255, 0.55);
+    }
+
+    .ll-meta-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(126, 243, 255, 0.8);
+      box-shadow: 0 0 6px rgba(126, 243, 255, 0.8);
+      animation: dotBlink 1.2s ease-in-out infinite;
+    }
+
+    .ll-meta-dot:nth-child(4) { animation-delay: 0.3s; }
+    .ll-meta-dot:nth-child(7) { animation-delay: 0.6s; }
+
+    @keyframes dotBlink {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.25; }
     }
   }
   --live-panel-bg: #101013;

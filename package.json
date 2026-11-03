@@ -7,7 +7,7 @@
   "license": "MIT",
   "build": {
     "appId": "com.niko.live",
-    "productName": "Niko直播",
+    "productName": "Niko直播伴侣",
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -75,8 +75,8 @@
     "build:prod": "vue-cli-service build --mode production --dest dist --no-clean",
     "build:win64": "electron-builder --win --x64",
     "pack:win64": "npm run build && npm run build:win64",
-    "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release-test -c.productName=Niko直播-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
-    "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播 -c.artifactName=NikoLive-Setup-${version}.${ext}",
+    "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release-test -c.productName=Niko直播伴侣-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
+    "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播伴侣 -c.artifactName=NikoLive-Setup-${version}.${ext}",
     "build:mac-x64": "electron-builder --mac --x64",
     "pack:mac-x64": "npm run build && npm run build:mac-x64",
     "upload-server": "npm --prefix ./upload-server run start",
@@ -90,6 +90,7 @@
     "core-js": "^3.36.1",
     "flv.js": "^1.6.2",
     "pinia": "^2.1.7",
+    "three": "^0.160.0",
     "trtc-electron-plugin-xmagic": "2.0.0-beta.0",
     "trtc-electron-sdk": "13.4.802-beta.1",
     "tuikit-atomicx-vue3-electron": "6.5.0",

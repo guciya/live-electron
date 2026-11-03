@@ -148,7 +148,7 @@ import xunIcon from '../assets/role/xun.png';
 import guanIcon from '../assets/role/guan.png';
 
 /** 与 H5 niko/constants 的 LIVE_NOTICE_TEXT 完全一致 */
-const LIVE_NOTICE_TEXT = 'Niko直播提醒绿色、文明、正能量直播，严禁未成年人进行直播或打赏。封面和直播内容严禁违法违规，低俗色情、吸烟酗酒等内容。如主播在直播过程中出现炫耀、送礼物等方式诱导误导打赏、私下交易，请谨慎判断，以防上当或财产损失。请大家注意财产安全，谨防网络诈骗。远离娱乐，合理消费，理性打赏。';
+const LIVE_NOTICE_TEXT = 'Niko直播伴侣提醒绿色、文明、正能量直播，严禁未成年人进行直播或打赏。封面和直播内容严禁违法违规，低俗色情、吸烟酗酒等内容。如主播在直播过程中出现炫耀、送礼物等方式诱导误导打赏、私下交易，请谨慎判断，以防上当或财产损失。请大家注意财产安全，谨防网络诈骗。远离娱乐，合理消费，理性打赏。';
 
 /** 主播 / 巡场 / 管理员角标，与 H5 NikoBarrage List 一致 */
 const ROLE_ICON = {

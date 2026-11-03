@@ -760,6 +760,8 @@ async function createWindow(width = 1366, height = 668) {
       nodeIntegration: true,
       contextIsolation: false,
       nodeIntegrationInWorker: true,
+      // 标记 confirm 窗口角色，让 Loading 跳过登录跳转（未登录时别把 confirm 窗口变成 Login 页）
+      additionalArguments: ['--window-role=confirm'],
     },
   });
   // 透明礼物覆盖窗口：覆盖在视频预览区域之上，只负责播放礼物特效
@@ -1912,7 +1914,7 @@ function openInternalPage(url, title, sso) {
     resizable: true,
     show: false,
     parent: windowMap.main || undefined,
-    title: title || 'Niko直播',
+    title: title || 'Niko直播伴侣',
     autoHideMenuBar: true,
     backgroundColor: '#ffffff',
     webPreferences: {
@@ -2082,7 +2084,7 @@ function createTray() {
 
     const iconPath = path.join(__dirname, 'favicon.ico');
     appTray = new Tray(trayImg);
-    appTray.setToolTip('Niko直播');
+    appTray.setToolTip('Niko直播伴侣');
     const contextMenu = Menu.buildFromTemplate([
       {
         label: '显示 Niko 窗口',

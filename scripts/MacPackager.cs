@@ -38,7 +38,7 @@ namespace MacPackager
             return Directory.GetCurrentDirectory();
         }
         static string ElectronVersion = "19.1.9";
-        static string AppName = "Niko直播";
+        static string AppName = "Niko直播伴侣";
         static string BundleId = "com.niko.live";
         static string Version = "6.5.0";
         static string TrtcSdkVersion = "13.4.802-beta.1";

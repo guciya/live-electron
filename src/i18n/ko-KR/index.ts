@@ -775,7 +775,7 @@ export const resource = {
   'Live room dismissed.': '생방송실이 해체되었습니다.',
   'Live room does not existed. Or you enterred the room on another device.': '생방송 방이 존재하지 않거나, 다른 기기에서 생방송 방에 입장하셨습니다.',
   'Live Setting': '설정',
-  'Live Streaming Assistant': 'Niko直播',
+  'Live Streaming Assistant': 'Niko直播伴侣',
   'Live tool': '라이브 방송 도구',
   'Live Tools': '라이브 방송 도구',
   'Music': '음악',

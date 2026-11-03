@@ -646,7 +646,7 @@ const demoResource = {
   'Gift-giving news': 'Gift-giving news',
   'Go Live': 'Go Live',
   'Interactive messages': 'Interactive messages',
-  'Live Streaming Assistant': 'Niko直播',
+  'Live Streaming Assistant': 'Niko直播伴侣',
   'Live Tools': 'Live Tools',
   'Living not started': 'Living not started',
   'Message List': 'Messages',

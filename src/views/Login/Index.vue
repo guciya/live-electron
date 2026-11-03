@@ -19,8 +19,8 @@
     <div class="tui-login-body">
       <div class="tui-login-card">
         <div class="tui-login-card-header">
-          <img class="tui-login-logo-img" src="../../assets/niko-logo.png" alt="Niko直播" />
-          <span class="tui-login-title-text">Niko直播</span>
+          <img class="tui-login-logo-img" src="../../assets/niko-logo.png" alt="Niko直播伴侣" />
+          <span class="tui-login-title-text">Niko直播伴侣</span>
         </div>
 
         <div class="tui-login-options">

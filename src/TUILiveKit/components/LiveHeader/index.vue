@@ -2,8 +2,8 @@
   <header class="live-header tui-window-header">
     <div class="left">
       <div class="logo-badge">
-        <img class="logo-icon" src="../../../assets/niko-logo.png" alt="Niko直播" />
-        <span class="title">Niko直播</span>
+        <img class="logo-icon" src="../../../assets/niko-logo.png" alt="Niko直播伴侣" />
+        <span class="title">Niko直播伴侣</span>
       </div>
       <div class="statistics">
         <div class="statistics-container" v-for="(item, index) in statisticsInfoList" :key="item.text">

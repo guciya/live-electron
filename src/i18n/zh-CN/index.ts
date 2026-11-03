@@ -683,7 +683,7 @@ const demoResource = {
   'Gift-giving news': '送礼消息',
   'Go Live': '开始直播',
   'Interactive messages': '互动消息',
-  'Live Streaming Assistant': 'Niko直播',
+  'Live Streaming Assistant': 'Niko直播伴侣',
   'Live Tools': '直播工具',
   'Living not started': '直播未开始...',
   'Message List': '消息列表',
