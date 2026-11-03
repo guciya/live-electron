@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Niko直播 启动中</title>
+<style>
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #150430;
+    user-select: none;
+    cursor: default;
+  }
+
+  .splash {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+  }
+  body.is-leaving .splash { opacity: 0; }
+
+  /* ---------- 背景场景 ---------- */
+  .scene {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    animation: scene-in 1.6s cubic-bezier(0.16, 0.72, 0.24, 1) both;
+    will-change: transform, opacity;
+  }
+  @keyframes scene-in {
+    0%   { opacity: 0; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  .splash::after {
+    /* 左上角太阳光弥漫 */
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 46%, rgba(255, 236, 140, 0.45), rgba(255, 190, 90, 0.12) 38%, transparent 62%);
+    pointer-events: none;
+    animation: sun-breathe 5s ease-in-out infinite alternate;
+  }
+  @keyframes sun-breathe {
+    0%   { opacity: 0.72; }
+    100% { opacity: 1; }
+  }
+
+  .windows-mid  { animation: twinkle 4.2s ease-in-out infinite alternate; }
+  .windows-near { animation: twinkle 3.4s ease-in-out 0.6s infinite alternate; }
+  @keyframes twinkle {
+    0%   { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
+
+  .cloud { animation: cloud-drift 9s ease-in-out infinite alternate; }
+  .cloud.b { animation-duration: 12s; animation-delay: 0.8s; }
+  .cloud.c { animation-duration: 10s; animation-delay: -2s; }
+  @keyframes cloud-drift {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(18px); }
+  }
+
+  /* ---------- 居中内容 ---------- */
+  .content {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 46%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .logo-wrap {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: logo-in 1s cubic-bezier(0.18, 1.5, 0.32, 1) 0.3s both;
+  }
+  @keyframes logo-in {
+    0%   { opacity: 0; transform: translateY(16px) scale(0.8); filter: blur(8px); }
+    60%  { filter: blur(0); }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  }
+
+  .halo {
+    position: absolute;
+    width: 214px;
+    height: 214px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 232, 158, 0.5), rgba(255, 186, 96, 0.18) 46%, transparent 70%);
+    animation: halo-pulse 2.8s ease-in-out 0.5s infinite;
+  }
+  @keyframes halo-pulse {
+    0%, 100% { opacity: 0.55; transform: scale(0.94); }
+    50%      { opacity: 0.95; transform: scale(1.06); }
+  }
+
+  .logo {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    border-radius: 26px;
+    object-fit: cover;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.16),
+      0 0 46px rgba(255, 208, 118, 0.5),
+      0 18px 42px rgba(16, 0, 38, 0.55);
+  }
+
+  .title {
+    margin-top: 20px;
+    font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: #fff;
+    text-shadow: 0 2px 18px rgba(40, 0, 60, 0.45);
+    display: flex;
+    align-items: baseline;
+    animation: text-in 0.7s ease-out 0.85s both;
+  }
+  @keyframes text-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .dots { display: inline-flex; margin-left: 2px; }
+  .dots b {
+    display: inline-block;
+    font-weight: 500;
+    opacity: 0;
+    animation: dot-blink 1.25s steps(1, end) infinite;
+  }
+  .dots b:nth-child(2) { animation-delay: 0.22s; }
+  .dots b:nth-child(3) { animation-delay: 0.44s; }
+  @keyframes dot-blink {
+    0%, 22% { opacity: 0; }
+    46%, 100% { opacity: 1; }
+  }
+
+  .progress {
+    margin-top: 26px;
+    width: 176px;
+    height: 3px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.22);
+    overflow: hidden;
+    animation: text-in 0.7s ease-out 0.9s both;
+  }
+  .progress i {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.9), #ffe6a3);
+    box-shadow: 0 0 10px rgba(255, 226, 150, 0.85);
+    animation: progress-fill 1.5s cubic-bezier(0.3, 0.8, 0.4, 1) 0.55s forwards;
+  }
+  @keyframes progress-fill {
+    from { width: 0; }
+    to   { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="splash">
+  <svg class="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ffdd4f" />
+        <stop offset="20%" stop-color="#ffc44a" />
+        <stop offset="40%" stop-color="#ff8bad" />
+        <stop offset="60%" stop-color="#f254b9" />
+        <stop offset="79%" stop-color="#a62bd2" />
+        <stop offset="100%" stop-color="#4b168f" />
+      </linearGradient>
+
+      <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#fffbd2" />
+        <stop offset="55%" stop-color="#ffe069" />
+        <stop offset="100%" stop-color="#ffb13c" />
+      </radialGradient>
+
+      <linearGradient id="farCity" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#8f39cd" />
+        <stop offset="100%" stop-color="#5d1a9e" />
+      </linearGradient>
+      <linearGradient id="midCity" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4f1a88" />
+        <stop offset="100%" stop-color="#2c0a55" />
+      </linearGradient>
+      <linearGradient id="nearCity" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#28094a" />
+        <stop offset="100%" stop-color="#14032c" />
+      </linearGradient>
+
+      <linearGradient id="horizonGlow" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ff7ad1" stop-opacity="0" />
+        <stop offset="100%" stop-color="#ff5fc0" stop-opacity="0.5" />
+      </linearGradient>
+      <linearGradient id="bottomFog" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#b846d6" stop-opacity="0.22" />
+        <stop offset="100%" stop-color="#150430" stop-opacity="0.9" />
+      </linearGradient>
+
+      <!-- 中层楼宇窗户：规则点阵 -->
+      <pattern id="winMid" width="24" height="28" patternUnits="userSpaceOnUse">
+        <rect x="5" y="6" width="6" height="10" fill="#ffcf82" opacity="0.55" />
+        <rect x="16" y="6" width="4" height="6" fill="#ffae5c" opacity="0.18" />
+        <rect x="5" y="20" width="6" height="3" fill="#ffcf82" opacity="0.22" />
+      </pattern>
+
+      <!-- 近景楼宇窗户：更大更亮 -->
+      <pattern id="winNear" width="30" height="34" patternUnits="userSpaceOnUse">
+        <rect x="6" y="7" width="8" height="12" fill="#ffd98a" opacity="0.7" />
+        <rect x="20" y="7" width="6" height="8" fill="#ffb85e" opacity="0.25" />
+        <rect x="6" y="24" width="8" height="4" fill="#ffd98a" opacity="0.3" />
+      </pattern>
+    </defs>
+
+    <!-- 天空 -->
+    <rect x="0" y="0" width="1600" height="1000" fill="url(#sky)" />
+
+    <!-- 太阳与光晕 -->
+    <circle cx="340" cy="560" r="420" fill="#ffcf5e" opacity="0.22" />
+    <circle cx="340" cy="560" r="300" fill="url(#sun)" />
+
+    <!-- 云 -->
+    <g class="cloud a" fill="#ffb9c4" opacity="0.35" style="filter: blur(18px)">
+      <ellipse cx="980" cy="170" rx="240" ry="32" />
+      <ellipse cx="1180" cy="235" rx="170" ry="24" />
+    </g>
+    <g class="cloud b" fill="#ffc7cf" opacity="0.28" style="filter: blur(22px)">
+      <ellipse cx="690" cy="120" rx="280" ry="30" />
+      <ellipse cx="420" cy="180" rx="180" ry="22" />
+    </g>
+    <g class="cloud c" fill="#ff9fb8" opacity="0.22" style="filter: blur(20px)">
+      <ellipse cx="1400" cy="120" rx="210" ry="26" />
+    </g>
+
+    <!-- 远山 / 地平线丘陵 -->
+    <path d="M0 742 Q 260 636 620 706 T 1120 664 T 1600 718 L1600 1000 L0 1000 Z"
+          fill="#7927ad" opacity="0.8" />
+
+    <!-- 远景城市 -->
+    <g fill="url(#farCity)" opacity="0.92">
+      <rect x="40"  y="640" width="60" height="360" />
+      <rect x="110" y="600" width="42" height="400" />
+      <rect x="162" y="690" width="88" height="310" />
+      <rect x="262" y="640" width="52" height="360" />
+      <rect x="322" y="722" width="70" height="278" />
+      <rect x="400" y="662" width="56" height="338" />
+      <rect x="466" y="612" width="80" height="388" />
+      <rect x="560" y="692" width="46" height="308" />
+      <rect x="620" y="732" width="76" height="268" />
+      <rect x="710" y="680" width="60" height="320" />
+      <rect x="790" y="642" width="52" height="358" />
+      <rect x="852" y="702" width="86" height="298" />
+      <rect x="952" y="662" width="46" height="338" />
+      <rect x="1012" y="722" width="70" height="278" />
+      <rect x="1092" y="672" width="56" height="328" />
+      <rect x="1162" y="702" width="90" height="298" />
+      <rect x="1262" y="642" width="60" height="358" />
+      <rect x="1332" y="692" width="80" height="308" />
+      <rect x="1422" y="652" width="50" height="348" />
+      <rect x="1482" y="702" width="70" height="298" />
+      <rect x="1562" y="662" width="40" height="338" />
+    </g>
+
+    <rect x="0" y="548" width="1600" height="220" fill="url(#horizonGlow)" opacity="0.55" />
+
+    <!-- 中景城市 -->
+    <g>
+      <rect x="0"    y="560" width="112" height="440" fill="url(#midCity)" />
+      <rect x="132"  y="642" width="70"  height="358" fill="url(#midCity)" />
+      <rect x="210"  y="470" width="122" height="530" fill="url(#midCity)" />
+      <rect x="228"  y="430" width="6"   height="42"  fill="#3a0d6b" />
+      <rect x="342"  y="622" width="62"  height="378" fill="url(#midCity)" />
+      <rect x="412"  y="542" width="112" height="458" fill="url(#midCity)" />
+      <rect x="532"  y="662" width="80"  height="338" fill="url(#midCity)" />
+      <rect x="622"  y="722" width="102" height="278" fill="url(#midCity)" />
+      <rect x="730"  y="692" width="92"  height="308" fill="url(#midCity)" />
+      <rect x="828"  y="702" width="70"  height="298" fill="url(#midCity)" />
+      <rect x="910"  y="522" width="122" height="478" fill="url(#midCity)" />
+      <rect x="1042" y="642" width="80"  height="358" fill="url(#midCity)" />
+      <rect x="1122" y="470" width="142" height="530" fill="url(#midCity)" />
+      <rect x="1180" y="418" width="7"   height="54"  fill="#3a0d6b" />
+      <rect x="1272" y="602" width="92"  height="398" fill="url(#midCity)" />
+      <rect x="1372" y="522" width="112" height="478" fill="url(#midCity)" />
+      <rect x="1492" y="562" width="108" height="438" fill="url(#midCity)" />
+    </g>
+    <g class="windows-mid" opacity="0.9">
+      <rect x="0"    y="560" width="112" height="440" fill="url(#winMid)" />
+      <rect x="132"  y="642" width="70"  height="358" fill="url(#winMid)" />
+      <rect x="210"  y="470" width="122" height="530" fill="url(#winMid)" />
+      <rect x="342"  y="622" width="62"  height="378" fill="url(#winMid)" />
+      <rect x="412"  y="542" width="112" height="458" fill="url(#winMid)" />
+      <rect x="532"  y="662" width="80"  height="338" fill="url(#winMid)" />
+      <rect x="622"  y="722" width="102" height="278" fill="url(#winMid)" />
+      <rect x="730"  y="692" width="92"  height="308" fill="url(#winMid)" />
+      <rect x="828"  y="702" width="70"  height="298" fill="url(#winMid)" />
+      <rect x="910"  y="522" width="122" height="478" fill="url(#winMid)" />
+      <rect x="1042" y="642" width="80"  height="358" fill="url(#winMid)" />
+      <rect x="1122" y="470" width="142" height="530" fill="url(#winMid)" />
+      <rect x="1272" y="602" width="92"  height="398" fill="url(#winMid)" />
+      <rect x="1372" y="522" width="112" height="478" fill="url(#winMid)" />
+      <rect x="1492" y="562" width="108" height="438" fill="url(#winMid)" />
+    </g>
+
+    <!-- 近景城市 -->
+    <g>
+      <rect x="0"    y="760" width="142" height="240" fill="url(#nearCity)" />
+      <rect x="152"  y="822" width="102" height="178" fill="url(#nearCity)" />
+      <rect x="272"  y="700" width="150" height="300" fill="url(#nearCity)" />
+      <rect x="442"  y="820" width="120" height="180" fill="url(#nearCity)" />
+      <rect x="580"  y="762" width="132" height="238" fill="url(#nearCity)" />
+      <rect x="732"  y="862" width="142" height="138" fill="url(#nearCity)" />
+      <rect x="892"  y="800" width="122" height="200" fill="url(#nearCity)" />
+      <rect x="1032" y="740" width="152" height="260" fill="url(#nearCity)" />
+      <rect x="1192" y="822" width="132" height="178" fill="url(#nearCity)" />
+      <rect x="1342" y="700" width="162" height="300" fill="url(#nearCity)" />
+      <rect x="1522" y="782" width="120" height="218" fill="url(#nearCity)" />
+    </g>
+    <g class="windows-near" opacity="0.95">
+      <rect x="0"    y="760" width="142" height="240" fill="url(#winNear)" />
+      <rect x="152"  y="822" width="102" height="178" fill="url(#winNear)" />
+      <rect x="272"  y="700" width="150" height="300" fill="url(#winNear)" />
+      <rect x="442"  y="820" width="120" height="180" fill="url(#winNear)" />
+      <rect x="580"  y="762" width="132" height="238" fill="url(#winNear)" />
+      <rect x="732"  y="862" width="142" height="138" fill="url(#winNear)" />
+      <rect x="892"  y="800" width="122" height="200" fill="url(#winNear)" />
+      <rect x="1032" y="740" width="152" height="260" fill="url(#winNear)" />
+      <rect x="1192" y="822" width="132" height="178" fill="url(#winNear)" />
+      <rect x="1342" y="700" width="162" height="300" fill="url(#winNear)" />
+      <rect x="1522" y="782" width="120" height="218" fill="url(#winNear)" />
+    </g>
+
+    <!-- 底部雾气，压暗前景保证文案可读 -->
+    <rect x="0" y="840" width="1600" height="160" fill="url(#bottomFog)" />
+  </svg>
+
+  <div class="content">
+    <div class="logo-wrap">
+      <div class="halo"></div>
+      <img class="logo" src="./src/assets/niko-logo.png" alt="Niko" />
+    </div>
+    <div class="title">
+      Niko直播启动中<span class="dots"><b>.</b><b>.</b><b>.</b></span>
+    </div>
+    <div class="progress"><i></i></div>
+  </div>
+</div>
+</body>
+</html>

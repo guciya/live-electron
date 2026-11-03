@@ -212,6 +212,8 @@ const windowMap = {
   confirm: null,
   // 礼物特效覆盖窗口：原生视频窗口永远在 DOM 之上，礼物必须放到同级透明窗口里播放
   giftOverlay: null,
+  // 启动动画窗口：主窗口首屏就绪前展示，结束后淡出销毁
+  splash: null,
 };
 
 const coverWindowRelativeBounds = {
@@ -267,6 +269,10 @@ function handleQuitConfirmed() {
   clearQuitTimers();
   pendingQuitRequest = false;
   isQuitting = true;
+  if (windowMap.splash && !windowMap.splash.isDestroyed()) {
+    windowMap.splash.destroy();
+  }
+  windowMap.splash = null;
   if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
     windowMap.giftOverlay.close();
   }
@@ -307,6 +313,11 @@ function forceQuitApp() {
   clearQuitTimers();
   isQuitting = true;
   pendingQuitRequest = false;
+
+  if (windowMap.splash && !windowMap.splash.isDestroyed()) {
+    windowMap.splash.destroy();
+  }
+  windowMap.splash = null;
 
   // Close all windows
   if (windowMap.giftOverlay && !windowMap.giftOverlay.isDestroyed()) {
@@ -692,6 +703,8 @@ async function createWindow(width = 1366, height = 668) {
     frame: false,
     acceptFirstMouse: true,
     icon: _mainIcon,
+    // 先隐藏，等启动动画结束再显示，避免启动时闪白/闪黑
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'TUILiveKit.preload.js'),
       nodeIntegration: true,
@@ -775,6 +788,39 @@ async function createWindow(width = 1366, height = 668) {
     },
   });
   windowMap.giftOverlay.setIgnoreMouseEvents(true);
+
+  // ==================== 启动动画窗口 ====================
+  // 独立静态页面（splash.html），不依赖 dist / dev server，主窗口首屏就绪后淡出。
+  const mainBounds = windowMap.main.getBounds();
+  windowMap.splash = new BrowserWindow({
+    x: mainBounds.x,
+    y: mainBounds.y,
+    width: mainBounds.width,
+    height: mainBounds.height,
+    frame: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#150430',
+    icon: _mainIcon,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+  windowMap.splash.once('ready-to-show', () => {
+    if (isWindowAlive(windowMap.splash)) {
+      windowMap.splash.show();
+      windowMap.splash.focus();
+    }
+  });
 
   // Make all links open with the browser, not with current application
   windowMap.main.webContents.setWindowOpenHandler(windowOpenHandler);
@@ -880,6 +926,56 @@ async function createWindow(width = 1366, height = 668) {
   windowMap.giftOverlay.webContents.on('did-fail-load', (_event, code, desc) => {
     console.error('[giftOverlay] did-fail-load:', code, desc);
   });
+
+  // ============ 启动动画：加载 splash.html，并在主窗口首屏就绪后收起 ============
+  const splashStartedAt = Date.now();
+  // 最短展示时长，保证动画完整播完（对应 splash.html 里的入场/进度条节奏）
+  const SPLASH_MIN_MS = 2400;
+  let mainRevealed = false;
+  const revealMainWindow = () => {
+    if (mainRevealed) {
+      return;
+    }
+    mainRevealed = true;
+    const delay = Math.max(0, SPLASH_MIN_MS - (Date.now() - splashStartedAt));
+    setTimeout(() => {
+      const splash = windowMap.splash;
+      try {
+        if (isWindowAlive(windowMap.main)) {
+          windowMap.main.show();
+          windowMap.main.focus();
+        }
+      } catch (err) {
+        console.warn(`${logPrefix} reveal main window failed:`, err);
+      }
+      if (isWindowAlive(splash)) {
+        // 让 splash 自己淡出（CSS transition），随后销毁窗口
+        try {
+          splash.webContents.executeJavaScript("document.body.classList.add('is-leaving')");
+        } catch (err) {
+          console.warn(`${logPrefix} splash fade-out failed:`, err);
+        }
+        setTimeout(() => {
+          if (splash && !splash.isDestroyed()) {
+            splash.destroy();
+          }
+          if (windowMap.splash === splash) {
+            windowMap.splash = null;
+          }
+        }, 460);
+      } else if (windowMap.splash === splash) {
+        windowMap.splash = null;
+      }
+    }, delay);
+  };
+
+  windowMap.splash.loadFile(path.join(__dirname, 'splash.html'));
+  // 主窗口首屏加载完成后再多等一拍，避免动画收起瞬间露出空白页面
+  windowMap.main.webContents.once('did-finish-load', () => {
+    setTimeout(revealMainWindow, 350);
+  });
+  // 兜底：主窗口加载失败/超时也必须收起启动动画
+  setTimeout(revealMainWindow, 8000);
 }
 
 function bindIPCEvent() {
@@ -2348,6 +2444,10 @@ const TUILiveKitMain = {
   },
   close: () => {
     if (isWindowAlive(windowMap.main)) {
+      if (windowMap.splash && !windowMap.splash.isDestroyed()) {
+        windowMap.splash.destroy();
+      }
+      windowMap.splash = null;
       if (isWindowAlive(windowMap.child)) {
         windowMap.child.close();
       }

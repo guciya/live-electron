@@ -166,7 +166,7 @@ const CoSlot = defineComponent({
             playsinline: true,
           }),
           props.user.nickname
-            ? h('div', { class: 'cogrid-label' }, [isAnchor ? h('span', { class: 'cogrid-badge cogrid-badge-anchor' }, '主播') : null, ''])
+            ? h('div', { class: 'cogrid-label' }, [isAnchor ? h('span', { class: 'cogrid-badge cogrid-badge-anchor' }, '') : null, ''])
             : null,
           // 放大按钮：不在主画面时才显示（在主画面里点击等于切回侧边栏，但保留一个按钮也行，这里侧边栏才显示）
           !props.isMain
