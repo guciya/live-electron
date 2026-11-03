@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <UIKitProvider theme="dark">
     <div class="live-player-page">
       <header class="player-header tui-window-header">
@@ -234,7 +234,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { UIKitProvider, TUIMessageBox, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
@@ -275,20 +275,20 @@ const { t } = useUIKit();
 const route = useRoute();
 const router = useRouter();
 
-const title = String(route.query.liveTitle || '');
-const anchorName = String(route.query.anchorName || '');
-const viewerCount = String(route.query.viewerCount || '0');
-const avatarRaw = String(route.query.avatar || '');
-const avatar = avatarRaw ? resolveImageUrl(avatarRaw) : '';
+let title = String(route.query.liveTitle || '');
+let anchorName = String(route.query.anchorName || '');
+let viewerCount = String(route.query.viewerCount || '0');
+const avatarRaw = computed(() => String(route.query.avatar || ''));
+const avatar = computed(() => avatarRaw.value ? resolveImageUrl(avatarRaw.value) : '');
 // IM 群组 ID（后端 room_id）与直播场次 ID（live_index_id）
-const roomId = String(route.query.roomId || '');
-const liveIndexId = String(route.query.liveId || '');
+let roomId = String(route.query.roomId || '');
+let liveIndexId = String(route.query.liveId || '');
 // 人气榜 / 在线观众接口需要数字类型的场次 ID
 const liveIndexIdNumber = computed(() => Number(liveIndexId) || undefined);
 // 主播用户 ID：关注接口的 attentionUserId
-const anchorId = Number(route.query.anchorId || 0);
+let anchorId = Number(route.query.anchorId || 0);
 // play_url 带签名参数，通过 history.state 传递（H5 项目同样做法）
-const playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
+let playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
 
 const { login, logout } = useLoginState();
 
@@ -617,7 +617,7 @@ function enterOtherLive(item: NikoLiveListItem) {
       },
       state: { playUrl: item.playUrl },
     })
-    .then(() => window.location.reload());
+    .catch((e) => console.warn('[LivePlayer] push failed:', e));
 }
 
 // 在线观众折叠组件：群消息 audience_list 下发的成员列表（liveIm 内已做解析）
@@ -1203,20 +1203,67 @@ function onClose() {
   window.ipcRenderer.send('on-close-window', null);
 }
 
-onMounted(() => {
-  unsubscribeSystem = onLiveImSystem((event) => {
-    void handleSystemEvent(event);
-  });
-  unsubscribeMembers = onLiveImMembers((members) => {
-    audienceMembers.value = members;
-  });
+/** 重新从 route.query / history.state 读取直播间元信息（let 变量 watch 时复用） */
+function refreshRouteBoundVars() {
+  title = String(route.query.liveTitle || '');
+  anchorName = String(route.query.anchorName || '');
+  viewerCount = String(route.query.viewerCount || '0');
+  roomId = String(route.query.roomId || '');
+  liveIndexId = String(route.query.liveId || '');
+  anchorId = Number(route.query.anchorId || 0);
+  playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
+}
+
+/** 初始化所有直播模块（播放器 / IM / TRTC / 状态轮询） */
+async function initLiveModules() {
+  // 1. 重置 let 变量到新房间的参数 + UI 状态
+  refreshRouteBoundVars();
+  errorText.value = '';
+  imReady.value = false;
+  chatHint.value = '聊天连接中...';
+  destroyed = false;
+  _cleanupStarted = false;
+  missingFromListCount = 0;
+  streamErrorCount = 0;
+
+  // 2. IM 事件订阅（cleanup 时 unsubscribe，这里确保重新注册）
+  if (!unsubscribeSystem) {
+    unsubscribeSystem = onLiveImSystem((event) => {
+      void handleSystemEvent(event);
+    });
+  }
+  if (!unsubscribeMembers) {
+    unsubscribeMembers = onLiveImMembers((members) => {
+      audienceMembers.value = members;
+    });
+  }
+
+  // 3. 播放器 + IM + TRTC + 状态轮询
   void startPlayback();
   void initChat();
-  // TRTC 独立连麦宫格：以观众身份进房，拉取连麦观众独立视频流
   void initTrtc();
-  // 每 2 秒对比在播列表，主播关播后 2~4 秒内必定退出（不依赖拉流错误事件）
   startLiveStatusPoll();
+}
+
+onMounted(() => {
+  void initLiveModules();
 });
+
+/**
+ * 同路由切房间（MoreLiveTray 选另一个直播间）：
+ *  先彻底清理旧房间的所有状态（IM / TRTC / FLV / 定时器），
+ *  再按新的 route.query 重新 init 所有模块。
+ *  组件本身不 reload，用户不会看到白屏闪烁。
+ */
+watch(
+  () => route.query.liveId,
+  async (newId, oldId) => {
+    if (!newId || newId === oldId) return;
+    console.log('[LivePlayer] switch live room:', oldId, '->', newId);
+    await doFullCleanup();
+    await initLiveModules();
+  },
+);
 
 // 标志位：确保 cleanup 只跑一次（handleBack / onBeforeRouteLeave / onBeforeUnmount 都会调）
 let _cleanupStarted = false;
