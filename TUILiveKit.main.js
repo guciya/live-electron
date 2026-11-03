@@ -710,6 +710,7 @@ async function createWindow(width = 1366, height = 668) {
       nodeIntegration: true,
       contextIsolation: false,
       nodeIntegrationInWorker: true,
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
   windowMap.mainCover = new BrowserWindow({
@@ -809,12 +810,13 @@ async function createWindow(width = 1366, height = 668) {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
-    backgroundColor: '#150430',
+    backgroundColor: '#01030a',
     icon: _mainIcon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
   windowMap.splash.once('ready-to-show', () => {
@@ -931,8 +933,8 @@ async function createWindow(width = 1366, height = 668) {
 
   // ============ 启动动画：加载 splash.html，并在主窗口首屏就绪后收起 ============
   const splashStartedAt = Date.now();
-  // 最短展示时长，保证动画完整播完（对应 splash.html 里的入场/进度条节奏）
-  const SPLASH_MIN_MS = 2200;
+  // 启动视频为 5 秒，完整播放后再淡出进入主窗口
+  const SPLASH_MIN_MS = 5200;
   let mainRevealed = false;
   const revealMainWindow = () => {
     if (mainRevealed) {
@@ -964,7 +966,7 @@ async function createWindow(width = 1366, height = 668) {
           if (windowMap.splash === splash) {
             windowMap.splash = null;
           }
-        }, 460);
+        }, 540);
       } else if (windowMap.splash === splash) {
         windowMap.splash = null;
       }

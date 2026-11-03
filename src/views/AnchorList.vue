@@ -230,7 +230,10 @@
 
       <!-- 悬浮圆形开播按钮：页面底部居中（仅主播展示） -->
       <button v-if="isAnchor" class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
-        <IconLiveStart class="anchor-fab-icon" />
+        <svg class="anchor-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="6" width="12" height="12" rx="2" />
+          <path d="m15 10 4.55-2.27A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.89L15 14" />
+        </svg>
         <span>开播</span>
       </button>
 
@@ -346,7 +349,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { IconLive, IconLiveStart, UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
+import { IconLive, UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import TUIMessageBox from '../TUILiveKit/common/base/MessageBox';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
@@ -922,7 +925,7 @@ onBeforeUnmount(() => {
     align-items: center;
     margin-left: 8px;
     height: 30px;
-    width: 105px;
+    width: 130px;
     padding-left: 11px;
     margin-top: 10px;
     background: rgba(255, 255, 255, 0.08);

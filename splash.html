@@ -2,413 +2,332 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Niko直播伴侣 启动中</title>
 <style>
   * { box-sizing: border-box; }
-
   html, body {
     margin: 0;
-    padding: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #1a0533;
+    background: #061b35;
     user-select: none;
     cursor: default;
   }
-
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: #fff;
+  }
   .splash {
     position: fixed;
     inset: 0;
     overflow: hidden;
     opacity: 1;
-    transition: opacity 0.4s ease;
+    background:
+      radial-gradient(circle at 50% 32%, rgba(34, 170, 255, 0.32), transparent 42%),
+      linear-gradient(135deg, #061a38 0%, #087fc1 46%, #04315e 100%);
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   }
   body.is-leaving .splash { opacity: 0; }
-
-  /* ---------- 背景场景：霓虹城市 + 巨日 ---------- */
-  /* 缓慢推进（Ken Burns），同时完成入场淡入 */
-  .scene {
+  .ambient {
+    position: absolute;
+    inset: -12%;
+    background:
+      radial-gradient(circle at 26% 26%, rgba(71, 208, 255, 0.42), transparent 30%),
+      radial-gradient(circle at 76% 70%, rgba(255, 220, 74, 0.2), transparent 28%),
+      radial-gradient(circle at 60% 10%, rgba(255, 255, 255, 0.14), transparent 24%);
+    filter: blur(20px);
+    animation: ambient-move 5s ease-in-out infinite alternate;
+  }
+  @keyframes ambient-move {
+    from { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.72; }
+    to { transform: translate3d(2%, 1%, 0) scale(1.08); opacity: 1; }
+  }
+  .video-stage {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-    animation: scene-in 4s cubic-bezier(0.25, 0.5, 0.4, 1) both;
-    will-change: transform, opacity;
-  }
-  @keyframes scene-in {
-    0%   { opacity: 0; transform: scale(1); }
-    16%  { opacity: 1; }
-    100% { opacity: 1; transform: scale(1.12); }
-  }
-
-  /* 太阳光晕缓慢呼吸 + 整体霓虹光弥漫 */
-  .splash::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at 45% 44%, rgba(255, 150, 120, 0.3), rgba(255, 90, 140, 0.1) 40%, transparent 66%);
-    pointer-events: none;
-    animation: sun-breathe 4.2s ease-in-out infinite alternate;
-  }
-  @keyframes sun-breathe {
-    0%   { opacity: 0.6; }
-    100% { opacity: 1; }
-  }
-
-  .stars-a { animation: stars-twinkle 2.8s ease-in-out infinite alternate; }
-  .stars-b { animation: stars-twinkle 3.6s ease-in-out 0.6s infinite alternate-reverse; }
-  @keyframes stars-twinkle {
-    0%   { opacity: 0.3; }
-    100% { opacity: 1; }
-  }
-
-  .windows-mid  { animation: twinkle 4.2s ease-in-out infinite alternate; }
-  .windows-near { animation: twinkle 3.4s ease-in-out 0.5s infinite alternate; }
-  @keyframes twinkle {
-    0%   { opacity: 0.5; }
-    100% { opacity: 1; }
-  }
-
-  .cloud { animation: cloud-drift 10s ease-in-out infinite alternate; }
-  .cloud.b { animation-duration: 13s; animation-delay: 0.8s; }
-  @keyframes cloud-drift {
-    0%   { transform: translateX(0); }
-    100% { transform: translateX(16px); }
-  }
-
-  /* ---------- 居中内容 ---------- */
-  .content {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 45%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    pointer-events: none;
-  }
-
-  .logo-wrap {
-    position: relative;
-    width: 150px;
-    height: 150px;
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: logo-in 1s cubic-bezier(0.18, 1.5, 0.32, 1) 0.3s both;
-  }
-  @keyframes logo-in {
-    0%   { opacity: 0; transform: translateY(16px) scale(0.8); filter: blur(8px); }
-    60%  { filter: blur(0); }
-    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  }
-
-  .halo {
-    position: absolute;
-    width: 240px;
-    height: 240px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 232, 158, 0.5), rgba(255, 150, 170, 0.2) 46%, transparent 70%);
-    animation: halo-pulse 2.8s ease-in-out 0.5s infinite;
-  }
-  @keyframes halo-pulse {
-    0%, 100% { opacity: 0.5; transform: scale(0.94); }
-    50%      { opacity: 0.95; transform: scale(1.06); }
-  }
-
-  .logo {
-    position: relative;
-    width: 150px;
-    height: 150px;
-    border-radius: 30px;
-    object-fit: cover;
-    box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.16),
-      0 0 46px rgba(255, 206, 150, 0.5),
-      0 18px 42px rgba(16, 0, 38, 0.55);
-  }
-
-  .title {
-    margin-top: 22px;
-    font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-    font-size: 24px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    color: #fff;
-    text-shadow:
-      0 1px 3px rgba(70, 0, 50, 0.5),
-      0 2px 14px rgba(70, 0, 50, 0.55),
-      0 0 28px rgba(90, 0, 60, 0.35);
-    display: flex;
-    align-items: baseline;
-    animation: text-in 0.7s ease-out 0.85s both;
-  }
-  @keyframes text-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .dots { display: inline-flex; margin-left: 2px; }
-  .dots b {
-    display: inline-block;
-    font-weight: 500;
-    opacity: 0;
-    animation: dot-blink 1.25s steps(1, end) infinite;
-  }
-  .dots b:nth-child(2) { animation-delay: 0.22s; }
-  .dots b:nth-child(3) { animation-delay: 0.44s; }
-  @keyframes dot-blink {
-    0%, 22% { opacity: 0; }
-    46%, 100% { opacity: 1; }
-  }
-
-  .progress {
-    margin-top: 28px;
-    width: 192px;
-    height: 3px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.2);
     overflow: hidden;
-    animation: text-in 0.7s ease-out 0.9s both;
+    animation: stage-in 0.8s ease-out both;
   }
-  .progress i {
-    display: block;
-    width: 0;
+  @keyframes stage-in {
+    from { opacity: 0; transform: scale(0.97); filter: blur(8px); }
+    to { opacity: 1; transform: scale(1); filter: blur(0); }
+  }
+  .splash-video,
+  .splash-fallback {
+    width: 100%;
     height: 100%;
-    border-radius: 3px;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), #ffe6a3);
-    box-shadow: 0 0 10px rgba(255, 226, 150, 0.85);
-    animation: progress-fill 1.5s cubic-bezier(0.3, 0.8, 0.4, 1) 0.55s forwards;
+    object-fit: cover;
+    object-position: center;
+    opacity: 0.94;
+    filter: saturate(1.18) contrast(1.02) brightness(1.12);
+    animation: video-push 5.2s cubic-bezier(0.18, 0.65, 0.3, 1) both;
   }
-  @keyframes progress-fill {
-    from { width: 0; }
-    to   { width: 100%; }
+  @keyframes video-push {
+    from { transform: scale(1.01); }
+    to { transform: scale(1.045); }
+  }
+  .splash-fallback { display: none; }
+  .video-failed .splash-video { display: none; }
+  .video-failed .splash-fallback { display: block; }
+  .light-sweep {
+    position: absolute;
+    inset: -30%;
+    pointer-events: none;
+    background: linear-gradient(112deg, transparent 35%, rgba(255,255,255,0.03) 43%, rgba(210,246,255,0.28) 49%, rgba(255,255,255,0.04) 55%, transparent 64%);
+    transform: translateX(-55%);
+    animation: sweep 3s cubic-bezier(0.3, 0.7, 0.3, 1) 0.25s both;
+    mix-blend-mode: screen;
+  }
+  @keyframes sweep {
+    from { transform: translateX(-55%); opacity: 0; }
+    20% { opacity: 0.9; }
+    to { transform: translateX(55%); opacity: 0; }
+  }
+  .cinema {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(1, 32, 58, 0.16), transparent 32%, transparent 68%, rgba(1, 32, 58, 0.14)),
+      linear-gradient(0deg, rgba(1, 26, 48, 0.18), transparent 24%, transparent 80%, rgba(1, 26, 48, 0.08));
+  }
+  .particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.38;
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.9) 0 1px, transparent 1.5px),
+      radial-gradient(circle, rgba(126,231,255,0.8) 0 1px, transparent 1.5px);
+    background-position: 0 0, 36px 42px;
+    background-size: 96px 96px, 132px 132px;
+    mask-image: linear-gradient(90deg, #000, transparent 36%, transparent 68%, #000);
+    animation: particles-drift 8s linear infinite;
+  }
+  @keyframes particles-drift {
+    to { background-position: 96px -96px, -96px -90px; }
+  }
+  .glass-frame {
+    position: absolute;
+    inset: 22px;
+    pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.24);
+    border-radius: 22px;
+    box-shadow: inset 0 0 40px rgba(255,255,255,0.04), 0 0 24px rgba(91,214,255,0.08);
+  }
+  .glass-frame::before,
+  .glass-frame::after {
+    content: "";
+    position: absolute;
+    width: 54px;
+    height: 54px;
+    border-color: rgba(255,255,255,0.72);
+    border-style: solid;
+  }
+  .glass-frame::before {
+    top: -1px;
+    left: -1px;
+    border-width: 2px 0 0 2px;
+    border-radius: 22px 0 0;
+  }
+  .glass-frame::after {
+    right: -1px;
+    bottom: -1px;
+    border-width: 0 2px 2px 0;
+    border-radius: 0 0 22px;
+  }
+  .live-mark {
+    position: absolute;
+    top: 42px;
+    right: 46px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 13px;
+    border: 1px solid rgba(255,255,255,0.24);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(10px);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.9);
+  }
+  .live-mark::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff38a;
+    box-shadow: 0 0 12px #fff38a;
+    animation: live-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    50% { opacity: 0.45; transform: scale(0.75); }
+  }
+  .brand {
+    position: absolute;
+    left: clamp(38px, 5.5vw, 88px);
+    top: 50%;
+    max-width: 36vw;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .brand-kicker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.42em;
+    color: rgba(201, 239, 255, 0.76);
+    opacity: 0;
+    animation: brand-in 0.8s ease-out 0.45s forwards;
+  }
+  .brand-kicker::before {
+    content: "";
+    width: 28px;
+    height: 2px;
+    background: #79e2ff;
+    box-shadow: 0 0 12px rgba(77, 214, 255, 0.9);
+  }
+  .brand-title {
+    margin: 0;
+    font-size: clamp(34px, 3.7vw, 58px);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #fff;
+    text-shadow: 0 3px 24px rgba(0, 51, 102, 0.42), 0 0 34px rgba(83, 207, 255, 0.2);
+    opacity: 0;
+    animation: brand-in 1s cubic-bezier(0.2, 0.75, 0.25, 1) 0.62s forwards;
+  }
+  .brand-subtitle {
+    margin-top: 16px;
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    color: rgba(225, 245, 255, 0.7);
+    opacity: 0;
+    animation: brand-in 0.8s ease-out 0.9s forwards;
+  }
+  @keyframes brand-in {
+    from { opacity: 0; transform: translateX(-18px); filter: blur(4px); }
+    to { opacity: 1; transform: translateX(0); filter: blur(0); }
+  }
+  .boot {
+    position: absolute;
+    right: clamp(38px, 5.5vw, 88px);
+    bottom: clamp(44px, 8vh, 78px);
+    width: clamp(180px, 18vw, 270px);
+    opacity: 0;
+    animation: boot-in 0.8s ease-out 1s forwards;
+  }
+  @keyframes boot-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .boot-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    color: rgba(226, 246, 255, 0.74);
+  }
+  .boot-percent {
+    font-family: "Consolas", monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: #fff;
+  }
+  .boot-track {
+    height: 2px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.18);
+  }
+  .boot-bar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(0);
+    transform-origin: left;
+    background: linear-gradient(90deg, #5de0ff, #fff6a5);
+    box-shadow: 0 0 12px rgba(111, 228, 255, 0.8);
+  }
+  body.is-leaving .video-stage { transform: scale(1.04); filter: brightness(1.25); }
+  body.is-leaving .brand, body.is-leaving .boot { opacity: 0; transition: opacity 0.25s ease; }
+  @media (max-width: 1000px) {
+    .brand { max-width: 31vw; }
+    .brand-title { font-size: 32px; }
+    .brand-subtitle { letter-spacing: 0.2em; }
   }
 </style>
 </head>
 <body>
 <div class="splash">
-  <svg class="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs>
-      <!-- 夜空：顶部深紫 → 品红 → 地平线红粉 -->
-      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"  stop-color="#35085c" />
-        <stop offset="16%" stop-color="#6d0c86" />
-        <stop offset="34%" stop-color="#b3128f" />
-        <stop offset="52%" stop-color="#ff2c6a" />
-        <stop offset="66%" stop-color="#ff5c62" />
-        <stop offset="82%" stop-color="#a11a9c" />
-        <stop offset="100%" stop-color="#3d0b63" />
-      </linearGradient>
-
-      <!-- 巨日 -->
-      <radialGradient id="sun" cx="50%" cy="50%" r="50%">
-        <stop offset="0%"   stop-color="#fffbe4" />
-        <stop offset="45%"  stop-color="#ffefbe" />
-        <stop offset="72%"  stop-color="#ffdd93" />
-        <stop offset="100%" stop-color="#ffc072" />
-      </radialGradient>
-
-      <!-- 太阳下半部分的粉红雾，让白色文案有足够对比 -->
-      <linearGradient id="sunHaze" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="#ff5c78" stop-opacity="0" />
-        <stop offset="45%"  stop-color="#ff4f72" stop-opacity="0.28" />
-        <stop offset="100%" stop-color="#ff3d68" stop-opacity="0.5" />
-      </linearGradient>
-
-      <linearGradient id="farCity" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#612096" />
-        <stop offset="100%" stop-color="#3c0e70" />
-      </linearGradient>
-      <linearGradient id="midCity" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#291047" />
-        <stop offset="100%" stop-color="#12032b" />
-      </linearGradient>
-      <linearGradient id="nearCity" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#130426" />
-        <stop offset="100%" stop-color="#05010d" />
-      </linearGradient>
-
-      <linearGradient id="horizonGlow" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#ff4f9a" stop-opacity="0" />
-        <stop offset="100%" stop-color="#ff3f8a" stop-opacity="0.45" />
-      </linearGradient>
-      <linearGradient id="bottomFog" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#6a1a9e" stop-opacity="0.18" />
-        <stop offset="100%" stop-color="#11031f" stop-opacity="0.92" />
-      </linearGradient>
-
-      <!-- 中层霓虹窗：青 + 粉 -->
-      <pattern id="winMid" width="26" height="30" patternUnits="userSpaceOnUse">
-        <rect x="5"  y="6"  width="8" height="10" fill="#61e9ff" opacity="0.6" />
-        <rect x="17" y="6"  width="4" height="7"  fill="#ff5bd0" opacity="0.45" />
-        <rect x="5"  y="21" width="8" height="3"  fill="#c9f8ff" opacity="0.25" />
-        <rect x="17" y="21" width="4" height="3"  fill="#ff9ae8" opacity="0.2" />
-      </pattern>
-
-      <!-- 近景霓虹窗：更亮 -->
-      <pattern id="winNear" width="32" height="36" patternUnits="userSpaceOnUse">
-        <rect x="6"  y="8"  width="10" height="12" fill="#7ef6ff" opacity="0.8" />
-        <rect x="21" y="8"  width="6"  height="9"  fill="#ff6bdf" opacity="0.7" />
-        <rect x="6"  y="26" width="10" height="4"  fill="#fff0ff" opacity="0.45" />
-        <rect x="21" y="26" width="6"  height="4"  fill="#a8f4ff" opacity="0.35" />
-      </pattern>
-    </defs>
-
-    <!-- 夜空 -->
-    <rect x="0" y="0" width="1600" height="1000" fill="url(#sky)" />
-
-    <!-- 星星（上方品红区域） -->
-    <g class="stars-a" fill="#fff" opacity="0.85">
-      <circle cx="120" cy="60"  r="2" />
-      <circle cx="250" cy="140" r="1.6" />
-      <circle cx="380" cy="45"  r="2.2" />
-      <circle cx="520" cy="120" r="1.5" />
-      <circle cx="640" cy="35"  r="1.8" />
-      <circle cx="760" cy="95"  r="2.4" />
-      <circle cx="900" cy="150" r="1.5" />
-      <circle cx="1030" cy="55" r="2" />
-      <circle cx="1160" cy="125" r="1.7" />
-      <circle cx="1290" cy="40" r="2.1" />
-      <circle cx="1420" cy="105" r="1.5" />
-      <circle cx="1530" cy="60" r="1.9" />
-    </g>
-    <g class="stars-b" fill="#ffd9f4" opacity="0.7">
-      <circle cx="60"  cy="200" r="1.6" />
-      <circle cx="300" cy="230" r="2" />
-      <circle cx="460" cy="180" r="1.4" />
-      <circle cx="990" cy="190" r="2.2" />
-      <circle cx="1120" cy="240" r="1.5" />
-      <circle cx="1350" cy="215" r="1.9" />
-      <circle cx="1490" cy="175" r="1.6" />
-    </g>
-
-    <!-- 巨日 + 光晕 -->
-    <circle cx="720" cy="470" r="400" fill="#ff9d86" opacity="0.16" />
-    <circle cx="720" cy="470" r="330" fill="url(#sun)" />
-    <ellipse cx="720" cy="560" rx="470" ry="230" fill="url(#sunHaze)" />
-
-    <!-- 地平线附近薄云 -->
-    <g class="cloud a" fill="#ff7fa8" opacity="0.3" style="filter: blur(16px)">
-      <ellipse cx="330" cy="520" rx="220" ry="22" />
-      <ellipse cx="1200" cy="540" rx="260" ry="24" />
-    </g>
-    <g class="cloud b" fill="#ffb0c4" opacity="0.22" style="filter: blur(20px)">
-      <ellipse cx="820" cy="600" rx="300" ry="20" />
-      <ellipse cx="1400" cy="590" rx="200" ry="18" />
-    </g>
-
-    <!-- 远景城市 -->
-    <g fill="url(#farCity)" opacity="0.92">
-      <rect x="30"  y="700" width="60" height="300" />
-      <rect x="100" y="660" width="42" height="340" />
-      <rect x="152" y="735" width="88" height="265" />
-      <rect x="252" y="690" width="52" height="310" />
-      <rect x="312" y="760" width="70" height="240" />
-      <rect x="392" y="705" width="56" height="295" />
-      <rect x="458" y="665" width="80" height="335" />
-      <rect x="552" y="742" width="46" height="258" />
-      <rect x="612" y="775" width="76" height="225" />
-      <rect x="702" y="728" width="60" height="272" />
-      <rect x="782" y="688" width="52" height="312" />
-      <rect x="844" y="748" width="86" height="252" />
-      <rect x="944" y="700" width="46" height="300" />
-      <rect x="1004" y="762" width="70" height="238" />
-      <rect x="1084" y="712" width="56" height="288" />
-      <rect x="1154" y="748" width="90" height="252" />
-      <rect x="1254" y="692" width="60" height="308" />
-      <rect x="1324" y="738" width="80" height="262" />
-      <rect x="1414" y="700" width="50" height="300" />
-      <rect x="1474" y="746" width="70" height="254" />
-      <rect x="1554" y="706" width="40" height="294" />
-    </g>
-
-    <rect x="0" y="650" width="1600" height="200" fill="url(#horizonGlow)" opacity="0.5" />
-
-    <!-- 中景城市 -->
-    <g>
-      <rect x="0"    y="600" width="112" height="400" fill="url(#midCity)" />
-      <rect x="132"  y="680" width="70"  height="320" fill="url(#midCity)" />
-      <rect x="210"  y="470" width="122" height="530" fill="url(#midCity)" />
-      <rect x="228"  y="432" width="6"   height="40"  fill="#2a0a4f" />
-      <rect x="342"  y="660" width="62"  height="340" fill="url(#midCity)" />
-      <rect x="412"  y="560" width="112" height="440" fill="url(#midCity)" />
-      <rect x="532"  y="700" width="80"  height="300" fill="url(#midCity)" />
-      <rect x="622"  y="745" width="102" height="255" fill="url(#midCity)" />
-      <rect x="730"  y="735" width="92"  height="265" fill="url(#midCity)" />
-      <rect x="828"  y="745" width="70"  height="255" fill="url(#midCity)" />
-      <rect x="910"  y="540" width="122" height="460" fill="url(#midCity)" />
-      <rect x="1042" y="680" width="80"  height="320" fill="url(#midCity)" />
-      <rect x="1122" y="470" width="142" height="530" fill="url(#midCity)" />
-      <rect x="1180" y="422" width="7"   height="50"  fill="#2a0a4f" />
-      <rect x="1272" y="640" width="92"  height="360" fill="url(#midCity)" />
-      <rect x="1372" y="540" width="112" height="460" fill="url(#midCity)" />
-      <rect x="1492" y="600" width="108" height="400" fill="url(#midCity)" />
-    </g>
-    <g class="windows-mid" opacity="0.95">
-      <rect x="0"    y="600" width="112" height="400" fill="url(#winMid)" />
-      <rect x="132"  y="680" width="70"  height="320" fill="url(#winMid)" />
-      <rect x="210"  y="470" width="122" height="530" fill="url(#winMid)" />
-      <rect x="342"  y="660" width="62"  height="340" fill="url(#winMid)" />
-      <rect x="412"  y="560" width="112" height="440" fill="url(#winMid)" />
-      <rect x="532"  y="700" width="80"  height="300" fill="url(#winMid)" />
-      <rect x="622"  y="745" width="102" height="255" fill="url(#winMid)" />
-      <rect x="730"  y="735" width="92"  height="265" fill="url(#winMid)" />
-      <rect x="828"  y="745" width="70"  height="255" fill="url(#winMid)" />
-      <rect x="910"  y="540" width="122" height="460" fill="url(#winMid)" />
-      <rect x="1042" y="680" width="80"  height="320" fill="url(#winMid)" />
-      <rect x="1122" y="470" width="142" height="530" fill="url(#winMid)" />
-      <rect x="1272" y="640" width="92"  height="360" fill="url(#winMid)" />
-      <rect x="1372" y="540" width="112" height="460" fill="url(#winMid)" />
-      <rect x="1492" y="600" width="108" height="400" fill="url(#winMid)" />
-    </g>
-
-    <!-- 近景城市 -->
-    <g>
-      <rect x="0"    y="790" width="142" height="210" fill="url(#nearCity)" />
-      <rect x="152"  y="845" width="102" height="155" fill="url(#nearCity)" />
-      <rect x="272"  y="735" width="150" height="265" fill="url(#nearCity)" />
-      <rect x="442"  y="845" width="120" height="155" fill="url(#nearCity)" />
-      <rect x="580"  y="792" width="132" height="208" fill="url(#nearCity)" />
-      <rect x="732"  y="880" width="142" height="120" fill="url(#nearCity)" />
-      <rect x="892"  y="826" width="122" height="174" fill="url(#nearCity)" />
-      <rect x="1032" y="772" width="152" height="228" fill="url(#nearCity)" />
-      <rect x="1192" y="845" width="132" height="155" fill="url(#nearCity)" />
-      <rect x="1342" y="735" width="162" height="265" fill="url(#nearCity)" />
-      <rect x="1522" y="810" width="120" height="190" fill="url(#nearCity)" />
-    </g>
-    <g class="windows-near" opacity="0.95">
-      <rect x="0"    y="790" width="142" height="210" fill="url(#winNear)" />
-      <rect x="152"  y="845" width="102" height="155" fill="url(#winNear)" />
-      <rect x="272"  y="735" width="150" height="265" fill="url(#winNear)" />
-      <rect x="442"  y="845" width="120" height="155" fill="url(#winNear)" />
-      <rect x="580"  y="792" width="132" height="208" fill="url(#winNear)" />
-      <rect x="732"  y="880" width="142" height="120" fill="url(#winNear)" />
-      <rect x="892"  y="826" width="122" height="174" fill="url(#winNear)" />
-      <rect x="1032" y="772" width="152" height="228" fill="url(#winNear)" />
-      <rect x="1192" y="845" width="132" height="155" fill="url(#winNear)" />
-      <rect x="1342" y="735" width="162" height="265" fill="url(#winNear)" />
-      <rect x="1522" y="810" width="120" height="190" fill="url(#winNear)" />
-    </g>
-
-    <!-- 底部雾气，压暗前景保证文案可读 -->
-    <rect x="0" y="840" width="1600" height="160" fill="url(#bottomFog)" />
-  </svg>
-
-  <div class="content">
-    <div class="logo-wrap">
-      <div class="halo"></div>
-      <img class="logo" src="./src/assets/niko-logo.png" alt="Niko" />
-    </div>
-    <div class="title">
-      Niko直播启动中<span class="dots"><b>.</b><b>.</b><b>.</b></span>
-    </div>
-    <div class="progress"><i></i></div>
+  <div class="ambient"></div>
+  <div class="video-stage">
+    <video id="splash-video" class="splash-video" src="./src/assets/niko-splash-4k.mp4" autoplay muted playsinline preload="auto"></video>
+    <audio id="splash-welcome" src="./src/assets/niko-welcome.wav" autoplay preload="auto"></audio>
+    <img class="splash-fallback" src="./src/assets/niko-login-bg-4k.jpg" alt="" />
   </div>
+  <div class="light-sweep"></div>
+  <div class="cinema"></div>
+  <div class="particles"></div>
+  <div class="glass-frame"></div>
+  <div class="live-mark">NIKO · LIVE</div>
+
+  <main class="brand">
+    <div class="brand-kicker">NIKO LIVE COMPANION</div>
+    <h1 class="brand-title">Niko直播伴侣</h1>
+    <div class="brand-subtitle">快乐开播，即刻出发</div>
+  </main>
+
+  <footer class="boot">
+    <div class="boot-meta">
+      <span id="boot-status">直播系统启动中</span>
+      <span class="boot-percent" id="boot-percent">00%</span>
+    </div>
+    <div class="boot-track"><i class="boot-bar" id="boot-bar"></i></div>
+  </footer>
 </div>
+<script>
+(function () {
+  var video = document.getElementById('splash-video');
+  var bar = document.getElementById('boot-bar');
+  var percent = document.getElementById('boot-percent');
+  var status = document.getElementById('boot-status');
+  var startedAt = performance.now();
+
+  function update() {
+    var progress;
+    if (video.duration && isFinite(video.duration)) {
+      progress = video.currentTime / video.duration;
+    } else {
+      progress = (performance.now() - startedAt) / 5000;
+    }
+    progress = Math.max(0, Math.min(1, progress));
+    bar.style.transform = 'scaleX(' + progress + ')';
+    percent.textContent = String(Math.round(progress * 100)).padStart(2, '0') + '%';
+    if (progress >= 0.99) status.textContent = 'Niko直播伴侣 准备就绪';
+    requestAnimationFrame(update);
+  }
+
+  video.addEventListener('error', function () {
+    document.body.classList.add('video-failed');
+  });
+  video.addEventListener('ended', function () {
+    status.textContent = 'Niko直播伴侣 准备就绪';
+  });
+  requestAnimationFrame(update);
+})();
+</script>
 </body>
 </html>

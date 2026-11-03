@@ -1,7 +1,11 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-login-page">
-    <video class="tui-login-bg-video" :src="loginBgVideo" autoplay loop muted playsinline></video>
+    <div class="tui-login-bg" aria-hidden="true">
+      <video class="tui-login-bg-video" :src="loginStageVideo" autoplay loop muted playsinline></video>
+      <audio ref="loginDjAudio" :src="loginDjAudioSrc" autoplay loop preload="auto"></audio>
+      <canvas ref="loginThreeCanvas" class="tui-login-bg-three"></canvas>
+    </div>
     <div class="tui-login-header">
       <div class="window-tool tui-window-header">
         <button class="tui-live-icon" @click="onMinimize">
@@ -77,7 +81,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, Ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, Ref } from 'vue';
+import * as THREE from 'three';
+import loginStageVideo from '../../assets/niko-login-stage.mp4';
+import loginDjAudioSrc from '../../assets/niko-login-dj.mp4';
 import router from '../../router';
 import { getWindowType } from '../../TUILiveKit/utils/envUtils';
 import { UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
@@ -93,7 +100,6 @@ import { USER_INFO_STORAGE_KEY } from '../../TUILiveKit/utils/userInfoStorage';
 import { NIKO_CONFIG } from '../../niko/config';
 import { useAuthStore } from '../../niko/store/auth';
 import { codeLogin, sendVerifyCode } from '../../niko/api/user';
-import loginBgVideo from '../../assets/niko-live-video.mp4';
 
 const { t } = useUIKit();
 const authStore = useAuthStore();
@@ -109,6 +115,163 @@ const countdown = ref(0);
 let countdownTimer: number | null = null;
 
 const canSend = computed(() => /^1[3-9]\d{9}$/.test(mobile.value));
+const loginThreeCanvas = ref<HTMLCanvasElement | null>(null);
+const loginDjAudio = ref<HTMLAudioElement | null>(null);
+let loginThreeCleanup: (() => void) | null = null;
+
+function playLoginDj() {
+  const audio = loginDjAudio.value;
+  if (!audio) return;
+  audio.volume = 0.32;
+  void audio.play().catch(() => undefined);
+}
+
+function initLoginThree(canvas: HTMLCanvasElement) {
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  } catch {
+    return () => undefined;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  renderer.setClearColor(0x000000, 0);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  camera.position.set(0, 0, 8.6);
+
+
+
+
+
+  const fireworks: Array<{
+    points: THREE.Points;
+    velocities: Float32Array;
+    life: number;
+    duration: number;
+  }> = [];
+  const raycaster = new THREE.Raycaster();
+  const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const onPointerDown = (event: PointerEvent) => {
+    const pointer = new THREE.Vector2(
+      (event.clientX / window.innerWidth) * 2 - 1,
+      -(event.clientY / window.innerHeight) * 2 + 1,
+    );
+    raycaster.setFromCamera(pointer, camera);
+    const origin = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(clickPlane, origin)) return;
+
+    const count = 120;
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const fireworkPalette = [0x62e9ff, 0xffd75e, 0xc47cff, 0xff6ea9, 0xffffff];
+    for (let index = 0; index < count; index += 1) {
+      positions[index * 3] = origin.x;
+      positions[index * 3 + 1] = origin.y;
+      positions[index * 3 + 2] = origin.z;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.1 + Math.random() * 2.6;
+      velocities[index * 3] = Math.cos(angle) * speed;
+      velocities[index * 3 + 1] = Math.sin(angle) * speed + 0.9;
+      velocities[index * 3 + 2] = (Math.random() - 0.5) * 1.8;
+      const color = new THREE.Color(fireworkPalette[index % fireworkPalette.length]);
+      colors[index * 3] = color.r;
+      colors[index * 3 + 1] = color.g;
+      colors[index * 3 + 2] = color.b;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({
+      size: 0.075,
+      vertexColors: true,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+    fireworks.push({ points, velocities, life: 1.65, duration: 1.65 });
+  };
+  window.addEventListener('pointerdown', onPointerDown, { passive: true });
+
+  const resize = () => {
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    const width = parent.clientWidth;
+    const height = parent.clientHeight;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / Math.max(height, 1);
+    camera.updateProjectionMatrix();
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas.parentElement!);
+  resize();
+
+  const clock = new THREE.Clock();
+  let animationFrame = 0;
+  const animate = () => {
+    const delta = Math.min(clock.getDelta(), 0.033);
+    for (let index = fireworks.length - 1; index >= 0; index -= 1) {
+      const firework = fireworks[index];
+      const attribute = firework.points.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const positions = attribute.array as Float32Array;
+      for (let particle = 0; particle < firework.velocities.length / 3; particle += 1) {
+        const offset = particle * 3;
+        const damping = Math.pow(0.985, delta * 60);
+        firework.velocities[offset] *= damping;
+        firework.velocities[offset + 1] = firework.velocities[offset + 1] * damping - 1.65 * delta;
+        firework.velocities[offset + 2] *= damping;
+        positions[offset] += firework.velocities[offset] * delta;
+        positions[offset + 1] += firework.velocities[offset + 1] * delta;
+        positions[offset + 2] += firework.velocities[offset + 2] * delta;
+      }
+      attribute.needsUpdate = true;
+      firework.life -= delta;
+      (firework.points.material as THREE.PointsMaterial).opacity = Math.max(0, firework.life / firework.duration);
+      if (firework.life <= 0) {
+        scene.remove(firework.points);
+        firework.points.geometry.dispose();
+        (firework.points.material as THREE.Material).dispose();
+        fireworks.splice(index, 1);
+      }
+    }
+    renderer.render(scene, camera);
+    animationFrame = requestAnimationFrame(animate);
+  };
+  animate();
+
+  return () => {
+    cancelAnimationFrame(animationFrame);
+    resizeObserver.disconnect();
+    window.removeEventListener('pointerdown', onPointerDown);
+    scene.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose();
+      if (mesh.material) {
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => {
+          const spriteMaterial = material as THREE.SpriteMaterial;
+          spriteMaterial.map?.dispose();
+          material.dispose();
+        });
+      }
+    });
+    renderer.dispose();
+  };
+}
+
+onMounted(() => {
+  if (loginThreeCanvas.value) {
+    loginThreeCleanup = initLoginThree(loginThreeCanvas.value);
+  }
+  playLoginDj();
+  window.addEventListener('pointerdown', playLoginDj, { once: true });
+});
 
 function startCountdown() {
   countdown.value = 60;
@@ -267,6 +430,10 @@ async function gotoNextPage() {
 }
 
 onBeforeUnmount(() => {
+  loginThreeCleanup?.();
+  loginThreeCleanup = null;
+  window.removeEventListener('pointerdown', playLoginDj);
+  loginDjAudio.value?.pause();
   if (countdownTimer !== null) {
     clearInterval(countdownTimer);
     countdownTimer = null;
@@ -303,14 +470,43 @@ function onClose() {
   overflow: hidden;
   background-color: #0b0d12;
 
+  .tui-login-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    background: #030718;
+  }
+
   .tui-login-bg-video {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
+    z-index: 0;
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    z-index: 0;
+    filter: brightness(0.72) saturate(1.25) contrast(1.08);
+  }
+
+  .tui-login-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(2, 4, 18, 0.06) 0%, rgba(2, 4, 18, 0.12) 45%, rgba(2, 4, 18, 0.62) 100%),
+      linear-gradient(180deg, rgba(2, 4, 18, 0.22) 0%, transparent 28%, rgba(2, 4, 18, 0.2) 100%);
+  }
+
+  .tui-login-bg-three {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
   }
 
   .tui-login-header,
