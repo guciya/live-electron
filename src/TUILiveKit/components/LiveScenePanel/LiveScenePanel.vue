@@ -1,15 +1,17 @@
 <template>
-  <div class="live-scene-panel" :class="{ 'no-material': mediaSourceList.length === 0 }">
-    <LiveSceneSelect :displayMode="mediaSourceList.length === 0 ? 'panel' : 'button'" @add-material="selectMaterial" />
+  <div class="live-scene-panel" :class="{ 'no-material': !hasAnyMaterial }">
+    <LiveSceneSelect :displayMode="!hasAnyMaterial ? 'panel' : 'button'" @add-material="selectMaterial" />
     <div class="materials-list">
-      <template v-for="material in mediaSourceListWithZOrderSort" :key="getMaterialKey(material)">
+      <template v-for="material in mediaSourceListStableOrder" :key="getMaterialKey(material)">
         <MaterialItem
           :material="material"
+          :is-active="selectedMaterialKey === getMaterialKey(material)"
           :is-menu-visible="visibleMenuKey === getMaterialKey(material)"
           :can-move-up="canMoveUp(material)"
           :can-move-down="canMoveDown(material)"
           :is-moving="movingKey === getMaterialKey(material)"
           @select="handleSelectMaterial"
+          @toggle-enabled="handleToggleCameraEnabled"
           @toggle-menu="handleToggleMenu"
           @close-menu="handleCloseMenu"
           @move-up="handleMoveMaterialUp"
@@ -20,23 +22,44 @@
           @rename="updateMaterialName(material)"
         />
       </template>
+      <!-- 已关闭的摄像头：保留列表项，点击眼睛图标重新打开 -->
+      <template v-for="material in disabledMaterialList" :key="getMaterialKey(material)">
+        <MaterialItem
+          :material="material"
+          :is-active="false"
+          :is-disabled="true"
+          :is-menu-visible="false"
+          :can-move-up="false"
+          :can-move-down="false"
+          :is-moving="false"
+          @toggle-enabled="handleToggleCameraEnabled"
+        />
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { TRTCMediaSourceType } from '@tencentcloud/tuiroom-engine-electron';
+import { computed, ref, watch } from 'vue';
+import { TRTCMediaSourceType, TRTCVideoMirrorType } from '@tencentcloud/tuiroom-engine-electron';
 import { useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { showMessage, MessageToastType } from '../../base-component/MessageToast';
 import { useVideoMixerState, MediaSource } from 'tuikit-atomicx-vue3-electron';
 import LiveSceneSelect from './LiveSceneSelect.vue';
 import MaterialItem from './MaterialItem.vue';
+import {
+  disabledCameras,
+  getDisabledCamera,
+  markCameraDisabled,
+  markCameraEnabled,
+} from './cameraVisibilityStore';
 
 const { t } = useUIKit();
 const {
   addMediaSource,
+  removeMediaSource,
   mediaSourceList,
+  activeMediaSource,
   updateMediaSource,
 } = useVideoMixerState();
 
@@ -49,14 +72,62 @@ const emits = defineEmits([
   'on-rename-material',
 ]);
 
+// 列表按插入顺序渲染（不按 zOrder 排序）：zOrder 只决定混流里谁在最上层渲染，
+// 点选不应该让列表视觉上跳动/重新排序。
+const mediaSourceListStableOrder = computed(() => mediaSourceList.value);
 const mediaSourceListWithZOrderSort = computed(() => [...mediaSourceList.value].sort(
   (item1: MediaSource, item2: MediaSource) => (item2.zOrder || 0) - (item1.zOrder || 0),
 ));
+
+// 已关闭的摄像头（不在混流里）也渲染成列表项，眼睛图标点击可重新打开
+const disabledMaterialList = computed<MediaSource[]>(() => disabledCameras.value.map((camera) => ({
+  sourceId: camera.deviceId,
+  sourceType: TRTCMediaSourceType.kCamera,
+  name: camera.deviceName || t('Camera'),
+  width: camera.width || 1280,
+  height: camera.height || 720,
+  mirrorType: camera.mirrorType,
+  zOrder: -1,
+} as MediaSource)));
+
+const hasAnyMaterial = computed(
+  () => mediaSourceList.value.length > 0 || disabledCameras.value.length > 0,
+);
 
 const visibleMenuKey = ref('');
 const movingKey = ref('');
 
 const getMaterialKey = (material: MediaSource) => `${material.sourceType}::${material.sourceId}`;
+
+// 面板自己记住当前激活项：蓝色高亮不依赖 SDK 的 isSelected
+// （点击预览空白处等场景 SDK 会取消选中，导致鼠标移开后高亮消失）
+const selectedMaterialKey = ref('');
+watch(
+  () => (activeMediaSource.value ? getMaterialKey(activeMediaSource.value) : ''),
+  (key) => {
+    if (key) {
+      selectedMaterialKey.value = key;
+    }
+  },
+  { immediate: true },
+);
+
+// 防护 SDK designer 的 document 级 mousedown/mouseup 监听导致的 emitOnSelect(null)：
+// 任何在面板/其他非预览容器里的点击都会让 designer 走 L446-448 或 L512-514 emitOnSelect(null)，
+// 把 SDK 的 isSelected 全部清掉。一旦 activeMediaSource 被清空且我们有本地记录的选中项，
+// 立即恢复选中态。配合 handleSelectMaterial 里的 setTimeout(0) 形成双保险。
+watch(activeMediaSource, (newVal) => {
+  if (newVal) return;
+  if (!selectedMaterialKey.value) return;
+  const target = mediaSourceList.value.find(
+    item => getMaterialKey(item) === selectedMaterialKey.value,
+  );
+  if (!target || target.isSelected) return;
+  // 放到下一个 tick：避免在 watch 回调里同步 await
+  setTimeout(() => {
+    updateMediaSource(target, { isSelected: true }).catch(() => {});
+  }, 0);
+});
 
 const handleSelectMaterial = async (material: MediaSource) => {
   visibleMenuKey.value = '';
@@ -66,28 +137,89 @@ const handleSelectMaterial = async (material: MediaSource) => {
     return;
   }
 
-  // 直接改 isSelected 标记，不要用 updateMediaSource(item, { isSelected: false })：
-  // SDK 内部实现里 `e.isSelected` 仍是旧值 true，会让 updateMediaSource 重新把该源选中，
-  // 导致点击其它摄像头后旧源依旧保持选中态，永远切不过去、也没有激活高亮。
-  const changed = !target.isSelected;
-  mediaSourceList.value.forEach((item) => {
-    item.isSelected = getMaterialKey(item) === targetKey;
-  });
+  // 面板本地高亮，保持选中态（不受 SDK emitOnSelect(null) 影响）
+  selectedMaterialKey.value = targetKey;
 
-  if (!changed) {
+  if (target.isSelected) {
     return;
   }
 
-  // 多路摄像头都铺满混流画布时，预览上可见的是 zOrder 最高的那一路。
-  // 选中项置顶，点击列表才能真正切换预览画面。
-  const maxZOrder = Math.max(
+  // 所有摄像头默认 rect 都是 (0,0)，叠在一起——谁 zOrder 最高谁可见。
+  // 点选要让被选中的摄像头"显示出来"，必须 bump zOrder；但列表显示不按 zOrder 排序，
+  // 所以点选后列表视觉稳定，不会自动重排。
+  const curMaxZ = mediaSourceList.value.reduce(
+    (max: number, m: MediaSource) => Math.max(max, m.zOrder || 0),
     0,
-    ...mediaSourceList.value.map(item => item.zOrder || 0),
   );
+
   try {
-    await updateMediaSource(target, { isSelected: true, zOrder: maxZOrder + 1 });
+    await updateMediaSource(target, { isSelected: true, zOrder: curMaxZ + 1 });
   } catch (error) {
     console.warn('[LiveScenePanel] select material failed:', error);
+  }
+
+  // SDK designer 注册了 document 级的 mousedown 监听器——任何在面板上的点都会被它检测成
+  // "在容器外点击"，进而触发 emitOnSelect(null)，把 SDK 的 isSelected 全部清掉。
+  // 这个 emitOnSelect 发生在 mousedown（click 之前）或 mouseup（在容器外），
+  // 时机不确定。我们用两层防护：
+  //   1) setTimeout(0)：下一个微任务再选一次，吃掉 mousedown 触发的 emitOnSelect(null)；
+  //   2) 下方 watch(activeMediaSource, ...)：监听 SDK 清选中，自动恢复本地记录的选中项
+  setTimeout(() => {
+    updateMediaSource(target, { isSelected: true }).catch(() => {});
+  }, 0);
+};
+
+const handleToggleCameraEnabled = async (material: MediaSource) => {
+  const sourceId = String(material.sourceId);
+  const disabled = getDisabledCamera(sourceId);
+  if (disabled) {
+    // 重新打开：把摄像头重新加入混流（会重新打开设备并自动置顶/选中）
+    // 先清掉关闭记录，避免添加过程中列表同时渲染「启用项 + 闭眼项」造成重复闪一下
+    markCameraEnabled(sourceId);
+    try {
+      const width = disabled.width || 1280;
+      const height = disabled.height || 720;
+      await addMediaSource({
+        sourceId: disabled.deviceId,
+        sourceType: TRTCMediaSourceType.kCamera,
+        name: disabled.deviceName || material.name || t('Camera'),
+        width,
+        height,
+        rect: { left: 0, top: 0, right: width, bottom: height },
+        mirrorType: disabled.mirrorType ?? TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
+      } as MediaSource);
+    } catch (error) {
+      // 打开失败：恢复闭眼项，用户可重试
+      markCameraDisabled(disabled);
+      console.warn('[LiveScenePanel] enable camera failed:', error);
+      showMessage({
+        type: MessageToastType.Error,
+        message: t('Failed to add camera'),
+      });
+    }
+    return;
+  }
+
+  // 关闭：从混流移除以释放摄像头设备，但列表项保留（闭眼状态），随时可再打开
+  try {
+    await removeMediaSource(material);
+    // 关闭的正是当前激活项时清掉本地高亮，避免闭眼项仍显示蓝色选中态
+    if (selectedMaterialKey.value === getMaterialKey(material)) {
+      selectedMaterialKey.value = '';
+    }
+    markCameraDisabled({
+      deviceId: sourceId,
+      deviceName: material.name,
+      width: material.width,
+      height: material.height,
+      mirrorType: material.mirrorType,
+    });
+  } catch (error) {
+    console.warn('[LiveScenePanel] disable camera failed:', error);
+    showMessage({
+      type: MessageToastType.Error,
+      message: t('Failed to remove media source'),
+    });
   }
 };
 

@@ -6,6 +6,19 @@
         <span class="niko-pk-close" @click="close">×</span>
       </div>
 
+      <div class="niko-pk-tabs">
+        <span
+          class="niko-pk-tab"
+          :class="{ 'is-active': activeTab === 'friend' }"
+          @click="switchTab('friend')"
+        >好友</span>
+        <span
+          class="niko-pk-tab"
+          :class="{ 'is-active': activeTab === 'recommend' }"
+          @click="switchTab('recommend')"
+        >推荐</span>
+      </div>
+
       <div class="niko-pk-search-row">
         <input
           v-model="keyword"
@@ -19,7 +32,7 @@
 
       <div class="niko-pk-list">
         <div v-if="loading" class="niko-pk-tip">{{ t('加载中...') }}</div>
-        <div v-else-if="anchors.length === 0" class="niko-pk-tip">{{ t('暂无主播') }}</div>
+        <div v-else-if="anchors.length === 0" class="niko-pk-tip">{{ emptyTip }}</div>
         <div
           v-for="anchor in anchors"
           :key="String(anchor.user_id ?? anchor.anchor_id)"
@@ -51,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { getPkAnchorList, invitePk, type PkAnchorItem } from '../api/live';
 import { resolveImageUrl } from '../config';
@@ -81,6 +94,22 @@ const keyword = ref('');
 const loading = ref(false);
 const inviting = ref(false);
 
+/** 当前 Tab：friend=好友（isFriend=1）/ recommend=推荐（isFriend=0） */
+type PkTab = 'friend' | 'recommend';
+const activeTab = ref<PkTab>('recommend');
+
+const isFriendForApi = computed(() => (activeTab.value === 'friend' ? 1 : 0));
+
+const emptyTip = computed(() =>
+  activeTab.value === 'friend' ? '暂无好友主播' : '暂无推荐主播',
+);
+
+function switchTab(tab: PkTab) {
+  if (activeTab.value === tab) return;
+  activeTab.value = tab;
+  void loadAnchors();
+}
+
 function close() {
   emit('update:visible', false);
 }
@@ -92,7 +121,12 @@ function onAvatarError(event: Event) {
 async function loadAnchors() {
   loading.value = true;
   try {
-    const res = await getPkAnchorList(keyword.value.trim());
+    const res = await getPkAnchorList(
+      keyword.value.trim(),
+      1,
+      50,
+      isFriendForApi.value,
+    );
     const list: PkAnchorItem[] = Array.isArray(res)
       ? res
       : ((res as any)?.list || (res as any)?.data || []);
@@ -100,7 +134,7 @@ async function loadAnchors() {
     anchors.value = exclude.size
       ? list.filter(item => !exclude.has(String(item.user_id ?? item.anchor_id)))
       : list;
-    console.log('[NikoPK] liveAnchorList:', anchors.value.length);
+    console.log('[NikoPK] liveAnchorList tab=', activeTab.value, 'count:', anchors.value.length);
   } catch (error: any) {
     anchors.value = [];
     console.warn('[NikoPK] liveAnchorList failed:', error?.message || error);
@@ -135,6 +169,8 @@ watch(
   (visible) => {
     if (visible) {
       keyword.value = '';
+      // 每次打开默认回到推荐 Tab
+      activeTab.value = 'recommend';
       void loadAnchors();
     }
   },
@@ -154,9 +190,9 @@ watch(
 }
 
 .niko-pk-dialog {
-  width: 460px;
-  height: 76vh;
-  min-height: 480px;
+  width: 555px;
+  height: 52vh;
+  min-height: 520px;
   max-height: 86vh;
   display: flex;
   flex-direction: column;
@@ -172,7 +208,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .niko-pk-title {
@@ -189,6 +225,42 @@ watch(
 
 .niko-pk-close:hover {
   color: #fff;
+}
+
+.niko-pk-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.niko-pk-tab {
+  position: relative;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.niko-pk-tab:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.niko-pk-tab.is-active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.niko-pk-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: #1677ff;
 }
 
 .niko-pk-search-row {
@@ -210,7 +282,7 @@ watch(
 }
 
 .niko-pk-search:focus {
-  border-color: #2b7fff;
+  border-color: #1677ff;
 }
 
 .niko-pk-search-btn {
@@ -267,7 +339,7 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(43, 127, 255, 0.5), rgba(43, 127, 255, 0.2));
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.5), rgba(22, 119, 255, 0.2));
   color: #fff;
   font-size: 14px;
 }

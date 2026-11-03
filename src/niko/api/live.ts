@@ -19,6 +19,16 @@ export interface PrepareLiveInfo {
   live_cover?: string;
   live_category_id?: string | number;
   orientation?: string;
+  /** 是否门票直播 */
+  is_charge?: boolean;
+  /** 直播预览开关 */
+  is_open_live_preview?: boolean;
+  /** 免费预览时长（秒） */
+  free_preview_duration_second?: number;
+  /** 已添加的免费观众数量 */
+  free_viewer_count?: number;
+  /** 门票金额 */
+  ticket_price?: number;
 }
 
 export interface PrepareLiveParams {
@@ -27,6 +37,10 @@ export interface PrepareLiveParams {
   isCharge?: boolean;
   ticketPrice?: number;
   freePreviewDurationSecond?: number;
+  /** 是否开启直播预览（与 freePreviewDurationSecond 配合，传 0 表示不开启） */
+  isOpenLivePreview?: boolean;
+  /** 指定免费观众的 user_id 列表（逗号分隔字符串或数组，视后端而定） */
+  freeViewerIds?: string | Array<string | number>;
   orientation?: 'portrait' | 'landscape';
   liveCategoryId?: string | number;
   withOBS?: number;
@@ -51,6 +65,52 @@ export function getPrepareLiveInfo(): Promise<PrepareLiveInfo> {
 /** 创建预开播 */
 export function createPrepareLive(params: PrepareLiveParams): Promise<PrepareLiveResult> {
   return request.post('/live/createPrepareLive', params) as unknown as Promise<PrepareLiveResult>;
+}
+
+/* ---------- 指定免费观众（白名单） ---------- */
+
+export interface WhitelistUserItem {
+  user_id: string | number;
+  nickname?: string;
+  avatar?: string;
+  user_level_info?: {
+    user_level_icon?: string;
+    user_level_name?: string;
+  };
+  contribute?: number;
+  /** 是否官方账号（不可被移除） */
+  is_whitelist?: boolean;
+}
+
+/** 拉取已添加的免费观众白名单（回显用） */
+export function getFreeViewerWhitelist(params: { page?: number; pageSize?: number }): Promise<WhitelistUserItem[]> {
+  return request.post('/live/anchorWhitelist', { page: 1, pageSize: 200, ...params }) as any;
+}
+
+/** 搜索白名单候选用户（按 keyword） */
+export function searchFreeViewerWhitelist(params: {
+  keyword: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<WhitelistUserItem[]> {
+  return request.post('/live/searchWhitelistUserList', { page: 1, pageSize: 200, ...params }) as any;
+}
+
+/** 从白名单移除某个用户 */
+export function removeFreeViewerWhitelist(params: {
+  removeUserId: string | number;
+}): Promise<void> {
+  return request.post('/live/removeAnchorWhitelist', params) as any;
+}
+
+/** 批量添加用户到白名单（appendUserId 支持逗号分隔多用户） */
+export function addFreeViewerWhitelist(params: {
+  appendUserId: string | Array<string | number>;
+}): Promise<void> {
+  const appendUserId = Array.isArray(params.appendUserId)
+    ? params.appendUserId.join(',')
+    : params.appendUserId;
+  return request.post('/live/addAnchorWhitelist', { appendUserId }) as any;
 }
 
 /** 关播 */
@@ -116,6 +176,16 @@ export function replyPk(replyStatus: 0 | 1, pkId: string | number): Promise<unkn
     replyStatus,
     pkId: String(pkId),
   }) as unknown as Promise<unknown>;
+}
+
+/** 从「连麦中」进入正式「PK 进行中」（后端按 pkId 开启计分，双方都下发 action 109 得分更新） */
+export function startPk(pkId: string | number): Promise<unknown> {
+  return request.post('/live/startPk', { pkId: String(pkId) }) as unknown as Promise<unknown>;
+}
+
+/** 退出 PK / 连线（后端广播 action 110 给双方，TRTC 跨房连接清理） */
+export function quitPk(pkId: string | number): Promise<unknown> {
+  return request.post('/live/quitPk', { pkId: String(pkId) }) as unknown as Promise<unknown>;
 }
 
 // ==================== 礼物 ====================

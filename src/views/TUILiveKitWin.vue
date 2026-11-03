@@ -50,6 +50,7 @@
               <button
                 class="niko-tool-btn"
                 type="button"
+                :class="{ 'is-active': coHostConnected }"
                 :disabled="!isInLive || loading"
                 @click="openLinkMicDialog"
               >
@@ -408,6 +409,7 @@ import { useElectronLogin, type ForceLogoutNoticePayload } from '../TUILiveKit/h
 import { releaseBeautyResourcesOnLogout } from '../TUILiveKit/utils/beautyLogoutCleanup';
 import LiveHeader from '../TUILiveKit/components/LiveHeader/index.vue';
 import LiveScenePanel from '../TUILiveKit/components/LiveScenePanel/index.vue';
+import { isCameraDisabled } from '../TUILiveKit/components/LiveScenePanel/cameraVisibilityStore';
 import LiveSettingButton from '../TUILiveKit/components/LiveSettingButton.vue';
 import LiveURLCopy from '../TUILiveKit/components/LiveURLCopy.vue';
 import LivePusherNotification from '../TUILiveKit/components/LivePusherNotification.vue';
@@ -463,7 +465,7 @@ import useRoomEngine from '../TUILiveKit/utils/useRoomEngine';
 import { mapToRoomEngineLanguage } from '../TUILiveKit/utils/common';
 import { LIVE_NAME_MAX_UTF8_BYTES } from '../TUILiveKit/constants/tuiConstant';
 import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
-import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk, replyPk } from '../niko/api/live';
+import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk, replyPk, startPk, quitPk } from '../niko/api/live';
 import type { PrepareLiveResult, AnchorPrepareWhitelistUser } from '../niko/api/live';
 import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 
@@ -581,6 +583,8 @@ const replyIncomingPkInvite = async (status: 0 | 1) => {
  *  连麦（走同一个 invitePk 接口）接受后服务端同样下发 108，不能误判成 PK */
 const handlePkStartedEvent = (event: LivePkStarted) => {
   console.log('[NikoPK] pk started:', event.pkId);
+  // 无论是否展示 PK 条，都要记录 pkId —— 后续 startPk / quitPk 都需要
+  if (event.pkId) pkIdRef.value = event.pkId;
   clearIncomingPkInvite();
   if (!pkIntentActive.value) {
     console.log('[NikoPK] co-host connected (not PK), skip PK bar');
@@ -598,6 +602,7 @@ const handlePkEndedEvent = (event: LivePkEnded) => {
   console.log('[NikoPK] pk ended:', event.pkId);
   pkIntentActive.value = false;
   demoPkActive.value = false;
+  pkIdRef.value = '';
   pkCountdown.value = 0;
   if (pkTimer) {
     clearInterval(pkTimer);
@@ -630,8 +635,8 @@ watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
 });
 
 const handlePkClick = async () => {
+  // 1. 已在正式 PK 中 → 结束 PK
   if (currentBattleInfo.value?.battleId || demoPkActive.value) {
-    // 结束 PK（演示效果直接本地清除）
     pkIntentActive.value = false;
     if (demoPkActive.value) {
       demoPkActive.value = false;
@@ -648,29 +653,46 @@ const handlePkClick = async () => {
   if (!isInLive.value || loading.value) {
     return;
   }
-  // 不弹窗：直接查询在播主播并自动邀请第一位；
-  // 没有可邀请的主播时，本地触发 PK 血条效果展示
-  pkIntentActive.value = true;
-  try {
-    const result: any = await getPkAnchorList('', 1, 20);
-    const list: any[] = Array.isArray(result) ? result : (result?.list ?? result?.data ?? []);
-    const selfId = String(loginUserInfo.value?.userId || '');
-    const target = list.find((item) => String(item.user_id ?? item.anchor_id) !== selfId);
-    if (target) {
-      await invitePk(target.user_id ?? target.anchor_id);
-      showMessage({ type: MessageToastType.Success, message: '已发送邀请，等待对方接受' });
+  // 2. 已有连麦连接 → 调后端 startPk 进入正式 PK（双方同步开启计分）
+  if (coHostConnected.value.length > 0) {
+    const pId = pkIdRef.value;
+    if (!pId) {
+      showMessage({ type: MessageToastType.Warning, message: '缺少 pkId，无法发起 PK' });
       return;
     }
-  } catch (e) {
-    console.warn('[NikoPK] auto invite failed:', e);
+    try {
+      await startPk(pId);
+      pkIntentActive.value = true;
+      // 演示血条兜底（SDK battleId 还没到时先亮 UI）
+      demoPkActive.value = true;
+      startPkCountdown(300);
+      showMessage({ type: MessageToastType.Success, message: 'PK 已开始' });
+    } catch (error: any) {
+      console.warn('[NikoPK] startPk failed:', error);
+      showMessage({ type: MessageToastType.Error, message: error?.message || '发起 PK 失败' });
+    }
+    return;
   }
-  demoPkActive.value = true;
-  pkCountdown.value = 300;
+  // 3. 还没连麦 → 打开弹窗让用户邀请（好友 / 推荐 Tab）
+  pkIntentActive.value = false;
+  pkDialogTitle.value = '连麦';
+  showPkDialog.value = true;
 };
 
-/** 退出连线（连麦 / PK 都走这个） */
+/** 退出连线（连麦 / PK 都走这个）：后端 quitPk + SDK exitHostConnection 双保险 */
 const handleExitConnection = async () => {
-  // 1. PK 中：先调 exitBattle
+  let backendOk = false;
+  // 1. 先调后端 quitPk（广播给双方 action 110，让对方也感知到退出）
+  if (pkIdRef.value) {
+    try {
+      await quitPk(pkIdRef.value);
+      backendOk = true;
+      console.log('[NikoPK] quitPk ok, pkId=', pkIdRef.value);
+    } catch (e) {
+      console.warn('[NikoPK] quitPk failed:', e);
+    }
+  }
+  // 2. 有 SDK battleId 也调 exitBattle（演示 PK 或 SDK 层的连线清理）
   if (currentBattleInfo.value?.battleId) {
     try {
       await exitBattle({ battleId: currentBattleInfo.value.battleId });
@@ -678,15 +700,30 @@ const handleExitConnection = async () => {
       console.warn('[Niko] exitBattle from exitConnection failed:', e);
     }
   }
-  // 2. 连麦状态：退出 Host 连线（后端 + TRTC 清理）
-  if (coHostConnected.value) {
+  // 3. TRTC 跨房连接清理（无论后端调用是否成功，本地 SDK 清理都要执行）
+  if (coHostConnected.value.length > 0) {
     try {
       await exitHostConnection();
-      showMessage({ type: MessageToastType.Success, message: '已退出连线' });
+      if (!backendOk) {
+        showMessage({ type: MessageToastType.Success, message: '已退出连线' });
+      }
     } catch (e) {
       console.warn('[Niko] exitHostConnection failed:', e);
       showMessage({ type: MessageToastType.Error, message: '退出连线失败' });
+      return;
     }
+  }
+  // 4. 本地状态清理
+  pkIntentActive.value = false;
+  demoPkActive.value = false;
+  pkIdRef.value = '';
+  pkCountdown.value = 0;
+  if (pkTimer) {
+    clearInterval(pkTimer);
+    pkTimer = null;
+  }
+  if (backendOk) {
+    showMessage({ type: MessageToastType.Success, message: '已退出连线' });
   }
 };
 
@@ -694,6 +731,8 @@ const handleExitConnection = async () => {
 const demoPkActive = ref(false);
 /** 本地是否主动发起的是 PK（false 表示走连麦，服务端同样会下发 108，不能展示 PK 条） */
 const pkIntentActive = ref(false);
+/** 当前连麦/PK 的 pkId（后端 invitePk/replyPk 成功后，IM 108 会下发，startPk/quitPk 都依赖它） */
+const pkIdRef = ref('');
 /** PK 进行中：血条盖在视频区顶部 */
 const pkActive = computed(() => !!(currentBattleInfo.value?.battleId || demoPkActive.value));
 
@@ -1523,7 +1562,7 @@ function ensureTrtcExitRoom(): Promise<void> {
     } catch (e) {
       console.warn('[Niko] exitRoom threw (ignored):', e);
     }
-    // 兜底：500ms 无论如何 resolve（防止根本不在房间里时 onExitRoom 永不触发）
+    // 兜底：3s 无论如何 resolve（防止根本不在房间里时 onExitRoom 永不触发）
     setTimeout(() => {
       if (!done) {
         done = true;
@@ -1531,7 +1570,7 @@ function ensureTrtcExitRoom(): Promise<void> {
         console.log('[Niko] ensureTrtcExitRoom timeout (assuming no previous room)');
         resolve();
       }
-    }, 500);
+    }, 3000);
   });
 }
 
@@ -2413,6 +2452,12 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
+  // ====== 第一步：确保 TRTCCloud 旧房间彻底退出 ======
+  // 从 LivePlayer（观众房）或其他页面跳过来时，trtcCloud 单例可能还残留旧房间状态
+  // （连线用户、远端视频回调等），必须在任何初始化（IM login / RoomEngine 绑定 / MediaMixing）
+  // 之前先等 exitRoom 完成，否则后续 bindRoomEngineEvents 会收到旧房间残留事件
+  await ensureTrtcExitRoom();
+
   // Subscribe to live ended event
   subscribeEvent(LiveListEvent.onLiveEnded, handleLiveEnded);
 
@@ -2762,13 +2807,22 @@ const restoreCamerasFromConfig = async (retryCount = 3) => {
   const availableIds = new Set(cameraList.value.map((c) => String(c.deviceId)));
   const persisted = loadCameraListConfig();
   const savedAll = persisted?.cameras || [];
-  // 设备枚举失败时（availableIds 为空）不要丢弃已保存的配置，直接尝试还原
-  const savedCameras = availableIds.size
+  // 设备枚举失败时（availableIds 为空）不要丢弃已保存的配置，直接尝试还原；
+  // 被眼睛关闭的摄像头不还原（列表里仍以闭眼项展示，可手动打开）
+  const savedCameras = (availableIds.size
     ? savedAll.filter((c) => availableIds.has(String(c.deviceId)))
-    : savedAll;
+    : savedAll
+  ).filter((c) => !isCameraDisabled(String(c.deviceId)));
 
   let cameras: PersistedCameraConfig[] = savedCameras;
   if (!cameras.length) {
+    // 已保存的摄像头全部被眼睛关闭：不要用 deviceList[0] 兜底，否则会把关掉的摄像头又打开
+    const allPersistedDisabled = savedAll.length > 0
+      && savedAll.every((c) => isCameraDisabled(String(c.deviceId)));
+    if (allPersistedDisabled) {
+      console.log('[Niko] all persisted cameras are disabled, skip restore');
+      return;
+    }
     // 兜底：用 cameraList[0] （系统第一个摄像头）
     const firstCamera = cameraList.value[0];
     if (!firstCamera) {
@@ -3093,7 +3147,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   display: flex;
-  background: #000;
+  background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
   overflow: hidden;
 }
 .video-cell-host {
@@ -3124,18 +3178,18 @@ onBeforeUnmount(() => {
 .video-cell-guest {
   flex: 1;
   position: relative;
-  background: #000;
+  background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
   overflow: hidden;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
   & + .video-cell-guest {
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 }
 .host-guest-video {
   width: 100%;
   height: 100%;
   display: block;
-  background: #000;
+  background: transparent;
 }
 .host-guest-name {
   position: absolute;
@@ -3220,7 +3274,8 @@ onBeforeUnmount(() => {
   height: 100% !important;
   object-fit: cover !important;
 }
-/* 连麦 / PK 工具按钮：与音乐按钮一致（图标在上、文字在下） */
+/* 连麦 / PK / 退出连线 工具按钮：图标在上、文字在下。
+ * 规则：默认白色；连麦/PK 激活时蓝色（与摄像头选中高亮同色）。 */
 .niko-tool-btn {
   display: flex;
   flex-direction: column;
@@ -3233,9 +3288,9 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 12px;
   background: transparent;
-  color: $text-color1;
+  color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
-  transition: box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 
   .niko-tool-icon {
     width: 24px;
@@ -3251,21 +3306,41 @@ onBeforeUnmount(() => {
   }
 
   &:hover:not(:disabled) {
-    box-shadow: 0 0 10px 0 var(--bg-color-mask);
+    background: rgba(255, 255, 255, 0.08);
 
     .niko-tool-icon,
     .niko-tool-label {
-      color: $icon-hover-color;
+      color: #fff;
+    }
+  }
+
+  /* 连麦激活态 */
+  &.is-active {
+    color: #1677ff;
+
+    &:hover:not(:disabled) {
+      background: rgba(22, 119, 255, 0.15);
+      box-shadow: 0 0 10px rgba(22, 119, 255, 0.25);
+
+      .niko-tool-icon,
+      .niko-tool-label {
+        color: #4096ff;
+      }
     }
   }
 
   &.is-pk-active {
-    background: linear-gradient(135deg, rgba(255, 107, 107, 0.24), rgba(255, 165, 61, 0.24));
-    box-shadow: 0 0 12px rgba(255, 107, 107, 0.35);
+    color: #1677ff;
+    background: rgba(22, 119, 255, 0.2);
+    box-shadow: 0 0 12px rgba(22, 119, 255, 0.35);
 
-    .niko-tool-icon,
-    .niko-tool-label {
-      color: #ffb0a0;
+    &:hover:not(:disabled) {
+      background: rgba(22, 119, 255, 0.28);
+
+      .niko-tool-icon,
+      .niko-tool-label {
+        color: #69b1ff;
+      }
     }
   }
 
@@ -3276,15 +3351,16 @@ onBeforeUnmount(() => {
 }
 
 .niko-tool-btn-danger {
-  color: #ff6b6b;
+  /* 退出连线始终是"动作按钮"，保持蓝色 */
+  color: #1677ff;
 
   &:hover:not(:disabled) {
-    background: rgba(255, 107, 107, 0.18);
-    box-shadow: 0 0 10px rgba(255, 107, 107, 0.25);
+    background: rgba(22, 119, 255, 0.18);
+    box-shadow: 0 0 10px rgba(22, 119, 255, 0.3);
 
     .niko-tool-icon,
     .niko-tool-label {
-      color: #ff8a8a;
+      color: #4096ff;
     }
   }
 }
@@ -3660,6 +3736,7 @@ onBeforeUnmount(() => {
           display: flex;
           gap: 8px;
           align-items: stretch;
+          height: 300px;
         }
       }
     }

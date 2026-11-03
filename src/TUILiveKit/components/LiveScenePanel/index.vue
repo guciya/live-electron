@@ -17,6 +17,7 @@ import { TRTCMediaSourceType } from '@tencentcloud/tuiroom-engine-electron';
 import { TRTCMediaMixingEvent } from 'trtc-electron-sdk';
 import { useVideoMixerState, MediaSource } from 'tuikit-atomicx-vue3-electron';
 import LiveScenePanel from './LiveScenePanel.vue';
+import { disabledCameras, getDisabledCamera, markCameraDisabled, markCameraEnabled } from './cameraVisibilityStore';
 import { ipcBridge, IPCMessageType, toPlainIpcPayload, ChildPanelType } from '../../ipc';
 import type { ShowChildPanelPayload, BeautyUpdatePayload } from '../../ipc';
 import logger from '../../utils/logger';
@@ -179,10 +180,12 @@ function mediaSourceToPlainPayload(material: MediaSource): Record<string, unknow
  * lets the editing flow keep the camera being edited selectable as itself.
  */
 function getUsedCameraIds(excludeSourceId?: string): string[] {
-  return videoMixerState.mediaSourceList.value
+  const enabledIds = videoMixerState.mediaSourceList.value
     .filter((m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera)
-    .map((m: MediaSource) => String(m.sourceId))
-    .filter((id: string) => id !== excludeSourceId);
+    .map((m: MediaSource) => String(m.sourceId));
+  // 已关闭（眼睛关闭）的摄像头仍然占用该设备，添加弹窗里也要禁用，避免重复添加
+  const disabledIds = disabledCameras.value.map((c) => String(c.deviceId));
+  return [...enabledIds, ...disabledIds].filter((id: string) => id !== excludeSourceId);
 }
 
 // Per-camera beauty effect properties are kept in a shared module-level
@@ -287,10 +290,19 @@ async function addMediaSourceWithToast(source: Record<string, any>) {
     inFlightAddCameraIds.add(cameraId);
   }
   let addFailed = false;
+  // 该设备之前被眼睛关闭过：先清掉关闭记录再添加，避免列表同时渲染启用项与闭眼项（重复 key）
+  const disabledRecord = isCamera && cameraId ? getDisabledCamera(cameraId) : undefined;
+  if (disabledRecord) {
+    markCameraEnabled(cameraId);
+  }
   try {
     await videoMixerState.addMediaSource(source as MediaSource);
   } catch (err) {
     addFailed = true;
+    if (disabledRecord) {
+      // 添加失败：恢复闭眼项，用户还能再点眼睛重试
+      markCameraDisabled(disabledRecord);
+    }
     logger.error('addMediaSource failed', err);
     let message = t('Failed to add media source');
     if (source.sourceType === TRTCMediaSourceType.kCamera) {

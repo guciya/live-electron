@@ -537,9 +537,11 @@ onBeforeUnmount(() => {
   width: auto;
   height: 56px;
   cursor: pointer;
-  color: $text-color1;
+  /* 默认白色（与连麦/PK 未激活态一致），点击/播放等激活态这里没有持久状态 */
+  color: rgba(255, 255, 255, 0.85);
   border-radius: 12px;
   position: relative;
+  transition: box-shadow 0.15s ease, color 0.15s ease, background 0.15s ease;
 
   .custom-icon {
     @include icon-size-24;
@@ -551,14 +553,15 @@ onBeforeUnmount(() => {
   }
 
   &:hover {
-    box-shadow: 0 0 10px 0 var(--bg-color-mask);
+    background: rgba(22, 119, 255, 0.12);
+    box-shadow: 0 0 10px rgba(22, 119, 255, 0.2);
 
     .custom-icon {
-      color: $icon-hover-color;
+      color: #4096ff;
     }
 
     .custom-text {
-      color: $icon-hover-color;
+      color: #4096ff;
     }
   }
 }

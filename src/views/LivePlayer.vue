@@ -235,7 +235,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { UIKitProvider, TUIMessageBox, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
@@ -290,7 +290,7 @@ const anchorId = Number(route.query.anchorId || 0);
 // play_url 带签名参数，通过 history.state 传递（H5 项目同样做法）
 const playUrl = String((window.history.state as Record<string, unknown> | null)?.playUrl || '');
 
-const { login } = useLoginState();
+const { login, logout } = useLoginState();
 
 const videoEl: Ref<HTMLVideoElement | null> = ref(null);
 const errorText = ref('');
@@ -326,6 +326,9 @@ const myUserId = computed(() => {
 
 let trtcEntered = false;
 const remoteUserStates = new Map<string, { videoAvailable: boolean; nickname?: string }>();
+
+/** 模块级 onEnterRoom 引用，cleanupTrtc 必须能 off 到同一个函数引用 */
+let _pendingOnEnterRoom: ((result: number) => void) | null = null;
 
 function getAnchorUserId(): string {
   return trtcAnchorUserId.value || myUserId.value;
@@ -423,8 +426,11 @@ function enterTrtcRoomAsAudience(roomId: string): Promise<number> {
       String(roomId),
       TRTCRoleType.TRTCRoleAudience,
     );
-    const onEnterRoom = (result: number) => {
-      trtcCloud.off('onEnterRoom', onEnterRoom);
+    // 存引用到模块级变量，cleanupTrtc 能正确 off
+    const handler = (result: number) => {
+      // 先 off（用闭包里的 handler 引用），再清模块级变量
+      trtcCloud.off('onEnterRoom', handler);
+      _pendingOnEnterRoom = null;
       if (result >= 0) {
         trtcEntered = true;
         trtcReady.value = true;
@@ -433,7 +439,8 @@ function enterTrtcRoomAsAudience(roomId: string): Promise<number> {
         reject(new Error(`TRTC enterRoom failed, code: ${result}`));
       }
     };
-    trtcCloud.on('onEnterRoom', onEnterRoom);
+    _pendingOnEnterRoom = handler;
+    trtcCloud.on('onEnterRoom', handler);
     // 绑定远端事件
     trtcCloud.on('onRemoteUserVideoAvailable', onRemoteUserVideoAvailable);
     trtcCloud.on('onRemoteUserEnterRoom', onRemoteUserEnterRoom);
@@ -441,22 +448,97 @@ function enterTrtcRoomAsAudience(roomId: string): Promise<number> {
   });
 }
 
-function cleanupTrtc() {
-  if (!trtcEntered) return;
+/**
+ * 彻底清理 TRTC 状态：
+ * 1) 同步 off 所有事件 → 防止 SDK 后续回调操作销毁中的 LivePlayer
+ * 2) 同步 stopRemoteView 所有远端流 + 清空 DOM 容器 → 防止异步 SDK 还在渲染连线画面
+ * 3) 发起 exitRoom 并返回一个 Promise，等 onExitRoom 回调（外部用 onBeforeRouteLeave await）
+ */
+function cleanupTrtc(): Promise<void> {
+  // 无论之前有没有 enterRoom，都把所有我们绑过的事件 off 掉（安全，重复 off 无副作用）
   try {
-    // 停所有远端视图
-    remoteUserStates.forEach((_state, uid) => stopRemoteViewSafe(uid));
+    if (_pendingOnEnterRoom) {
+      trtcCloud.off('onEnterRoom', _pendingOnEnterRoom);
+      _pendingOnEnterRoom = null;
+    }
+    trtcCloud.off('onExitRoom', onExitRoom);
     trtcCloud.off('onRemoteUserVideoAvailable', onRemoteUserVideoAvailable);
     trtcCloud.off('onRemoteUserEnterRoom', onRemoteUserEnterRoom);
-    trtcCloud.exitRoom();
+    trtcCloud.off('onRemoteUserLeaveRoom', onRemoteUserLeaveRoom);
   } catch (e) {
-    console.warn('[LivePlayer] trtc cleanup failed:', e);
+    // 忽略
   }
+
+  // 先同步 stop 所有远端视图 + 清所有 DOM
+  try {
+    remoteUserStates.forEach((_state, uid) => stopRemoteViewSafe(uid));
+    // 同步清空 CoGuestGrid 渲染出来的所有视频元素 —— 关键！
+    // 防止 SDK 即使在 exitRoom 还没完成时，继续把连线画面渲染到我们的 DOM 上
+    const gridEl = coGuestGridRef.value?.$el as HTMLElement | undefined;
+    if (gridEl) {
+      try {
+        gridEl.querySelectorAll('video, canvas').forEach((el) => {
+          try { (el as any).pause?.(); } catch {}
+          try { (el as any).src = ''; } catch {}
+          try { (el as any).remove?.(); } catch {}
+        });
+        gridEl.innerHTML = '';
+      } catch (e) {
+        console.warn('[LivePlayer] clear CoGuestGrid DOM failed:', e);
+      }
+    }
+  } catch (e) {
+    console.warn('[LivePlayer] stopRemoteViewSafe failed:', e);
+  }
+  remoteUserStates.clear();
+  guestUsers.value = [];
+
+  // 发起 exitRoom 并等 onExitRoom 回调（最多等 3 秒兜底）
+  if (trtcEntered) {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const resolveOnce = () => {
+        if (resolved) return;
+        resolved = true;
+        trtcCloud.off('onExitRoom', _onExitRoomWaiter);
+        trtcEntered = false;
+        trtcReady.value = false;
+        trtcAnchorUserId.value = '';
+        resolve();
+      };
+      const _onExitRoomWaiter = (_reason: number) => resolveOnce();
+      // 3 秒兜底 —— 防止 SDK 卡死不回调
+      const timer = window.setTimeout(resolveOnce, 3000);
+      // resolveOnce 回调里会 off，但 timer 先到也需要 off
+      const _timer = timer;
+      const originalResolve = resolveOnce;
+      // 包装一下：timer 超时时也要 off 掉我们的 handler
+      _timer; // 避免 lint warning
+      trtcCloud.on('onExitRoom', _onExitRoomWaiter);
+      try {
+        trtcCloud.exitRoom();
+      } catch (e) {
+        // exitRoom 抛异常直接 resolve，不要卡住路由
+        console.warn('[LivePlayer] exitRoom threw:', e);
+        resolveOnce();
+      }
+    });
+  }
+
+  // 没 enterRoom，直接返回 resolved Promise
   trtcEntered = false;
   trtcReady.value = false;
   trtcAnchorUserId.value = '';
-  guestUsers.value = [];
-  remoteUserStates.clear();
+  return Promise.resolve();
+}
+
+// 防止 enterTrtcRoomAsAudience 内部的 onEnterRoom 闭包在 cleanup 后仍持有引用
+// 用具名函数方便 off
+function onExitRoom(_reason: number) {
+  // LivePlayer 已经 cleanup 了，忽略
+}
+function onRemoteUserLeaveRoom(_userInfo: any) {
+  // 同上
 }
 
 async function initTrtc() {
@@ -473,8 +555,8 @@ async function initTrtc() {
   }
 }
 
-function exitTrtc() {
-  cleanupTrtc();
+function exitTrtc(): Promise<void> {
+  return cleanupTrtc();
 }
 
 // 关注：接口没有查询态，默认未关注，点一次以接口结果为准
@@ -674,7 +756,7 @@ async function exitRoom(title: string, message: string, silent = false) {
   // TRTC 独立连麦宫格：退出房间
   exitTrtc();
   // 销毁播放器与停滞计时器
-  playerHandle?.destroy();
+  await playerHandle?.destroy();
   playerHandle = null;
   if (stallTimer !== null) {
     window.clearTimeout(stallTimer);
@@ -737,7 +819,7 @@ function handleStreamError(detail: string) {
 /**
  * 观看直播间需要 IM 登录 + 加入直播群：
  * - 主播列表页没有登录 IM，这里用本地登录凭据登录一次；
- * - 同一窗口内之后去开播时，TUILiveKitWin 会检测到已登录并复用会话，避免重复登录互踢。
+ * - 退出 LivePlayer 时会 logout，与 TUILiveKitWin 完全隔离，互不影响。
  */
 async function initChat() {
   if (!roomId) {
@@ -880,8 +962,100 @@ function toggleSound() {
   muted.value = el.muted;
 }
 
+/**
+ * 彻底清理所有全局状态（IM + TRTC + 播放器），
+ * 返回一个 Promise，等所有异步操作完成后 resolve。
+ * 在点击 .player-back 的这一刻就调用它，确保离开 LivePlayer 时
+ * 所有模块级单例都被 reset 到和初始化一样的干净状态，
+ * 不会把任何画面/事件/状态带到其他页面（尤其 TUILiveKitWin）。
+ */
+async function doFullCleanup(): Promise<void> {
+  if (_cleanupStarted) return;
+  _cleanupStarted = true;
+  destroyed = true;
+
+  // 1) 停 FLV 播放器 + 各种定时器 —— await 确保 FetchStreamLoader pump 彻底停
+  stopLiveStatusPoll();
+  try { window.ipcRenderer?.send('close-game-mobile', null); } catch { /* ignore */ }
+  if (streamErrorTimer) { clearTimeout(streamErrorTimer); streamErrorTimer = null; }
+  streamErrorCount = 0;
+  if (stallTimer !== null) { window.clearTimeout(stallTimer); stallTimer = null; }
+  lastVideoTime = 0;
+  unsubscribeSystem?.();
+  unsubscribeSystem = null;
+  unsubscribeMembers?.();
+  unsubscribeMembers = null;
+  await playerHandle?.destroy();
+  playerHandle = null;
+
+  // 2) 同步 off 所有 TRTC 事件 + stopRemoteView + 清空 DOM 容器
+  //    → 防止异步 SDK 还在渲染连线画面、回调操作已销毁的 LivePlayer
+  try {
+    if (_pendingOnEnterRoom) {
+      trtcCloud.off('onEnterRoom', _pendingOnEnterRoom);
+      _pendingOnEnterRoom = null;
+    }
+    trtcCloud.off('onExitRoom', onExitRoom);
+    trtcCloud.off('onRemoteUserVideoAvailable', onRemoteUserVideoAvailable);
+    trtcCloud.off('onRemoteUserEnterRoom', onRemoteUserEnterRoom);
+    trtcCloud.off('onRemoteUserLeaveRoom', onRemoteUserLeaveRoom);
+  } catch { /* ignore */ }
+
+  try {
+    remoteUserStates.forEach((_state, uid) => stopRemoteViewSafe(uid));
+    // 同步清空 CoGuestGrid 里所有 video/canvas —— 关键！防止 SDK 继续渲染到旧 DOM
+    const gridEl = coGuestGridRef.value?.$el as HTMLElement | undefined;
+    if (gridEl) {
+      gridEl.querySelectorAll('video, canvas').forEach((el) => {
+        try { (el as any).pause?.(); } catch {}
+        try { (el as any).src = ''; } catch {}
+        try { (el as any).remove?.(); } catch {}
+      });
+      gridEl.innerHTML = '';
+    }
+  } catch { /* ignore */ }
+
+  remoteUserStates.clear();
+  guestUsers.value = [];
+
+  // 3) 并行等待 TRTC exitRoom + IM leaveLiveChat + logout 全部完成
+  //    SDK 文档明确要求："请等待 onExitRoom() 回调到来后再执行下次 enterRoom"
+  try {
+    await Promise.allSettled([
+      // TRTC exitRoom（cleanupTrtc 返回 Promise，等 onExitRoom 回调或 3s 兜底）
+      trtcEntered ? new Promise<void>((resolve) => {
+        let resolved = false;
+        const resolveOnce = () => {
+          if (resolved) return;
+          resolved = true;
+          trtcCloud.off('onExitRoom', _waiter);
+          trtcEntered = false;
+          trtcReady.value = false;
+          trtcAnchorUserId.value = '';
+          resolve();
+        };
+        const _waiter = (_reason: number) => resolveOnce();
+        const _timer = window.setTimeout(resolveOnce, 3000);
+        void _timer;
+        trtcCloud.on('onExitRoom', _waiter);
+        try { trtcCloud.exitRoom(); } catch { resolveOnce(); }
+      }) : Promise.resolve(),
+      // IM 离开群 + 登出
+      leaveLiveChat().catch(() => undefined),
+      logout().catch(() => undefined),
+    ]);
+  } catch (e) {
+    console.warn('[LivePlayer] doFullCleanup error:', e);
+  }
+}
+
 function handleBack() {
-  router.push({ name: 'anchor-list' });
+  // 点击返回按钮的这一刻就同步发起所有清理，
+  // 等全部完成（TRTC exitRoom + IM logout + 播放器销毁）再切路由。
+  // 确保 TUILiveKitWin 进来时所有模块级单例都是干净的。
+  void doFullCleanup().finally(() => {
+    router.push({ name: 'anchor-list' });
+  });
 }
 
 async function startPlayback() {
@@ -1044,35 +1218,20 @@ onMounted(() => {
   startLiveStatusPoll();
 });
 
+// 标志位：确保 cleanup 只跑一次（handleBack / onBeforeRouteLeave / onBeforeUnmount 都会调）
+let _cleanupStarted = false;
+
+/**
+ * onBeforeRouteLeave：路由离开前阻塞等待 doFullCleanup 完成（兜底，handleBack 已经先 await 过）
+ */
+onBeforeRouteLeave(async () => {
+  await doFullCleanup();
+  return true;
+});
+
 onBeforeUnmount(() => {
-  destroyed = true;
-  stopLiveStatusPoll();
-  // 离开直播间（含手动点返回）时关闭本次打开的游戏窗口
-  try {
-    window.ipcRenderer?.send('close-game-mobile', null);
-  } catch {
-    // 忽略 IPC 异常
-  }
-  if (streamErrorTimer) {
-    clearTimeout(streamErrorTimer);
-    streamErrorTimer = null;
-  }
-  streamErrorCount = 0;
-  if (stallTimer !== null) {
-    window.clearTimeout(stallTimer);
-    stallTimer = null;
-  }
-  lastVideoTime = 0;
-  unsubscribeSystem?.();
-  unsubscribeSystem = null;
-  unsubscribeMembers?.();
-  unsubscribeMembers = null;
-  playerHandle?.destroy();
-  playerHandle = null;
-  // 退出直播间时离开 IM 群；保留 IM 登录态，去开播时直接复用同一会话
-  void leaveLiveChat();
-  // TRTC 独立连麦宫格：退出房间
-  exitTrtc();
+  // 兜底：Electron 关窗口等不走路由钩子的场景
+  void doFullCleanup();
 });
 </script>
 

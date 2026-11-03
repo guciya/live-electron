@@ -276,7 +276,7 @@ const CoSlot = defineComponent({
   min-height: 0;
   overflow: hidden;
   border-radius: 0.5rem;
-  background: rgba(0, 0, 0, 0.35);
+  // background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 

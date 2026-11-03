@@ -952,6 +952,17 @@ onBeforeUnmount(() => {
     gap: 0.75rem;
     margin-top: 10px;
     -webkit-app-region: no-drag;
+    /* 宽度不够时允许横向滚动，避免把其他元素挤变形 */
+    overflow-x: auto;
+    overflow-y: visible;
+    flex-shrink: 1;
+    min-width: 0;
+    /* 内联元素不换行 */
+    flex-wrap: nowrap;
+    /* 直接子元素都不要被压缩，保证各自宽度，这样 overflow-x:auto 才会触发滚动条 */
+    > * {
+      flex-shrink: 0;
+    }
   }
 
   .anchor-user {

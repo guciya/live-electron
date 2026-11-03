@@ -1,7 +1,7 @@
 <template>
   <div
     class="material-item"
-    :class="{ active: isMaterialActive, 'show-dropdown': isMenuVisible }"
+    :class="{ active: isMaterialActive, 'show-dropdown': isMenuVisible, 'is-disabled': isDisabled }"
     @click="handleSelectMaterial"
   >
     <component class="material-icon" :is="getMaterialIcon(material.sourceType)" />
@@ -9,6 +9,31 @@
       <span class="material-name">{{ material.name }}</span>
     </div>
     <div class="material-controls">
+      <!-- 摄像头开关：睁眼=启用中，闭眼=已关闭（关闭后设备释放但列表项保留） -->
+      <div
+        v-if="material.sourceType === TRTCMediaSourceType.kCamera"
+        class="control-button eye-control"
+        :title="isDisabled ? '打开摄像头' : '关闭摄像头'"
+        @click.stop="handleToggleEnabled"
+      >
+        <svg v-if="isDisabled" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path
+            d="M2.2 12S5.7 5.6 12 5.6 21.8 12 21.8 12 18.3 18.4 12 18.4 2.2 12 2.2 12z"
+            stroke="currentColor"
+            stroke-width="1.5"
+            opacity="0.5"
+          />
+          <path d="M3.4 3.6l17.2 16.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path
+            d="M2.2 12S5.7 5.6 12 5.6 21.8 12 21.8 12 18.3 18.4 12 18.4 2.2 12 2.2 12z"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </div>
       <!-- Mirror control only for camera type -->
       <div
         class="control-button mirror-control"
@@ -71,11 +96,14 @@ const props = defineProps<{
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   isMoving?: boolean;
+  isDisabled?: boolean;
+  isActive?: boolean;
 }>();
 
 const emits = defineEmits<{
   select: [material: MediaSource];
   toggleMenu: [material: MediaSource];
+  toggleEnabled: [material: MediaSource];
   closeMenu: [];
   moveUp: [material: MediaSource];
   moveDown: [material: MediaSource];
@@ -97,7 +125,13 @@ const { updateMediaSource, removeMediaSource, activeMediaSource } = useVideoMixe
 const videoEffectManager = useVideoEffectManager();
 
 const getMaterialKey = (source: Partial<MediaSource> | null | undefined) => `${source?.sourceType ?? ''}::${source?.sourceId ?? ''}`;
-const isMaterialActive = computed(() => getMaterialKey(activeMediaSource.value) === getMaterialKey(props.material));
+// 高亮由面板传入的 isActive 决定（面板会持久记住选中项，鼠标移开或 SDK 取消选中都不会丢）；
+// 未传时回退到 SDK 的 activeMediaSource
+const isMaterialActive = computed(() => (
+  typeof props.isActive === 'boolean'
+    ? props.isActive
+    : getMaterialKey(activeMediaSource.value) === getMaterialKey(props.material)
+));
 const materialKey = computed(() => getMaterialKey(props.material));
 
 function toggleMirror() {
@@ -112,7 +146,15 @@ function toggleMirror() {
 }
 
 const handleSelectMaterial = () => {
+  // 已关闭的摄像头不在混流里，点击整行不触发选中（用眼睛图标重新打开）
+  if (props.isDisabled) {
+    return;
+  }
   emits('select', props.material);
+};
+
+const handleToggleEnabled = () => {
+  emits('toggleEnabled', props.material);
 };
 
 const handleToggleMenu = () => {
@@ -356,9 +398,16 @@ onBeforeUnmount(() => {
   }
 
   &.active {
-    background: rgba(92, 122, 255, 0.2);
-    border: 1px solid rgba(92, 122, 255, 0.65);
+    background: #1677ff;
+    border: 1px solid #1677ff;
     border-radius: 8px;
+  }
+
+  &.is-disabled {
+    .material-icon,
+    .material-name {
+      color: rgba(213, 224, 242, 0.5);
+    }
   }
 
   .material-icon {
