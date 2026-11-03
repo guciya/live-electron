@@ -61,14 +61,33 @@ const getMaterialKey = (material: MediaSource) => `${material.sourceType}::${mat
 const handleSelectMaterial = async (material: MediaSource) => {
   visibleMenuKey.value = '';
   const targetKey = getMaterialKey(material);
-  const unselectTargets = mediaSourceList.value.filter(item => item.isSelected && getMaterialKey(item) !== targetKey);
-  for (const item of unselectTargets) {
-    await updateMediaSource(item, { isSelected: false });
+  const target = mediaSourceList.value.find(item => getMaterialKey(item) === targetKey);
+  if (!target) {
+    return;
   }
 
-  const target = mediaSourceList.value.find(item => getMaterialKey(item) === targetKey);
-  if (target && !target.isSelected) {
-    await updateMediaSource(target, { isSelected: true });
+  // 直接改 isSelected 标记，不要用 updateMediaSource(item, { isSelected: false })：
+  // SDK 内部实现里 `e.isSelected` 仍是旧值 true，会让 updateMediaSource 重新把该源选中，
+  // 导致点击其它摄像头后旧源依旧保持选中态，永远切不过去、也没有激活高亮。
+  const changed = !target.isSelected;
+  mediaSourceList.value.forEach((item) => {
+    item.isSelected = getMaterialKey(item) === targetKey;
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  // 多路摄像头都铺满混流画布时，预览上可见的是 zOrder 最高的那一路。
+  // 选中项置顶，点击列表才能真正切换预览画面。
+  const maxZOrder = Math.max(
+    0,
+    ...mediaSourceList.value.map(item => item.zOrder || 0),
+  );
+  try {
+    await updateMediaSource(target, { isSelected: true, zOrder: maxZOrder + 1 });
+  } catch (error) {
+    console.warn('[LiveScenePanel] select material failed:', error);
   }
 };
 

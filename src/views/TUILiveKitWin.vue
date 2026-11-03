@@ -1612,6 +1612,9 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
     // 屏幕共享 / 图片 / 视频文件等源不独占设备，保留不动。
     // Vue state 同步清 camera 源，确保 hasCameraInMixer() 正确 → ensureDefaultCamera() 重新 add
     // 时从 localStorage 恢复上次保存的 deviceId（YY/OBS 虚拟摄像头 / Integrated Camera）。
+    // 开播前先保存当前「全部」摄像头（可能已经添加了多个），
+    // 下面 force-clean 会把它们全部释放，再由 ensureDefaultCamera 按保存列表恢复全部。
+    saveCamerasFromMixer();
     try {
       const mmm = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
       const cameraSources = (mmm?.sourceList || []).filter(
@@ -1624,22 +1627,21 @@ const onPreLiveConfirm = async (result: PrepareLiveResult & { liveTitle: string;
         }
         console.log('[Niko] force-clean camera sources done');
       }
-      // 同步清 Vue state 里的 kCamera 源（和 SDK 保持一致）
+      // 同步清 Vue state 里的全部 kCamera 源（和 SDK 保持一致），
+      // 否则 hasCameraInMixer() 仍为 true → restoreCamerasFromConfig 被跳过。
       const prevList = videoMixerState.mediaSourceList.value;
-      const cameraIdx = prevList.findIndex(
-        (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+      const withoutCamera = prevList.filter(
+        (m: MediaSource) => m.sourceType !== TRTCMediaSourceType.kCamera,
       );
-      if (cameraIdx >= 0) {
-        const withoutCamera = [...prevList];
-        withoutCamera.splice(cameraIdx, 1);
+      if (withoutCamera.length !== prevList.length) {
         videoMixerState.mediaSourceList.value = withoutCamera;
-        console.log('[Niko] Vue state camera source removed, remaining:', withoutCamera.length);
+        console.log('[Niko] Vue state all camera sources removed, remaining:', withoutCamera.length);
       }
     } catch (e) {
       console.warn('[Niko] force-clean failed (ignored):', e);
     }
     // 关键：重置 cameraEnsurePromise，破除 race condition 锁。
-    // 上面的 force-clean 可能刚好把某个正在进行的 autoAddDefaultCamera 结果清掉了，
+    // 上面的 force-clean 可能刚好把某个正在进行的 restoreCamerasFromConfig 结果清掉了，
     // 如果不重置，下面 ensureDefaultCamera() 会复用那个已经 resolve 的旧 promise，
     // 导致 hasCameraInMixer 误判 / 画面黑。
     cameraEnsurePromise = null;
@@ -2282,13 +2284,19 @@ watch(
   { immediate: true }
 );
 
-// 摄像头源变化时自动保存配置（用户在 CameraSettingDialog 换设备也能存）
+// 摄像头列表 / 选中项变化时自动保存完整配置（用户在 CameraSettingDialog 换设备也能存）
 watch(
-  () => videoMixerState.mediaSourceList.value?.filter(
-    (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
-  ).map((m: MediaSource) => String(m.sourceId)),
+  () => videoMixerState.mediaSourceList.value
+    ?.filter((m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera)
+    .map((m: MediaSource) => [
+      String(m.sourceId),
+      m.isSelected ? 1 : 0,
+      m.width || 0,
+      m.height || 0,
+      (m as any).mirrorType ?? '',
+    ].join('|')),
   () => {
-    saveCurrentCameraFromMixer();
+    saveCamerasFromMixer();
   },
 );
 
@@ -2677,8 +2685,10 @@ onMounted(async () => {
   }
 });
 
-// ==================== 摄像头持久化（保存用户上次选的摄像头/分辨率） ====================
+// ==================== 摄像头持久化（保存「全部」摄像头 + 当前选中的那一路） ====================
+// 旧 key 只存 1 个摄像头，保留用于首次迁移
 const CAMERA_CONFIG_KEY = 'niko_live_camera_config';
+const CAMERA_LIST_KEY = 'niko_live_camera_list';
 
 interface PersistedCameraConfig {
   deviceId: string;
@@ -2687,108 +2697,156 @@ interface PersistedCameraConfig {
   height: number;
   mirrorType?: number;
 }
-function saveCameraConfig(cam: PersistedCameraConfig) {
-  try { window.localStorage.setItem(CAMERA_CONFIG_KEY, JSON.stringify(cam)); } catch {}
-}
-function loadCameraConfig(): PersistedCameraConfig | null {
-  try {
-    const raw = window.localStorage.getItem(CAMERA_CONFIG_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-function clearCameraConfig() {
-  try { window.localStorage.removeItem(CAMERA_CONFIG_KEY); } catch {}
+
+interface PersistedCameraList {
+  cameras: PersistedCameraConfig[];
+  selectedDeviceId?: string;
 }
 
-// 摄像头列表变化时，保存当前 camera 源的最新配置
-function saveCurrentCameraFromMixer() {
-  const cam = videoMixerState.mediaSourceList.value.find(
+function loadCameraListConfig(): PersistedCameraList | null {
+  try {
+    const raw = window.localStorage.getItem(CAMERA_LIST_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as PersistedCameraList;
+      if (Array.isArray(parsed?.cameras) && parsed.cameras.length) {
+        return parsed;
+      }
+    }
+    // 迁移旧版单摄像头配置
+    const legacyRaw = window.localStorage.getItem(CAMERA_CONFIG_KEY);
+    if (legacyRaw) {
+      const legacy = JSON.parse(legacyRaw) as PersistedCameraConfig;
+      if (legacy?.deviceId) {
+        return { cameras: [legacy], selectedDeviceId: String(legacy.deviceId) };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCameraListConfig(config: PersistedCameraList) {
+  try { window.localStorage.setItem(CAMERA_LIST_KEY, JSON.stringify(config)); } catch {}
+}
+
+// 摄像头列表 / 选中项变化时，保存完整列表（不能只存第一个，否则重进/开播后只剩一个）
+function saveCamerasFromMixer() {
+  const cameras = videoMixerState.mediaSourceList.value.filter(
     (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
   );
-  if (!cam) return;
-  saveCameraConfig({
-    deviceId: String(cam.sourceId),
-    deviceName: cam.name,
-    width: cam.width || 1280,
-    height: cam.height || 720,
-    mirrorType: (cam as any).mirrorType,
+  // force-clean 期间列表会被临时清空，此时不要覆盖已有配置
+  if (!cameras.length) return;
+  const selected = cameras.find((m: MediaSource) => m.isSelected) || cameras[0];
+  saveCameraListConfig({
+    cameras: cameras.map((m: MediaSource) => ({
+      deviceId: String(m.sourceId),
+      deviceName: m.name,
+      width: m.width || 1280,
+      height: m.height || 720,
+      mirrorType: (m as any).mirrorType,
+    })),
+    selectedDeviceId: String(selected.sourceId),
   });
 }
 
 // USB 摄像头冷启动较慢，addMediaSource 可能 5 秒超时，这里重试几次避免预览/推流无画面
-const autoAddDefaultCamera = async (retryCount = 3) => {
-  // 优先恢复用户上次保存的摄像头配置
-  const saved = loadCameraConfig();
-  if (saved) {
+const restoreCamerasFromConfig = async (retryCount = 3) => {
+  if (cameraList.value.length === 0) {
     try {
-      if (cameraList.value.length === 0) await getCameraList();
-      // 确认保存的 deviceId 在当前设备列表中存在（USB 插拔可能变化）
-      const stillExists = cameraList.value.some((c) => String(c.deviceId) === String(saved.deviceId));
-      if (stillExists) {
-        const width = saved.width || 1280;
-        const height = saved.height || 720;
+      await getCameraList();
+    } catch (err) {
+      console.warn('[Niko] getCameraList failed:', err);
+    }
+  }
+  const availableIds = new Set(cameraList.value.map((c) => String(c.deviceId)));
+  const persisted = loadCameraListConfig();
+  const savedAll = persisted?.cameras || [];
+  // 设备枚举失败时（availableIds 为空）不要丢弃已保存的配置，直接尝试还原
+  const savedCameras = availableIds.size
+    ? savedAll.filter((c) => availableIds.has(String(c.deviceId)))
+    : savedAll;
+
+  let cameras: PersistedCameraConfig[] = savedCameras;
+  if (!cameras.length) {
+    // 兜底：用 cameraList[0] （系统第一个摄像头）
+    const firstCamera = cameraList.value[0];
+    if (!firstCamera) {
+      console.warn('[Niko] no camera device found');
+      return;
+    }
+    cameras = [{
+      deviceId: String(firstCamera.deviceId),
+      deviceName: firstCamera.deviceName,
+      width: 1280,
+      height: 720,
+      mirrorType: TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
+    }];
+  }
+
+  const selectedId = persisted?.selectedDeviceId
+    && cameras.some((c) => String(c.deviceId) === String(persisted.selectedDeviceId))
+    ? String(persisted.selectedDeviceId)
+    : String(cameras[cameras.length - 1].deviceId);
+  // 选中的摄像头最后添加：SDK 每次 addMediaSource 都会把新源置顶并选中，
+  // 最后添加的源自然成为预览里最上层、被激活的那一路。
+  const ordered = [
+    ...cameras.filter((c) => String(c.deviceId) !== selectedId),
+    ...cameras.filter((c) => String(c.deviceId) === selectedId),
+  ];
+
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    try {
+      for (const cam of ordered) {
+        const exists = videoMixerState.mediaSourceList.value.some(
+          (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera
+            && String(m.sourceId) === String(cam.deviceId),
+        );
+        if (exists) continue;
+        const width = cam.width || 1280;
+        const height = cam.height || 720;
         await videoMixerState.addMediaSource({
-          sourceId: saved.deviceId,
+          sourceId: cam.deviceId,
           sourceType: TRTCMediaSourceType.kCamera,
-          name: saved.deviceName || 'Camera',
+          name: cam.deviceName || 'Camera',
           width,
           height,
           rect: { left: 0, top: 0, right: width, bottom: height },
-          mirrorType: saved.mirrorType ?? TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
+          mirrorType: cam.mirrorType ?? TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
         } as MediaSource);
-        console.log('[Niko] restored saved camera:', saved.deviceName || saved.deviceId);
-        saveCurrentCameraFromMixer();
-        return;
-      } else {
-        console.warn('[Niko] saved camera device no longer exists, falling back to default');
-        clearCameraConfig();
+        console.log('[Niko] camera restored:', cam.deviceName || cam.deviceId);
       }
+      break;
     } catch (err) {
-      console.warn('[Niko] restore saved camera failed, falling back to default:', err);
-      clearCameraConfig();
+      if (attempt < retryCount) {
+        console.log(`[Niko] restore cameras retry (${attempt}/${retryCount}):`, err);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } else {
+        console.warn(`[Niko] restore cameras failed after ${retryCount} attempts:`, err);
+      }
     }
   }
 
-  // 兜底：用 cameraList[0] （系统第一个摄像头）
-  for (let attempt = 1; attempt <= retryCount; attempt++) {
+  // 恢复选中态：直接改 isSelected（SDK 的 updateMediaSource({isSelected:false}) 会重新
+  // 选中源自身，不能用来取消选中），再逐个同步给 SDK。
+  const cameraSources = videoMixerState.mediaSourceList.value.filter(
+    (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
+  );
+  // 选中的设备添加失败时，退回到已成功添加的第一路，保证总有一路处于激活态
+  const effectiveSelectedId = cameraSources.some(
+    (m: MediaSource) => String(m.sourceId) === selectedId,
+  )
+    ? selectedId
+    : (cameraSources[0] ? String(cameraSources[0].sourceId) : '');
+  for (const source of cameraSources) {
+    source.isSelected = String(source.sourceId) === effectiveSelectedId;
     try {
-      if (cameraList.value.length === 0) {
-        await getCameraList();
-      }
-      const firstCamera = cameraList.value[0];
-      if (!firstCamera) {
-        console.warn('[Niko] no camera device found');
-        return;
-      }
-      // 避免重复添加
-      const exists = videoMixerState.mediaSourceList.value.some(
-        (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera
-          && String(m.sourceId) === String(firstCamera.deviceId),
-      );
-      if (exists) return;
-      const width = 1280;
-      const height = 720;
-      await videoMixerState.addMediaSource({
-        sourceId: firstCamera.deviceId,
-        sourceType: TRTCMediaSourceType.kCamera,
-        name: firstCamera.deviceName,
-        width,
-        height,
-        rect: { left: 0, top: 0, right: width, bottom: height },
-        mirrorType: TRTCVideoMirrorType.TRTCVideoMirrorType_Enable,
-      } as MediaSource);
-      console.log('[Niko] default camera added:', firstCamera.deviceName);
-      saveCurrentCameraFromMixer();
-      return;
+      await videoMixerState.updateMediaSource(source, {});
     } catch (err) {
-      if (attempt < retryCount) {
-        console.log(`[Niko] auto add default camera retry (${attempt}/${retryCount}):`, err);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      } else {
-        console.warn(`[Niko] auto add default camera failed after ${retryCount} attempts:`, err);
-      }
+      console.warn('[Niko] sync camera selection failed:', err);
     }
   }
+  saveCamerasFromMixer();
 };
 
 // 同一时刻只允许一次摄像头加入流程：
@@ -2802,7 +2860,7 @@ const ensureDefaultCamera = (): Promise<void> => {
     return Promise.resolve();
   }
   if (!cameraEnsurePromise) {
-    cameraEnsurePromise = autoAddDefaultCamera().finally(() => {
+    cameraEnsurePromise = restoreCamerasFromConfig().finally(() => {
       cameraEnsurePromise = null;
     });
   }
