@@ -50,19 +50,24 @@ export async function createStreamPlayer(
   let player: FlvjsPlayer | null = null;
   let destroyed = false;
 
-  const destroy = (): Promise<void> => {
+  const destroy = async (): Promise<void> => {
+    if (destroyed) {
+      return;
+    }
     destroyed = true;
-    if (player) {
+    const activePlayer = player;
+    player = null;
+    if (activePlayer) {
       try {
-        // flv.js Player.destroy() 内部已按正确顺序执行：
-        //   1. unload → transmuxer.close/destroy → IOController.destroy → FetchStreamLoader.destroy (abort pump)
-        //   2. detachMediaElement → MSE detach + 关闭 MediaSource
-        //   3. player 自己 cleanup
-        player.destroy();
+        activePlayer.pause();
+        // 先停止拉流和转封装，但暂时保留 MSE/SourceBuffer。
+        // 已排队的 pump 分片仍可能在此后几个事件循环内提交，不能立即 detach。
+        activePlayer.unload();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        activePlayer.destroy();
       } catch (error) {
         console.warn('[niko/flvPlayer] destroy failed:', error);
       }
-      player = null;
     }
     // 兜底：即使 player 不存在或已是原生播放模式，也要清 video 元素
     if (videoEl) {
@@ -74,10 +79,6 @@ export async function createStreamPlayer(
         console.warn('[niko/flvPlayer] reset video element failed:', error);
       }
     }
-    // 给 FetchStreamLoader._pump 递归 Promise 链留时间收尾
-    // abort() 会 cancel fetch reader，但已经 resolve 的 chunk 还在 IOController → transmuxer → MSE 管道里排队，
-    // 它们跑完再停，否则最后一个 chunk 进来 appendMediaSegment → SourceBuffer 已被 detach → 读 buffered 炸
-    return new Promise((resolve) => setTimeout(resolve, 50));
   };
 
   if (!rawUrl) {

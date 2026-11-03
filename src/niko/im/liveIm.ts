@@ -92,6 +92,13 @@ export interface LivePkEnded {
   raw: Record<string, any>;
 }
 
+/** PK 双方分数更新（message_action=109） */
+export interface LivePkScoreUpdate {
+  pkId: string;
+  scores: Record<string, number>;
+  raw: Record<string, any>;
+}
+
 /**
  * 复用 TUIKit 已经登录好的 IM 实例（对齐 web-obs-live 的加群/监听逻辑）。
  *
@@ -120,6 +127,7 @@ const giftListeners = new Set<(gift: LiveImGift) => void>();
 const settleListeners = new Set<(stats: LiveSettleStats) => void>();
 const pkInviteListeners = new Set<(invite: LivePkInvite) => void>();
 const pkStartedListeners = new Set<(event: LivePkStarted) => void>();
+const pkScoreListeners = new Set<(event: LivePkScoreUpdate) => void>();
 const pkEndedListeners = new Set<(event: LivePkEnded) => void>();
 const systemListeners = new Set<(event: LiveImSystemEvent) => void>();
 
@@ -466,6 +474,25 @@ function handleCustomMessage(custom: any, raw: any): void {
     pkStartedListeners.forEach((listener) => listener({ pkId, raw: data }));
     return;
   }
+  // PK 双方分数更新：newAnchorList / anchor_list 中携带 anchor_id 和 score
+  if (action === 109) {
+    const data = custom?.message_data || {};
+    const anchors = data.newAnchorList || data.anchor_list || data.anchorList;
+    if (!Array.isArray(anchors) || anchors.length === 0) {
+      return;
+    }
+    const scores: Record<string, number> = {};
+    anchors.forEach((anchor: any) => {
+      const anchorId = String(anchor.anchor_id ?? anchor.user_id ?? anchor.anchorId ?? anchor.userId ?? '');
+      if (anchorId) {
+        scores[anchorId] = Number(anchor.score ?? 0) || 0;
+      }
+    });
+    const pkId = String(data.pk_id ?? data.pkId ?? anchors[0]?.pk_id ?? '');
+    console.log('[NikoIM] pk score updated:', pkId, scores);
+    pkScoreListeners.forEach((listener) => listener({ pkId, scores, raw: data }));
+    return;
+  }
   // PK 结束 / 对方退出
   if (action === 110) {
     const data = custom?.message_data || {};
@@ -760,6 +787,12 @@ export function onLiveImPkInvite(listener: (invite: LivePkInvite) => void): () =
 export function onLiveImPkStarted(listener: (event: LivePkStarted) => void): () => void {
   pkStartedListeners.add(listener);
   return () => pkStartedListeners.delete(listener);
+}
+
+/** PK 分数更新事件（action 109） */
+export function onLiveImPkScore(listener: (event: LivePkScoreUpdate) => void): () => void {
+  pkScoreListeners.add(listener);
+  return () => pkScoreListeners.delete(listener);
 }
 
 /** PK 结束 / 对方退出事件 */

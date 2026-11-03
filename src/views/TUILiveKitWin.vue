@@ -99,17 +99,12 @@
               <button
                 class="niko-tool-btn"
                 type="button"
-                :class="{ 'is-pk-active': !!(currentBattleInfo?.battleId || demoPkActive) }"
+                :class="{ 'is-pk-active': !!(currentBattleInfo?.battleId || backendPkActive) }"
                 :disabled="!isInLive || loading"
                 @click="handlePkClick"
               >
-                <svg class="niko-tool-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M6.4 3.6l4.2 4.2-2.6 2.6L3.8 6.2z" fill="currentColor" opacity=".9" />
-                  <path d="M17.6 3.6l4.2 4.2-2.6 2.6-4.2-4.2z" fill="currentColor" opacity=".9" />
-                  <path d="M8 16l6-6M10 19l6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-                  <path d="M4.2 16.2l3.6 3.6M16.2 16.2l3.6 3.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-                </svg>
-                <span class="niko-tool-label">{{ (currentBattleInfo?.battleId || demoPkActive) ? '结束PK' : 'PK' }}</span>
+                <img class="niko-tool-icon niko-pk-tool-icon" :src="pkIcon" alt="PK" />
+                <span class="niko-tool-label">{{ (currentBattleInfo?.battleId || backendPkActive) ? '结束PK' : 'PK' }}</span>
               </button>
               <MusicButton :isShowingInChildWindow="true" />
               <!-- 退出连线：只在连线或 PK 中显示 -->
@@ -180,7 +175,7 @@
             <div v-if="pkActive" class="pk-overlay">
               <div class="pk-bar">
                 <div class="pk-side pk-left">
-                  <span class="pk-score">{{ battleScoreMap.get(loginUserInfo?.userId) || 0 }}</span>
+                  <span class="pk-score">{{ pkSelfScore }}</span>
                 </div>
                 <div class="pk-progress">
                   <div class="pk-progress-inner" :style="{ width: pkProgressPercent + '%' }"></div>
@@ -207,7 +202,7 @@
               <div v-if="remoteGuestUsers.length" class="guest-column">
                 <div v-for="u in remoteGuestUsers" :key="u.userId" class="video-cell video-cell-guest">
                   <div :id="guestViewId(u.userId)" class="host-guest-video"></div>
-                  <span class="host-guest-name">{{ u.nickName || u.userId }}</span>
+                  <span class="host-guest-name">{{ u.nickName || '连线主播' }}</span>
                   <button
                     class="guest-audio-btn"
                     :class="{ 'is-muted': guestAudioMuted[u.userId] }"
@@ -454,6 +449,7 @@ import FollowListDialog from '../niko/components/FollowListDialog.vue';
 import MessageCenter from '../niko/components/MessageCenter.vue';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
+import pkIcon from '../assets/pkicon.png';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import {
@@ -464,11 +460,13 @@ import {
   onLiveImSystem,
   onLiveImPkInvite,
   onLiveImPkStarted,
+  onLiveImPkScore,
   onLiveImPkEnded,
   type LiveImSystemEvent,
   type LiveSettleStats,
   type LivePkInvite,
   type LivePkStarted,
+  type LivePkScoreUpdate,
   type LivePkEnded,
 } from '../niko/im/liveIm';
 import {
@@ -542,15 +540,25 @@ const roomEngine = useRoomEngine();
 
 // ===== PK 状态 =====
 const battleScoreMap = computed(() => battleScore.value || new Map<string, number>());
+const imPkScores = ref<Record<string, number>>({});
+const pkSelfScore = computed(() => {
+  const selfId = String(loginUserInfo.value?.userId || '');
+  if (Object.prototype.hasOwnProperty.call(imPkScores.value, selfId)) {
+    return imPkScores.value[selfId];
+  }
+  return battleScoreMap.value.get(selfId) || 0;
+});
 const pkOpponentScore = computed(() => {
-  const selfId = loginUserInfo.value?.userId;
+  const selfId = String(loginUserInfo.value?.userId || '');
+  const imOpponent = Object.entries(imPkScores.value).find(([uid]) => uid !== selfId);
+  if (imOpponent) return imOpponent[1];
   for (const [uid, score] of battleScoreMap.value.entries()) {
     if (uid !== selfId) return score;
   }
   return 0;
 });
 const pkProgressPercent = computed(() => {
-  const self = battleScoreMap.value.get(loginUserInfo.value?.userId) || 0;
+  const self = pkSelfScore.value;
   const opp = pkOpponentScore.value;
   const total = self + opp;
   if (total <= 0) return 50;
@@ -563,6 +571,7 @@ let unsubscribeSystem: (() => void) | null = null;
 let unsubscribeJoinCount: (() => void) | null = null;
 let unsubscribePkInvite: (() => void) | null = null;
 let unsubscribePkStarted: (() => void) | null = null;
+let unsubscribePkScore: (() => void) | null = null;
 let unsubscribePkEnded: (() => void) | null = null;
 
 /** 收到的 PK / 连麦邀请（被邀请方） */
@@ -581,6 +590,9 @@ const clearIncomingPkInvite = () => {
 /** 收到别人的连线邀请：展示接受/拒绝弹窗，倒计时结束自动关闭 */
 const handlePkInviteReceived = (invite: LivePkInvite) => {
   console.log('[NikoPK] incoming invite:', invite);
+  if (invite.anchorId && invite.nickname && invite.nickname !== invite.anchorId) {
+    guestNameCache.set(invite.anchorId, invite.nickname);
+  }
   incomingPkInvite.value = invite;
   incomingPkCountdown.value = Math.max(1, Number(invite.waitTimeout) || 15);
   if (incomingPkTimer) {
@@ -614,29 +626,50 @@ const replyIncomingPkInvite = async (status: 0 | 1) => {
   }
 };
 
-/** PK 开始（双方都会收到 action 108）：只有本地主动发起 PK 时才展示 PK 条，
- *  连麦（走同一个 invitePk 接口）接受后服务端同样下发 108，不能误判成 PK */
+/** PK/连线建立（action 108）：pk_stage=1 或本地已调用 startPk 时展示 PK 条，
+ *  普通连麦接受后同样会下发 108，不能仅凭消息误判成 PK */
 const handlePkStartedEvent = (event: LivePkStarted) => {
   console.log('[NikoPK] pk started:', event.pkId);
   // 无论是否展示 PK 条，都要记录 pkId —— 后续 startPk / quitPk 都需要
+  if (event.pkId && event.pkId !== pkIdRef.value) {
+    imPkScores.value = {};
+  }
   if (event.pkId) pkIdRef.value = event.pkId;
+  updateRemoteGuestNames(event.raw);
   clearIncomingPkInvite();
-  if (!pkIntentActive.value) {
+  const pkStage = Number(event.raw.pk_stage ?? event.raw.pkStage ?? 0);
+  if (!pkIntentActive.value && pkStage !== 1) {
     console.log('[NikoPK] co-host connected (not PK), skip PK bar');
     return;
   }
-  if (demoPkActive.value || currentBattleInfo.value?.battleId) {
+  if (backendPkActive.value || currentBattleInfo.value?.battleId) {
     return;
   }
-  demoPkActive.value = true;
-  startPkCountdown(300);
+  backendPkActive.value = true;
+  startPkCountdown(Number(event.raw.pk_keep_second ?? event.raw.pkKeepSecond) || 300);
+};
+
+/** IM action 109：更新双方真实分数；接收方未点击 startPk 也要同步展示 PK 条 */
+const handlePkScoreUpdated = (event: LivePkScoreUpdate) => {
+  if (event.pkId && pkIdRef.value && event.pkId !== pkIdRef.value) {
+    return;
+  }
+  if (event.pkId) pkIdRef.value = event.pkId;
+  updateRemoteGuestNames(event.raw);
+  imPkScores.value = event.scores;
+  pkIntentActive.value = true;
+  if (!pkActive.value) {
+    backendPkActive.value = true;
+    startPkCountdown(300);
+  }
 };
 
 /** PK 结束 / 对方退出（action 110） */
 const handlePkEndedEvent = (event: LivePkEnded) => {
   console.log('[NikoPK] pk ended:', event.pkId);
   pkIntentActive.value = false;
-  demoPkActive.value = false;
+  backendPkActive.value = false;
+  imPkScores.value = {};
   pkIdRef.value = '';
   pkCountdown.value = 0;
   if (pkTimer) {
@@ -670,48 +703,31 @@ watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
 });
 
 const handlePkClick = async () => {
-  // 1. 已在正式 PK 中 → 结束 PK
-  if (currentBattleInfo.value?.battleId || demoPkActive.value) {
-    pkIntentActive.value = false;
-    if (demoPkActive.value) {
-      demoPkActive.value = false;
-      pkCountdown.value = 0;
-      return;
-    }
-    try {
-      await exitBattle({ battleId: currentBattleInfo.value.battleId });
-    } catch (e) {
-      console.warn('[Niko] exitBattle failed:', e);
-    }
+  // 已在 PK 中：通过后端 quitPk 和 SDK 清理真实连接，不只隐藏本地血条
+  if (currentBattleInfo.value?.battleId || backendPkActive.value) {
+    await handleExitConnection();
     return;
   }
   if (!isInLive.value || loading.value) {
     return;
   }
-  // 2. 已有连麦连接 → 调后端 startPk 进入正式 PK（双方同步开启计分）
-  if (coHostConnected.value.length > 0) {
-    const pId = pkIdRef.value;
-    if (!pId) {
-      showMessage({ type: MessageToastType.Warning, message: '缺少 pkId，无法发起 PK' });
-      return;
-    }
-    try {
-      await startPk(pId);
-      pkIntentActive.value = true;
-      // 演示血条兜底（SDK battleId 还没到时先亮 UI）
-      demoPkActive.value = true;
-      startPkCountdown(300);
-      showMessage({ type: MessageToastType.Success, message: 'PK 已开始' });
-    } catch (error: any) {
-      console.warn('[NikoPK] startPk failed:', error);
-      showMessage({ type: MessageToastType.Error, message: error?.message || '发起 PK 失败' });
-    }
+
+  // startPk 必须携带连线建立后由 IM 108 下发的 pkId
+  const pId = pkIdRef.value;
+  if (!pId) {
+    showMessage({ type: MessageToastType.Warning, message: '请先与主播连麦，连线建立后再开启 PK' });
     return;
   }
-  // 3. 还没连麦 → 打开弹窗让用户邀请（好友 / 推荐 Tab）
-  pkIntentActive.value = false;
-  pkDialogTitle.value = '连麦';
-  showPkDialog.value = true;
+  try {
+    await startPk(pId);
+    pkIntentActive.value = true;
+    backendPkActive.value = true;
+    startPkCountdown(300);
+    showMessage({ type: MessageToastType.Success, message: 'PK 已开始' });
+  } catch (error: any) {
+    console.warn('[NikoPK] startPk failed:', error);
+    showMessage({ type: MessageToastType.Error, message: error?.message || '发起 PK 失败' });
+  }
 };
 
 /** 退出连线（连麦 / PK 都走这个）：后端 quitPk + SDK exitHostConnection 双保险 */
@@ -727,7 +743,7 @@ const handleExitConnection = async () => {
       console.warn('[NikoPK] quitPk failed:', e);
     }
   }
-  // 2. 有 SDK battleId 也调 exitBattle（演示 PK 或 SDK 层的连线清理）
+  // 2. 有 SDK battleId 也调 exitBattle（清理 SDK 层 PK 状态）
   if (currentBattleInfo.value?.battleId) {
     try {
       await exitBattle({ battleId: currentBattleInfo.value.battleId });
@@ -750,7 +766,8 @@ const handleExitConnection = async () => {
   }
   // 4. 本地状态清理
   pkIntentActive.value = false;
-  demoPkActive.value = false;
+  backendPkActive.value = false;
+  imPkScores.value = {};
   pkIdRef.value = '';
   pkCountdown.value = 0;
   if (pkTimer) {
@@ -762,14 +779,14 @@ const handleExitConnection = async () => {
   }
 };
 
-/** PK 演示效果开关：没有在播主播可邀请时本地展示 PK 血条 */
-const demoPkActive = ref(false);
+/** 后端 startPk 已成功：在 SDK battleId 尚未同步时先展示真实 PK 血条 */
+const backendPkActive = ref(false);
 /** 本地是否主动发起的是 PK（false 表示走连麦，服务端同样会下发 108，不能展示 PK 条） */
 const pkIntentActive = ref(false);
 /** 当前连麦/PK 的 pkId（后端 invitePk/replyPk 成功后，IM 108 会下发，startPk/quitPk 都依赖它） */
 const pkIdRef = ref('');
 /** PK 进行中：血条盖在视频区顶部 */
-const pkActive = computed(() => !!(currentBattleInfo.value?.battleId || demoPkActive.value));
+const pkActive = computed(() => !!(currentBattleInfo.value?.battleId || backendPkActive.value));
 
 /** 连麦入口：同样走「查询开播主播」列表 */
 const openLinkMicDialog = () => {
@@ -1052,7 +1069,25 @@ interface RemoteGuest {
 }
 
 const remoteGuestUsers = ref<RemoteGuest[]>([]);
+const guestNameCache = new Map<string, string>();
 const guestVideoAvailable = new Set<string>();
+
+/** 从 PK 108/109 的主播列表补充连线昵称，避免 TRTC 只有 userId 时直接展示 ID */
+function updateRemoteGuestNames(raw: Record<string, any>) {
+  const anchors = raw?.newAnchorList || raw?.anchor_list || raw?.anchorList;
+  if (!Array.isArray(anchors)) return;
+  anchors.forEach((anchor: any) => {
+    const userId = String(anchor.anchor_id ?? anchor.user_id ?? anchor.anchorId ?? anchor.userId ?? '');
+    const nickname = String(anchor.nickname ?? anchor.nick_name ?? anchor.user_name ?? '').trim();
+    if (userId && nickname && nickname !== userId) {
+      guestNameCache.set(userId, nickname);
+    }
+  });
+  remoteGuestUsers.value = remoteGuestUsers.value.map((user) => ({
+    ...user,
+    nickName: guestNameCache.get(user.userId) || user.nickName,
+  }));
+}
 
 /** 远端嘉宾静音状态：key = userId，true 表示已关闭对方声音 */
 const guestAudioMuted = ref<Record<string, boolean>>({});
@@ -1450,11 +1485,17 @@ const onRemoteUserEnterRoom = ({ userInfo }: { roomId: string; userInfo?: { user
   if (!userId || !isInLive.value) {
     return;
   }
-  if (remoteGuestUsers.value.some((u) => u.userId === userId)) {
+  const eventName = userInfo?.userName && userInfo.userName !== userId ? userInfo.userName : '';
+  const nickName = guestNameCache.get(userId) || eventName;
+  const existing = remoteGuestUsers.value.find((u) => u.userId === userId);
+  if (existing) {
+    if (nickName && existing.nickName !== nickName) {
+      remoteGuestUsers.value = remoteGuestUsers.value.map((u) => u.userId === userId ? { ...u, nickName } : u);
+    }
     return;
   }
-  console.log('[Niko] remote user entered:', userId, userInfo?.userName);
-  remoteGuestUsers.value = [...remoteGuestUsers.value, { userId, nickName: userInfo?.userName }];
+  console.log('[Niko] remote user entered:', userId, nickName);
+  remoteGuestUsers.value = [...remoteGuestUsers.value, { userId, nickName }];
 };
 
 /** RoomEngine 远端用户视频状态变更：{ userId, streamType, hasVideo, reason } */
@@ -1475,7 +1516,7 @@ const onUserVideoStateChanged = ({ userId, streamType, hasVideo }: { userId: str
   console.log('[Niko] remote camera available:', userId);
   guestVideoAvailable.add(userId);
   if (!remoteGuestUsers.value.some((u) => u.userId === userId)) {
-    remoteGuestUsers.value = [...remoteGuestUsers.value, { userId }];
+    remoteGuestUsers.value = [...remoteGuestUsers.value, { userId, nickName: guestNameCache.get(userId) }];
   }
   bindGuestVideo(userId);
 };
@@ -2575,6 +2616,7 @@ onMounted(async () => {
   // PK / 连麦邀请：被邀请方弹窗、开始/结束状态（对齐 web-obs-live action 106/108/110）
   unsubscribePkInvite = onLiveImPkInvite(handlePkInviteReceived);
   unsubscribePkStarted = onLiveImPkStarted(handlePkStartedEvent);
+  unsubscribePkScore = onLiveImPkScore(handlePkScoreUpdated);
   unsubscribePkEnded = onLiveImPkEnded(handlePkEndedEvent);
   // 累计本场进房人次：结算页「观看人数」的本地估算源之一
   // （观众列表 15s 轮询是快照，短停留观众会漏；进房消息每人必达）
@@ -3122,6 +3164,8 @@ onBeforeUnmount(() => {
   unsubscribePkInvite = null;
   unsubscribePkStarted?.();
   unsubscribePkStarted = null;
+  unsubscribePkScore?.();
+  unsubscribePkScore = null;
   unsubscribePkEnded?.();
   unsubscribePkEnded = null;
   clearIncomingPkInvite();
@@ -3185,51 +3229,63 @@ onBeforeUnmount(() => {
 /* PK 血条：盖在视频区顶部（视频已是 DOM，可以正常叠加） */
 .pk-overlay {
   position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 10;
-  width: 80%;
+  width: 100%;
+  min-width: 100%;
+  pointer-events: none;
   .pk-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: rgba(0, 0, 0, 0.68);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 20px;
-    padding: 6px 14px;
-    backdrop-filter: blur(6px);
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    backdrop-filter: none;
     .pk-side {
-      flex: 0 0 auto;
-      min-width: 46px;
-      text-align: center;
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      z-index: 2;
+      width: 64px;
+      display: flex;
+      align-items: center;
       .pk-score {
-        font-size: 17px;
+        color: #fff;
+        font-size: 16px;
+        line-height: 1;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
+        text-shadow: 0 1px 3px #000;
       }
     }
-    .pk-left .pk-score {
-      color: #5fb8ff;
-      text-shadow: 0 0 8px rgba(95, 184, 255, 0.45);
+    .pk-left {
+      left: 0;
+      justify-content: flex-start;
+      padding-left: 12px;
     }
-    .pk-right .pk-score {
-      color: #ff8b6c;
-      text-shadow: 0 0 8px rgba(255, 139, 108, 0.45);
+    .pk-right {
+      right: 0;
+      justify-content: flex-end;
+      padding-right: 12px;
     }
     .pk-progress {
-      flex: 1;
-      height: 16px;
+      width: 100%;
+      height: 24px;
       background: #ff6b6b;
-      border-radius: 8px;
+      border-radius: 0;
       position: relative;
       overflow: hidden;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+      box-shadow: none;
       .pk-progress-inner {
         height: 100%;
         background: linear-gradient(90deg, #3aa0ff, #6cc5ff);
-        border-radius: 8px;
-        transition: width 0.5s ease;
+        border-radius: 0 12px 12px 0;
+        transition: width 0.35s ease-out;
       }
       .pk-countdown {
         position: absolute;
@@ -3237,7 +3293,7 @@ onBeforeUnmount(() => {
         left: 50%;
         transform: translate(-50%, -50%);
         color: #fff;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
       }
