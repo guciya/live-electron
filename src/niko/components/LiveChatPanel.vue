@@ -95,6 +95,19 @@
         {{ t('Send') }}
       </button>
       <button
+        class="niko-chat-float"
+        type="button"
+        title="飘屏"
+        aria-label="飘屏"
+        :disabled="disabled || sendingMarquee || !draft.trim()"
+        @click="handleSendMarquee"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 11v2a1 1 0 0 0 1 1h2l5 3V7l-5 3H4a1 1 0 0 0-1 1z" />
+          <path d="M14 8a4 4 0 0 1 0 8" />
+        </svg>
+      </button>
+      <button
         v-if="showGiftButton"
         class="niko-chat-gift"
         type="button"
@@ -135,12 +148,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useUIKit } from '@tencentcloud/uikit-base-component-vue3';
+import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import { sendLiveMessage } from '../api/live';
 import { resolveImageUrl } from '../config';
 import {
   joinLiveChat,
   isLiveChatConnected,
   onLiveImMessage,
+  pushLocalMarquee,
+  sendMarqueeMessage,
   type LiveImMessage,
 } from '../im/liveIm';
 import boIcon from '../assets/role/bo.png';
@@ -176,9 +192,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useUIKit();
+const { loginUserInfo } = useLoginState();
 const messages = ref<LiveImMessage[]>([]);
 const draft = ref('');
 const sending = ref(false);
+const sendingMarquee = ref(false);
 const connected = ref(false);
 const listRef = ref<HTMLElement | null>(null);
 const MAX_MESSAGES = 200;
@@ -281,8 +299,35 @@ async function handleSend() {
   }
 }
 
+/** 以飘屏消息（message_action=1001）发送当前输入内容 */
+async function handleSendMarquee() {
+  const content = draft.value.trim();
+  if (!content || props.disabled || sendingMarquee.value) {
+    return;
+  }
+  sendingMarquee.value = true;
+  try {
+    const profile = {
+      userId: String(loginUserInfo.value?.userId || ''),
+      nickname: String(loginUserInfo.value?.userName || ''),
+      avatar: String(loginUserInfo.value?.avatarUrl || ''),
+    };
+    await sendMarqueeMessage(content, profile);
+    pushLocalMarquee({ ...profile, text: content });
+    draft.value = '';
+  } catch (error: any) {
+    console.warn('[NikoChat] marquee send failed:', error?.message || error);
+  } finally {
+    sendingMarquee.value = false;
+  }
+}
+
 onMounted(() => {
   unsubscribe = onLiveImMessage((message) => {
+    // 飘屏消息只在飘屏层展示，不进聊天列表（对齐 web-obs-live）
+    if (message.marquee) {
+      return;
+    }
     messages.value.push(message);
     if (messages.value.length > MAX_MESSAGES) {
       messages.value.splice(0, messages.value.length - MAX_MESSAGES);
@@ -586,6 +631,26 @@ onBeforeUnmount(() => {
 
 .niko-chat-send:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.niko-chat-float {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #ff4d9d, #7a5cff);
+  color: #fff;
+  cursor: pointer;
+}
+
+.niko-chat-float:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

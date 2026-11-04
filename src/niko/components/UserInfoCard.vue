@@ -17,19 +17,19 @@
         </div>
         <div class="niko-user-card-head">
           <div class="niko-user-card-name-row">
-            <span class="niko-user-card-name">{{ info.nickname || '用户' }}</span>
+            <span class="niko-user-card-name">{{ info?.nickname || (loading ? '加载中…' : '用户') }}</span>
             <span v-if="genderText" class="niko-user-card-gender" :class="genderClass">
               {{ genderText }}
             </span>
             <!-- 角色标签：主播/房管 -->
-            <span v-if="info.is_anchor" class="niko-role-badge is-anchor">主播</span>
-            <span v-if="info.is_manager" class="niko-role-badge is-manager">房管</span>
+            <span v-if="info?.is_anchor" class="niko-role-badge is-anchor">主播</span>
+            <span v-if="info?.is_manager" class="niko-role-badge is-manager">房管</span>
           </div>
           <div class="niko-user-card-badges">
             <!-- VIP -->
-            <span v-if="info.vip_info?.vip_name" class="niko-user-card-vip">
+            <span v-if="info?.vip_info?.vip_name" class="niko-user-card-vip">
               <img v-if="vipIcon" :src="vipIcon" alt="" />
-              {{ info.vip_info.vip_name }}
+              {{ info?.vip_info?.vip_name }}
             </span>
             <!-- 用户等级：优先展示 gif 动效（level_gif_icon） -->
             <span v-if="userLevelGifIcon || userLevelIcon" class="niko-user-card-level">
@@ -47,18 +47,18 @@
       </div>
 
       <div class="niko-user-card-signature">
-        {{ info.introduction || '这个人很懒，什么都没留下' }}
+        {{ info?.introduction || '这个人很懒，什么都没留下' }}
       </div>
 
       <div class="niko-user-card-meta">
         <div class="niko-user-card-meta-row">
           <span class="niko-user-card-meta-item">
             <span class="niko-user-card-meta-label">IP位置：</span>
-            <span>{{ info.user_location || '未知' }}</span>
+            <span>{{ info?.user_location || '未知' }}</span>
           </span>
           <span class="niko-user-card-meta-item">
             <span class="niko-user-card-meta-label">NKO号：</span>
-            <span>{{ info.user_show_id || '-' }}</span>
+            <span>{{ info?.user_show_id || '-' }}</span>
           </span>
         </div>
         <div v-if="fansText" class="niko-user-card-meta-row">
@@ -145,12 +145,13 @@ const fansText = computed(() => {
 .niko-user-card {
   position: relative;
   width: 22rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   border-radius: 0.75rem;
   background: linear-gradient(180deg, #1e1e2e 0%, #191a20 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
   color: #fff;
-  overflow: hidden;
 }
 
 .niko-user-card-close {
@@ -177,31 +178,26 @@ const fansText = computed(() => {
 
 .niko-user-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.85rem;
-  padding: 1rem 1.25rem 1rem;
+  padding: 6rem 1.25rem 1rem;
+  background: linear-gradient(135deg, rgba(255, 48, 109, 0.15), rgba(74, 144, 226, 0.15));
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
   position: relative;
-
-  // 没有名片背景时的默认渐变
-  &:not(:style) {
-    background: linear-gradient(135deg, rgba(255, 48, 109, 0.15), rgba(74, 144, 226, 0.15));
-  }
 }
 
 .niko-user-card-avatar-wrap {
+  margin-top: -159px;
   position: relative;
   flex: none;
   width: 4.25rem;
   height: 4.25rem;
-  margin-top: 100px;
 }
 
 .niko-user-card-avatar {
   width: 4.25rem;
-  margin-top: 100px;
   height: 4.25rem;
   border-radius: 50%;
   object-fit: cover;
@@ -221,10 +217,10 @@ const fansText = computed(() => {
 .niko-user-card-head {
   flex: 1;
   min-width: 0;
-  padding-top: 0.3rem;
 }
 
 .niko-user-card-name-row {
+  margin-left: -85px;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -278,6 +274,7 @@ const fansText = computed(() => {
   gap: 0.35rem;
   margin-top: 0.4rem;
   flex-wrap: wrap;
+  margin-left: -85px;
 }
 
 .niko-user-card-level,

@@ -14,6 +14,8 @@ export interface LiveImMessage {
   time: number;
   /** 礼物消息额外字段（用于礼物特效） */
   gift?: LiveImGift;
+  /** 是否为飘屏消息（message_action=1001），用于飘屏层单独消费 */
+  marquee?: boolean;
   /** 等级/勋章/身份展示信息（对齐 H5 niko/im 与 web-obs-live 的 message_data 结构） */
   extra?: {
     levelColor?: string;
@@ -401,6 +403,7 @@ function handleCustomMessage(custom: any, raw: any): void {
         avatar: resolveImageUrl(String(data.avatar || '')),
         text,
         time: messageTime(raw),
+        marquee: true,
       });
     }
     return;
@@ -667,6 +670,57 @@ async function doJoinGroup(roomId: string): Promise<void> {
   }
   currentGroupId = roomId;
   console.log('[NikoIM] joined group:', roomId, 'status:', rawStatus ?? 'unknown');
+}
+
+/** 发送飘屏消息（message_action=1001），与 web-obs-live 的飘屏消息格式一致 */
+export async function sendMarqueeMessage(
+  text: string,
+  profile?: { userId?: string; nickname?: string; avatar?: string },
+): Promise<void> {
+  const content = text.trim();
+  const chat = getChat() as any;
+  if (!content || !currentGroupId || !chat) {
+    return;
+  }
+  const payload = {
+    message_type: 2,
+    message_action: 1001,
+    message_text: content,
+    message_data: {
+      user_id: profile?.userId || '',
+      nickname: profile?.nickname || '',
+      avatar: profile?.avatar || '',
+    },
+  };
+  const message = chat.createCustomMessage({
+    to: currentGroupId,
+    conversationType: 'GROUP',
+    payload: {
+      data: JSON.stringify(payload),
+      description: '飘屏',
+      extension: '',
+    },
+  });
+  await chat.sendMessage(message);
+}
+
+/** 本地立即回显一条飘屏，保证发送方在 IM 未回显自己消息时也能看到 */
+export function pushLocalMarquee(params: {
+  text: string;
+  userId?: string;
+  nickname?: string;
+  avatar?: string;
+}): void {
+  emitMessage({
+    id: `local-marquee-${Date.now()}`,
+    kind: 'chat',
+    fromUserId: params.userId || '',
+    nickname: params.nickname || '我',
+    avatar: resolveImageUrl(params.avatar || ''),
+    text: params.text,
+    time: Date.now() / 1000,
+    marquee: true,
+  });
 }
 
 /** 加入直播 IM 群（群 ID = 后端 room_id），复用 TUIKit 已建立的登录态 */

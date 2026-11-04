@@ -45,6 +45,9 @@
 
           <GiftEffect />
 
+          <!-- IM 飘屏消息（message_action=1001 / 进房 / 礼物） -->
+          <LiveMarquee />
+
           <div v-if="errorText" class="player-status">{{ errorText }}</div>
 
           <div class="player-anchor">
@@ -160,6 +163,7 @@
                 :visible="audiencePanelVisible"
                 :live-index-id="liveIndexIdNumber"
                 @click.stop
+                @user-click="handleUserClick"
               />
             </div>
             </div>
@@ -261,6 +265,7 @@ import type { NikoLiveListItem } from '../niko/api/liveList';
 import { attentionUser } from '../niko/api/user';
 import LiveChatPanel from '../niko/components/LiveChatPanel.vue';
 import GiftEffect from '../niko/components/GiftEffect.vue';
+import LiveMarquee from '../niko/components/LiveMarquee.vue';
 import GiftPanel from '../niko/components/GiftPanel.vue';
 import GamePanel from '../niko/components/GamePanel.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
@@ -316,6 +321,7 @@ let signalScene: THREE.Scene | null = null;
 let signalResizeObserver: ResizeObserver | null = null;
 let signalStageElement: HTMLElement | null = null;
 let signalRafId: number | null = null;
+let signalPointerDownHandler: ((event: PointerEvent) => void) | null = null;
 const signalPointer = { x: 0, y: 0, targetX: 0, targetY: 0 };
 
 function handleSignalPointerMove(event: PointerEvent) {
@@ -342,6 +348,10 @@ function disposeSignalScene() {
   if (signalStageElement) {
     signalStageElement.removeEventListener('pointermove', handleSignalPointerMove);
     signalStageElement.removeEventListener('pointerleave', handleSignalPointerLeave);
+    if (signalPointerDownHandler) {
+      signalStageElement.removeEventListener('pointerdown', signalPointerDownHandler);
+      signalPointerDownHandler = null;
+    }
     signalStageElement = null;
   }
   if (signalScene) {
@@ -587,6 +597,110 @@ function initSignalScene() {
     );
     world.add(particles);
 
+    // ---- 增强氛围层：侧翼能量流、悬浮碎片、光标光环、点击冲击波 ----
+    const streamCount = 240;
+    const streamPositions = new Float32Array(streamCount * 3);
+    const streamBaseX = new Float32Array(streamCount);
+    const streamSpeeds = new Float32Array(streamCount);
+    const streamColors = new Float32Array(streamCount * 3);
+    for (let i = 0; i < streamCount; i += 1) {
+      const side = i % 2 ? 1 : -1;
+      streamBaseX[i] = side * (3.5 + Math.random() * 3.2);
+      streamPositions[i * 3] = streamBaseX[i];
+      streamPositions[i * 3 + 1] = (Math.random() - 0.5) * 8;
+      streamPositions[i * 3 + 2] = -3 - Math.random() * 10;
+      streamSpeeds[i] = 0.5 + Math.random() * 1.2;
+      const tint = new THREE.Color(side > 0 ? 0xff5fb4 : 0x5fe6ff);
+      tint.toArray(streamColors, i * 3);
+    }
+    const streamGeometry = new THREE.BufferGeometry();
+    streamGeometry.setAttribute('position', new THREE.BufferAttribute(streamPositions, 3));
+    streamGeometry.setAttribute('color', new THREE.BufferAttribute(streamColors, 3));
+    const streamPoints = new THREE.Points(
+      streamGeometry,
+      new THREE.PointsMaterial({
+        size: 0.055,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+      }),
+    );
+    world.add(streamPoints);
+
+    const shards = Array.from({ length: 14 }, (_, index) => {
+      const side = index % 2 ? 1 : -1;
+      const geometry = index % 3 === 0
+        ? new THREE.OctahedronGeometry(0.18 + (index % 4) * 0.05, 0)
+        : new THREE.TetrahedronGeometry(0.22 + (index % 3) * 0.08, 0);
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({
+          color: side > 0 ? 0xff4da6 : 0x55e7ff,
+          transparent: true,
+          opacity: 0.42,
+          wireframe: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      mesh.position.set(
+        side * (3.3 + Math.random() * 2.8),
+        (Math.random() - 0.5) * 5.2,
+        -3 - Math.random() * 8,
+      );
+      world.add(mesh);
+      return { mesh, baseX: mesh.position.x, baseY: mesh.position.y, phase: index * 0.82 };
+    });
+
+    const haloGroup = new THREE.Group();
+    haloGroup.position.z = -3;
+    scene.add(haloGroup);
+    const haloOuter = new THREE.Mesh(
+      new THREE.TorusGeometry(0.72, 0.009, 6, 96),
+      new THREE.MeshBasicMaterial({
+        color: 0x7ce9ff,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    const haloInner = new THREE.Mesh(
+      new THREE.TorusGeometry(0.42, 0.012, 6, 96),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6fc2,
+        transparent: true,
+        opacity: 0.28,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    haloGroup.add(haloOuter, haloInner);
+
+    const rippleGroup: {
+      mesh: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+      startedAt: number;
+    }[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const material = new THREE.MeshBasicMaterial({
+        color: index % 2 ? 0xff5fb4 : 0x5fe6ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.014, 6, 96), material);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(0, -3.05, -5);
+      world.add(mesh);
+      rippleGroup.push({ mesh, startedAt: -10 });
+    }
+    let rippleIndex = 0;
+    let rippleClock = 0;
+
     const resize = () => {
       const width = Math.max(1, stage.clientWidth);
       const height = Math.max(1, stage.clientHeight);
@@ -605,6 +719,20 @@ function initSignalScene() {
     signalStageElement = stage;
     stage.addEventListener('pointermove', handleSignalPointerMove, { passive: true });
     stage.addEventListener('pointerleave', handleSignalPointerLeave);
+    // 点击影片外的背景区域生成冲击波，不拦截任何原本的点击行为
+    signalPointerDownHandler = (event: PointerEvent) => {
+      if (event.target !== stage) return;
+      const rect = stage.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const ripple = rippleGroup[rippleIndex];
+      rippleIndex = (rippleIndex + 1) % rippleGroup.length;
+      const nx = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+      const ny = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+      ripple.mesh.position.x = nx * Math.max(3.6, camera.aspect * 3.2);
+      ripple.mesh.position.z = -5 - ny * 2.4;
+      ripple.startedAt = rippleClock;
+    };
+    stage.addEventListener('pointerdown', signalPointerDownHandler, { passive: true });
 
     const frameInterval = 1000 / 30;
     let lastFrame = 0;
@@ -644,6 +772,42 @@ function initSignalScene() {
       }
       particleGeometry.attributes.position.needsUpdate = true;
       particles.rotation.y = Math.sin(elapsed * 0.05) * 0.025;
+
+      for (let i = 0; i < streamCount; i += 1) {
+        const yIndex = i * 3 + 1;
+        streamPositions[yIndex] += delta * streamSpeeds[i] * 1.1;
+        if (streamPositions[yIndex] > 4.6) streamPositions[yIndex] = -4.6;
+        streamPositions[i * 3] = streamBaseX[i]
+          + signalPointer.x * 0.45
+          + Math.sin(elapsed * 0.6 + i) * 0.06;
+      }
+      streamGeometry.attributes.position.needsUpdate = true;
+
+      shards.forEach(({ mesh, baseX, baseY, phase }) => {
+        mesh.rotation.x = phase + elapsed * 0.3;
+        mesh.rotation.y = phase * 0.7 - elapsed * 0.22;
+        mesh.position.y = baseY + Math.sin(elapsed * 0.55 + phase) * 0.24;
+        mesh.position.x = baseX + signalPointer.x * 0.3;
+      });
+
+      haloGroup.position.x = signalPointer.x * Math.max(3.4, camera.aspect * 3.1);
+      haloGroup.position.y = signalPointer.y * 2.3 + 0.2;
+      haloGroup.scale.setScalar(1 + Math.sin(elapsed * 2.4) * 0.08);
+      haloOuter.rotation.z = elapsed * 0.8;
+      haloInner.rotation.z = -elapsed * 1.2;
+
+      rippleClock = elapsed;
+      rippleGroup.forEach(({ mesh, startedAt }) => {
+        const age = elapsed - startedAt;
+        if (age < 0 || age > 1.2) {
+          mesh.material.opacity = 0;
+          return;
+        }
+        const progress = age / 1.2;
+        mesh.scale.setScalar(0.4 + progress * 4.2);
+        mesh.material.opacity = 0.45 * (1 - progress);
+      });
+
       renderer.render(scene, camera);
     };
     signalRafId = requestAnimationFrame(animate);
@@ -1785,7 +1949,7 @@ onBeforeUnmount(() => {
 .player-side {
   position: relative;
   flex: none;
-  width: 20rem;
+  width: 30rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;

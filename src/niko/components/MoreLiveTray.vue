@@ -397,6 +397,7 @@ onUnmounted(stopAllPreviews);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #fff;
 }
 
 .more-live-title {

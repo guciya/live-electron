@@ -188,6 +188,8 @@
               </div>
             </div>
             <GiftEffect v-if="isInLive" />
+            <!-- IM 飘屏消息（主播端同样展示） -->
+            <LiveMarquee v-if="isInLive" />
             <!-- 更多直播：与观众端一致的底部横滑长条弹窗（自带拉流预览） -->
             <MoreLiveTray
               :visible="moreLiveVisible"
@@ -417,6 +419,7 @@ import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
 import pkIcon from '../assets/pkicon.png';
 import GiftEffect from '../niko/components/GiftEffect.vue';
+import LiveMarquee from '../niko/components/LiveMarquee.vue';
 import UserInfoCard from '../niko/components/UserInfoCard.vue';
 import {
   joinLiveChat,

@@ -24,6 +24,10 @@
           v-for="(item, index) in rows"
           :key="`${item.userId}-${index}`"
           class="audience-item"
+          role="button"
+          tabindex="0"
+          @click="handleRowClick(item)"
+          @keydown.enter="handleRowClick(item)"
         >
           <span v-if="activeTab === 'contribute'" class="audience-medal">
             {{ medalText(index) }}
@@ -76,6 +80,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'count-change', count: number): void;
+  (e: 'user-click', payload: { userId: string; isMystery: boolean }): void;
 }>();
 
 type TabKey = 'online' | 'noble' | 'contribute';
@@ -87,7 +92,7 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 interface PanelRow {
-  userId: number;
+  userId: string;
   nickname: string;
   avatar: string;
   gender: number;
@@ -95,6 +100,7 @@ interface PanelRow {
   levelIcon: string;
   levelName: string;
   score: number;
+  isMystery: boolean;
 }
 
 const activeTab = ref<TabKey>('online');
@@ -111,7 +117,7 @@ const emptyText = computed(() => {
 function normalizeAudience(item: LiveAudienceItem): PanelRow {
   const level = item.user_level_info;
   return {
-    userId: item.user_id,
+    userId: String(item.user_id ?? ''),
     nickname: item.nickname || '用户',
     avatar: item.avatar ? resolveImageUrl(item.avatar) : '',
     gender: item.gender || 0,
@@ -119,13 +125,14 @@ function normalizeAudience(item: LiveAudienceItem): PanelRow {
     levelIcon: level?.level_icon ? resolveImageUrl(level.level_icon) : '',
     levelName: level?.level_name || '',
     score: item.contribute_popularity || 0,
+    isMystery: Boolean(Number(item.is_mystery)),
   };
 }
 
 function normalizeContribute(item: ContributeUserItem): PanelRow {
   const level = item.user_level_info;
   return {
-    userId: item.user_id,
+    userId: String(item.user_id ?? ''),
     nickname: item.nickname || '用户',
     avatar: item.avatar ? resolveImageUrl(item.avatar) : '',
     gender: item.gender || 0,
@@ -133,7 +140,14 @@ function normalizeContribute(item: ContributeUserItem): PanelRow {
     levelIcon: level?.user_level_icon ? resolveImageUrl(level.user_level_icon) : '',
     levelName: level?.user_level_name || '',
     score: item.contribute || 0,
+    isMystery: false,
   };
+}
+
+/** 点击列表项打开用户信息卡片 */
+function handleRowClick(row: PanelRow) {
+  if (!row.userId) return;
+  emit('user-click', { userId: row.userId, isMystery: row.isMystery });
 }
 
 /** 贡献前三名展示金银铜牌 */
@@ -332,6 +346,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
+  cursor: pointer;
 
   &:hover {
     background-color: rgba(255, 255, 255, 0.06);
