@@ -16,6 +16,22 @@ const EventEmitter = require('events');
 
 const logPrefix = '[TUILiveKit.main]';
 
+function createNikoIcon() {
+  const { nativeImage } = require('electron');
+  const iconDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'build')
+    : path.join(__dirname, 'build');
+  let icon = nativeImage.createFromPath(path.join(iconDir, 'icon-round-32x32.png'));
+  if (!icon.isEmpty()) {
+    try { icon.addRepresentation({ scaleFactor: 2, file: path.join(iconDir, 'icon-round-48x48.png') }); } catch (_) {}
+    try { icon.addRepresentation({ scaleFactor: 1, file: path.join(iconDir, 'icon-round-32x32.png') }); } catch (_) {}
+    try { icon.addRepresentation({ scaleFactor: 0.5, file: path.join(iconDir, 'icon-round-16x16.png') }); } catch (_) {}
+  } else {
+    icon = nativeImage.createFromPath(path.join(iconDir, 'icon.ico'));
+  }
+  return icon;
+}
+
 // ==================== 托盘菜单图标（16x16 PNG，运行时绘制，免新增资源文件） ====================
 const TRAY_ICON_SIZE = 16;
 // 中性灰蓝色，深色/浅色系统菜单下都可见
@@ -688,12 +704,8 @@ function windowOpenHandler(details) {
 async function createWindow(width = 1366, height = 668) {
   await checkAndApplyDeviceAccessPrivilege();
 
-  // 主窗口图标：用 nativeImage 多尺寸 PNG 构建，避免 PowerShell 生成的 ICO 颜色丢失
-  const { nativeImage: _ni } = require('electron');
-  const _mainIcon = _ni.createFromPath(path.join(__dirname, 'build', 'icon-round-32x32.png'));
-  try { _mainIcon.addRepresentation({ scaleFactor: 2, file: path.join(__dirname, 'build', 'icon-round-48x48.png') }); } catch (_) {}
-  try { _mainIcon.addRepresentation({ scaleFactor: 1, file: path.join(__dirname, 'build', 'icon-round-32x32.png') }); } catch (_) {}
-  try { _mainIcon.addRepresentation({ scaleFactor: 0.5, file: path.join(__dirname, 'build', 'icon-round-16x16.png') }); } catch (_) {}
+  // 主窗口与托盘共用打包后的真实资源路径，避免 ASAR 中读取不存在的 build 目录。
+  const _mainIcon = createNikoIcon();
 
   windowMap.main = new BrowserWindow({
     width: 1620 || width,
@@ -2075,16 +2087,10 @@ function notifyMainWindow(channel, payload) {
 function createTray() {
   try {
     // 圆形托盘图标（16/32/48 多尺寸，适配 Windows 高 DPI 缩放）
-    const { nativeImage } = require('electron');
-    const trayIconPath = path.join(__dirname, 'build', 'icon-round-32x32.png');
-    const trayIconLargePath = path.join(__dirname, 'build', 'icon-round-48x48.png');
-    const trayIconSmallPath = path.join(__dirname, 'build', 'icon-round-16x16.png');
-    const trayImg = nativeImage.createFromPath(trayIconPath);
-    try { trayImg.addRepresentation({ scaleFactor: 2, file: trayIconLargePath }); } catch (_) {}
-    try { trayImg.addRepresentation({ scaleFactor: 1, file: trayIconPath }); } catch (_) {}
-    try { trayImg.addRepresentation({ scaleFactor: 0.5, file: trayIconSmallPath }); } catch (_) {}
-
-    const iconPath = path.join(__dirname, 'favicon.ico');
+    const trayImg = createNikoIcon();
+    if (trayImg.isEmpty()) {
+      throw new Error('Niko tray icon resource is missing or invalid');
+    }
     appTray = new Tray(trayImg);
     appTray.setToolTip('Niko直播伴侣');
     const contextMenu = Menu.buildFromTemplate([

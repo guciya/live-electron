@@ -8,7 +8,7 @@
       class="message-box-overlay"
       @click="handleOverlayClick"
     >
-      <div class="tui-message-box">
+      <div :class="['tui-message-box', customClass]">
         <div v-if="title && title !== ''" class="tui-message-box-header">
           <div class="tui-message-box-title">{{ title }}</div>
           <div class="close">
@@ -50,6 +50,7 @@ interface Props {
   confirmButtonText: string;
   cancelButtonText?: string;
   cancelCallback?: BeforeCloseFn | null;
+  customClass?: string;
   // eslint-disable-next-line @typescript-eslint/ban-types
   remove: Function;
   appendToBody?: boolean;

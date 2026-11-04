@@ -7,7 +7,7 @@ node_modules
 /release-test4
 /dist
 /dist-dev
-
+/release-asar-false
 !package-lock.json
 
 # local env files

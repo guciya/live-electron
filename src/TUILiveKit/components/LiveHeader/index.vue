@@ -32,7 +32,7 @@
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <span>返回列表</span>
+        <span>返回</span>
       </button>
       <!-- 关注列表 / 消息：仅开播页启用（放在「返回列表」右侧） -->
       <button
@@ -513,7 +513,7 @@ defineExpose({ refreshMessageUnread });
       display: inline-flex;
       align-items: center;
       height: 30px;
-      width: 105px;
+      width: 135px;
       padding-left: 11px;
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.12);

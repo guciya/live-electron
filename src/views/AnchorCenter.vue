@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="anchor-center-page">
+      <canvas ref="holoCanvas" class="holo-canvas" aria-hidden="true"></canvas>
       <!-- 顶部标题栏 -->
       <header class="anchor-center-header tui-window-header">
         <div class="header-left">
@@ -293,9 +294,12 @@ import { showMessage, MessageToastType } from '../TUILiveKit/base-component/Mess
 import { resolveImageUrl } from '../niko/config';
 import { useAuthStore } from '../niko/store/auth';
 import { getAnchorCenter, type AnchorCenterData } from '../niko/api/live';
+import * as THREE from 'three/src/Three.js';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const holoCanvas = ref<HTMLCanvasElement | null>(null);
+let cleanupHologram: (() => void) | null = null;
 
 // 窗口控制
 const isMaximized = ref(false);
@@ -424,42 +428,376 @@ function handlePending(feature: string) {
   }
 }
 
+function createHologramScene(canvas: HTMLCanvasElement) {
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+  } catch (error) {
+    console.warn('[AnchorCenter] WebGL initialization failed', error);
+    return null;
+  }
+
+  renderer.setClearColor(0x03050d, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x070914, 0.038);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 90);
+  camera.position.set(0, 0.25, 11);
+  const world = new THREE.Group();
+  scene.add(world);
+  scene.add(new THREE.AmbientLight(0x7685d8, 1.35));
+
+  const starCount = 620;
+  const starPositions = new Float32Array(starCount * 3);
+  const starColors = new Float32Array(starCount * 3);
+  const violet = new THREE.Color(0x7567e8);
+  const cyan = new THREE.Color(0x71e7ff);
+  for (let i = 0; i < starCount; i += 1) {
+    starPositions[i * 3] = (Math.random() - 0.5) * 30;
+    starPositions[i * 3 + 1] = (Math.random() - 0.5) * 18;
+    starPositions[i * 3 + 2] = -18 + Math.random() * 20;
+    const color = violet.clone().lerp(cyan, Math.random());
+    starColors[i * 3] = color.r;
+    starColors[i * 3 + 1] = color.g;
+    starColors[i * 3 + 2] = color.b;
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+  const starMaterial = new THREE.PointsMaterial({
+    size: 0.035,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.58,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const stars = new THREE.Points(starGeometry, starMaterial);
+  world.add(stars);
+
+  const grid = new THREE.GridHelper(46, 46, 0x4053a0, 0x17243f);
+  grid.position.set(0, -3.55, -5);
+  const gridMaterial = grid.material as THREE.Material;
+  gridMaterial.transparent = true;
+  gridMaterial.opacity = 0.18;
+  gridMaterial.depthWrite = false;
+  world.add(grid);
+
+  const coreGroup = new THREE.Group();
+  world.add(coreGroup);
+  const coreLight = new THREE.PointLight(0x55dfff, 22, 13, 2);
+  coreLight.position.set(1.2, 1.1, 2.2);
+  coreGroup.add(coreLight);
+  const rimLight = new THREE.PointLight(0x8a5cff, 18, 12, 2);
+  rimLight.position.set(-1.5, -0.6, 1.2);
+  coreGroup.add(rimLight);
+
+  const glowCanvas = document.createElement('canvas');
+  glowCanvas.width = 128;
+  glowCanvas.height = 128;
+  const glowContext = glowCanvas.getContext('2d');
+  if (glowContext) {
+    const gradient = glowContext.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(150, 240, 255, 0.9)');
+    gradient.addColorStop(0.18, 'rgba(92, 140, 255, 0.48)');
+    gradient.addColorStop(0.48, 'rgba(111, 68, 255, 0.16)');
+    gradient.addColorStop(1, 'rgba(61, 39, 180, 0)');
+    glowContext.fillStyle = gradient;
+    glowContext.fillRect(0, 0, 128, 128);
+  }
+  const glowTexture = new THREE.CanvasTexture(glowCanvas);
+  glowTexture.colorSpace = THREE.SRGBColorSpace;
+  const glowMaterial = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0xb3c5ff,
+    transparent: true,
+    opacity: 0.3,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const glow = new THREE.Sprite(glowMaterial);
+  glow.scale.set(4.8, 4.8, 1);
+  glow.position.z = -0.8;
+  coreGroup.add(glow);
+
+  const crystalMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x7566ed,
+    emissive: 0x251b64,
+    emissiveIntensity: 0.55,
+    metalness: 0.28,
+    roughness: 0.16,
+    transmission: 0.18,
+    thickness: 0.75,
+    clearcoat: 1,
+    clearcoatRoughness: 0.12,
+    transparent: true,
+    opacity: 0.52,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    flatShading: true,
+  });
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1.02, 1), crystalMaterial);
+  crystal.scale.set(0.82, 1.25, 0.82);
+  coreGroup.add(crystal);
+
+  const coreMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9cf5ff,
+    emissive: 0x39cdea,
+    emissiveIntensity: 1.8,
+    metalness: 0.35,
+    roughness: 0.18,
+    transparent: true,
+    opacity: 0.88,
+  });
+  const innerCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.46, 2), coreMaterial);
+  coreGroup.add(innerCore);
+
+  const wireSourceGeometry = new THREE.IcosahedronGeometry(1.28, 1);
+  const wireGeometry = new THREE.EdgesGeometry(wireSourceGeometry);
+  wireSourceGeometry.dispose();
+  const wire = new THREE.LineSegments(
+    wireGeometry,
+    new THREE.LineBasicMaterial({
+      color: 0xaaa0ff,
+      transparent: true,
+      opacity: 0.38,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  coreGroup.add(wire);
+
+  const ringSpecs = [
+    { radius: 1.52, color: 0x62e7ff, opacity: 0.5, rotation: [1.12, 0.18, 0.2], speed: 0.11 },
+    { radius: 1.88, color: 0x8c78ff, opacity: 0.34, rotation: [0.62, 0.92, 1.1], speed: -0.075 },
+    { radius: 2.24, color: 0x4f8fff, opacity: 0.2, rotation: [1.42, -0.4, 2.1], speed: 0.045 },
+  ];
+  const orbitGroups: THREE.Group[] = [];
+  ringSpecs.forEach((spec, index) => {
+    const orbit = new THREE.Group();
+    orbit.rotation.set(spec.rotation[0], spec.rotation[1], spec.rotation[2]);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(spec.radius, index === 0 ? 0.012 : 0.008, 6, 160),
+      new THREE.MeshBasicMaterial({
+        color: spec.color,
+        transparent: true,
+        opacity: spec.opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    orbit.add(ring);
+    const satellite = new THREE.Mesh(
+      new THREE.SphereGeometry(index === 0 ? 0.055 : 0.038, 12, 12),
+      new THREE.MeshBasicMaterial({ color: spec.color, blending: THREE.AdditiveBlending }),
+    );
+    satellite.position.set(spec.radius, 0, 0);
+    orbit.add(satellite);
+    coreGroup.add(orbit);
+    orbitGroups.push(orbit);
+  });
+
+  const dustCount = 140;
+  const dustPositions = new Float32Array(dustCount * 3);
+  for (let i = 0; i < dustCount; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 0.85 + Math.random() * 2.15;
+    dustPositions[i * 3] = Math.cos(angle) * radius;
+    dustPositions[i * 3 + 1] = (Math.random() - 0.5) * 3.2;
+    dustPositions[i * 3 + 2] = Math.sin(angle) * radius * 0.65;
+  }
+  const dustGeometry = new THREE.BufferGeometry();
+  dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+  const dust = new THREE.Points(
+    dustGeometry,
+    new THREE.PointsMaterial({
+      color: 0x88dcff,
+      size: 0.035,
+      transparent: true,
+      opacity: 0.62,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  coreGroup.add(dust);
+
+  const pointerTarget = { x: 0, y: 0 };
+  const pointer = { x: 0, y: 0 };
+  const handlePointerMove = (event: PointerEvent) => {
+    pointerTarget.x = (event.clientX / Math.max(window.innerWidth, 1) - 0.5) * 2;
+    pointerTarget.y = (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 2;
+  };
+  const resetPointer = () => {
+    pointerTarget.x = 0;
+    pointerTarget.y = 0;
+  };
+  window.addEventListener('pointermove', handlePointerMove, { passive: true });
+  window.addEventListener('blur', resetPointer);
+
+  let coreBaseX = 0;
+  let coreBaseY = 0;
+  const resize = () => {
+    const host = canvas.parentElement;
+    const width = Math.max(host?.clientWidth || window.innerWidth, 1);
+    const height = Math.max(host?.clientHeight || window.innerHeight, 1);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * camera.position.z;
+    const visibleWidth = visibleHeight * camera.aspect;
+    coreBaseX = visibleWidth * (width < 900 ? 0.4 : 0.31);
+    coreBaseY = visibleHeight * (width < 900 ? 0.35 : 0.31);
+    coreGroup.scale.setScalar(width < 700 ? 0.58 : width < 1100 ? 0.72 : 0.88);
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas.parentElement || canvas);
+  resize();
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motionScale = reducedMotion ? 0.25 : 1;
+  const frameInterval = 1000 / 30;
+  let lastFrameTime = 0;
+  let raf = 0;
+  let disposed = false;
+  const animate = (time: number) => {
+    if (disposed) return;
+    raf = requestAnimationFrame(animate);
+    const elapsed = time - lastFrameTime;
+    if (elapsed < frameInterval) return;
+    lastFrameTime = time - (elapsed % frameInterval);
+    const t = time * 0.001 * motionScale;
+
+    pointer.x += (pointerTarget.x - pointer.x) * 0.045;
+    pointer.y += (pointerTarget.y - pointer.y) * 0.045;
+    coreGroup.position.set(
+      coreBaseX + pointer.x * 0.13,
+      coreBaseY + Math.sin(t * 0.72) * 0.11 - pointer.y * 0.08,
+      0,
+    );
+    coreGroup.rotation.y = t * 0.075 + pointer.x * 0.055;
+    coreGroup.rotation.x = Math.sin(t * 0.24) * 0.035 - pointer.y * 0.025;
+    crystal.rotation.x = t * 0.17;
+    crystal.rotation.y = t * 0.25;
+    wire.rotation.x = -t * 0.09;
+    wire.rotation.y = t * 0.13;
+    innerCore.rotation.x = -t * 0.22;
+    innerCore.rotation.y = t * 0.32;
+    innerCore.scale.setScalar(1 + Math.sin(t * 1.65) * 0.075);
+    coreMaterial.emissiveIntensity = 1.75 + Math.sin(t * 1.65) * 0.42;
+    crystalMaterial.emissiveIntensity = 0.52 + Math.sin(t * 1.65) * 0.12;
+    glowMaterial.opacity = 0.27 + Math.sin(t * 1.65) * 0.055;
+    const glowScale = 4.75 + Math.sin(t * 1.65) * 0.24;
+    glow.scale.set(glowScale, glowScale, 1);
+    orbitGroups.forEach((orbit, index) => {
+      orbit.rotation.z = ringSpecs[index].rotation[2] + t * ringSpecs[index].speed;
+    });
+    dust.rotation.y = -t * 0.085;
+    dust.rotation.z = t * 0.025;
+    stars.rotation.y = t * 0.004;
+    stars.position.y = Math.sin(t * 0.15) * 0.06;
+    starMaterial.opacity = 0.54 + Math.sin(t * 0.4) * 0.06;
+    grid.position.z = -5 + (t * 0.08) % 1;
+    camera.position.x += (pointer.x * 0.12 - camera.position.x) * 0.035;
+    camera.position.y += (0.25 - pointer.y * 0.075 - camera.position.y) * 0.035;
+    camera.lookAt(0, 0.2, -2);
+    renderer.render(scene, camera);
+  };
+  raf = requestAnimationFrame(animate);
+
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(raf);
+    resizeObserver.disconnect();
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('blur', resetPointer);
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh;
+      if (drawable.geometry) geometries.add(drawable.geometry);
+      if (Array.isArray(drawable.material)) {
+        drawable.material.forEach((material) => materials.add(material));
+      } else if (drawable.material) {
+        materials.add(drawable.material);
+      }
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    glowTexture.dispose();
+    renderer.dispose();
+  };
+}
+
 onMounted(() => {
   // 恢复窗口最大化状态（与 AnchorList 保持一致）
   window.ipcRenderer?.invoke?.('window-is-maximized').then((v) => {
     isMaximized.value = Boolean(v);
   }).catch(() => undefined);
   loadAnchorCenter();
+  if (holoCanvas.value) {
+    cleanupHologram = createHologramScene(holoCanvas.value);
+  }
 });
 
 onBeforeUnmount(() => {
-  // 清理
+  cleanupHologram?.();
+  cleanupHologram = null;
 });
 </script>
 
 <style scoped>
 /* ==================== 基础 ==================== */
 .anchor-center-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100%;
-  background: #0a0a10;
+  background:
+    radial-gradient(900px 560px at 90% -10%, rgba(79, 64, 170, 0.2), transparent 70%),
+    radial-gradient(700px 500px at -10% 90%, rgba(21, 112, 148, 0.12), transparent 70%),
+    #050711;
   color: #e6e6ea;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+.holo-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 /* ==================== 顶部标题栏 ==================== */
 .anchor-center-header {
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: 48px;
   padding: 0 10px 0 0;
-  background: rgba(20, 20, 28, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(7, 9, 19, 0.8);
+  backdrop-filter: blur(18px) saturate(125%);
+  border-bottom: 1px solid rgba(147, 160, 224, 0.1);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
@@ -522,6 +860,8 @@ onBeforeUnmount(() => {
 
 /* ==================== 主体布局 ==================== */
 .anchor-center-body {
+  position: relative;
+  z-index: 1;
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 20px 28px 32px;
@@ -537,25 +877,40 @@ onBeforeUnmount(() => {
 /* ==================== Banner 通栏 ==================== */
 .user-banner {
   position: relative;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
-  border: 1px solid rgba(139,92,246,0.18);
+  border: 1px solid rgba(149, 154, 255, 0.24);
+  background: rgba(12, 15, 34, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 20px 60px rgba(2, 4, 18, 0.36),
+    0 0 42px rgba(91, 74, 190, 0.08);
+  backdrop-filter: blur(20px) saturate(130%);
   flex-shrink: 0;
 }
 .banner-bg {
   position: absolute; inset: 0;
   background:
-    radial-gradient(600px 200px at 10% 0%, rgba(139,92,246,0.35), transparent 60%),
-    radial-gradient(500px 200px at 90% 100%, rgba(244,114,182,0.25), transparent 60%),
-    linear-gradient(135deg, #1a1033 0%, #241644 50%, #2d1a4d 100%);
+    radial-gradient(620px 240px at 6% 0%, rgba(120, 87, 255, 0.3), transparent 65%),
+    radial-gradient(560px 260px at 92% 45%, rgba(39, 190, 230, 0.15), transparent 68%),
+    linear-gradient(120deg, rgba(29, 21, 62, 0.72), rgba(15, 19, 45, 0.6) 54%, rgba(8, 25, 43, 0.66));
+}
+.banner-bg::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.075), transparent 25%, transparent 72%, rgba(105, 227, 255, 0.045));
+  pointer-events: none;
 }
 .banner-bg::after {
   content: '';
   position: absolute; inset: 0;
   background-image:
-    radial-gradient(circle at 20% 80%, rgba(255,255,255,0.03) 1px, transparent 1px),
-    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.04) 1px, transparent 1px);
-  background-size: 40px 40px, 60px 60px;
+    linear-gradient(rgba(150, 166, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(150, 166, 255, 0.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.8), transparent 78%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.8), transparent 78%);
+  pointer-events: none;
 }
 .banner-content {
   position: relative;
@@ -563,7 +918,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 22px 28px;
+  padding: 26px 30px;
 }
 .banner-left {
   display: flex;
@@ -580,13 +935,16 @@ onBeforeUnmount(() => {
 
 /* 头像 */
 .avatar-ring {
-  width: 64px; height: 64px;
+  width: 72px; height: 72px;
   border-radius: 50%;
-  padding: 2.5px;
-  background: linear-gradient(135deg, #a78bfa, #f472b6);
+  padding: 3px;
+  background: conic-gradient(from 210deg, #62e7ff, #7770ff, #c084fc, #62e7ff);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 20px rgba(167,139,250,0.3);
+  box-shadow:
+    0 8px 28px rgba(78, 73, 190, 0.34),
+    0 0 24px rgba(79, 209, 238, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 .avatar {
   width: 100%; height: 100%;
@@ -594,7 +952,7 @@ onBeforeUnmount(() => {
   background: #222;
   object-fit: cover;
   display: block;
-  border: 2px solid #1a1033;
+  border: 2px solid #11152c;
 }
 .avatar-empty {
   display: flex; align-items: center; justify-content: center;
@@ -606,8 +964,8 @@ onBeforeUnmount(() => {
 .user-meta { min-width: 0; }
 .user-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .user-name {
-  font-size: 20px; font-weight: 700;
-  background: linear-gradient(90deg, #ffffff, #e9d5ff);
+  font-size: 22px; font-weight: 700;
+  background: linear-gradient(90deg, #ffffff, #dcd8ff 62%, #b9efff);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   letter-spacing: 0.5px;
 }
@@ -652,11 +1010,12 @@ onBeforeUnmount(() => {
   min-width: 80px;
 }
 .banner-stat-label {
-  font-size: 11px; color: rgba(255,255,255,0.45);
+  font-size: 11px; color: rgba(229, 233, 255, 0.6);
   margin-bottom: 4px;
 }
 .banner-stat-value {
-  font-size: 22px; font-weight: 700; color: #fff;
+  font-size: 23px; font-weight: 700; color: #fff;
+  text-shadow: 0 2px 14px rgba(134, 160, 255, 0.16);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.3px;
 }
@@ -669,28 +1028,57 @@ onBeforeUnmount(() => {
   display: inline-flex; align-items: center; gap: 6px;
   height: 40px; padding: 0 20px;
   border: none; border-radius: 20px;
-  background: linear-gradient(90deg, #ec4899, #8b5cf6);
+  background: linear-gradient(100deg, #7657e8, #436fd8 58%, #219dbf);
   color: #fff; font-size: 13px; font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(139,92,246,0.4), 0 0 0 1px rgba(255,255,255,0.05);
-  transition: transform 0.12s, box-shadow 0.2s;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 7px 24px rgba(75, 84, 205, 0.36),
+    0 0 0 1px rgba(173, 209, 255, 0.1);
+  transition: transform 0.18s, box-shadow 0.22s, filter 0.22s;
 }
 .banner-start-btn svg { width: 12px; height: 12px; }
 .banner-start-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 22px rgba(139,92,246,0.5), 0 0 0 1px rgba(255,255,255,0.08);
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 28px rgba(75, 84, 205, 0.46),
+    0 0 24px rgba(59, 196, 224, 0.12);
 }
 
 /* ==================== 通用卡片 ==================== */
 .section-card {
-  background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9));
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(125deg, rgba(255, 255, 255, 0.035), transparent 28%),
+    linear-gradient(155deg, rgba(22, 25, 46, 0.86), rgba(9, 13, 27, 0.8));
+  border: 1px solid rgba(154, 166, 226, 0.12);
+  border-radius: 16px;
   padding: 20px 22px;
-  transition: border-color 0.2s, transform 0.2s;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 12px 36px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(18px) saturate(125%);
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+.section-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(181, 196, 255, 0.2), transparent);
+  pointer-events: none;
 }
 .section-card:hover {
-  border-color: rgba(139,92,246,0.2);
+  border-color: rgba(133, 137, 234, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 40px rgba(0, 0, 0, 0.24),
+    0 0 28px rgba(88, 94, 201, 0.04);
 }
 .section-header {
   display: flex;
@@ -707,7 +1095,8 @@ onBeforeUnmount(() => {
 }
 .title-icon {
   width: 18px; height: 18px;
-  color: #b39fff;
+  color: #9baaff;
+  filter: drop-shadow(0 0 7px rgba(104, 169, 255, 0.18));
 }
 .section-action {
   display: inline-flex; align-items: center;
@@ -758,14 +1147,16 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.05);
-  transition: background 0.15s, border-color 0.15s;
+  background: linear-gradient(145deg, rgba(112, 126, 190, 0.055), rgba(26, 31, 54, 0.08));
+  border: 1px solid rgba(169, 182, 236, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
   min-width: 0;
 }
 .stat-item:hover {
-  background: rgba(139,123,230,0.08);
-  border-color: rgba(139,123,230,0.18);
+  background: linear-gradient(145deg, rgba(112, 107, 208, 0.1), rgba(38, 118, 151, 0.055));
+  border-color: rgba(126, 174, 235, 0.17);
+  transform: translateY(-1px);
 }
 .stat-icon {
   width: 40px; height: 40px;
@@ -793,26 +1184,43 @@ onBeforeUnmount(() => {
 .entry-grid--4 { grid-template-columns: repeat(4, 1fr); }
 
 .entry-item {
+  position: relative;
   display: flex; flex-direction: column; align-items: center;
   gap: 6px;
   padding: 18px 6px 16px;
-  border: none; border-radius: 12px;
-  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(164, 178, 232, 0.075); border-radius: 12px;
+  background: linear-gradient(145deg, rgba(115, 125, 189, 0.055), rgba(22, 27, 50, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  color: inherit;
+  font: inherit;
   cursor: pointer;
-  transition: background 0.18s, transform 0.12s, box-shadow 0.18s, border-color 0.18s;
-  border: 1px solid rgba(255,255,255,0.04);
+  transform-style: preserve-3d;
+  transition: background 0.22s, transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.22s, border-color 0.22s;
 }
 .entry-item:hover {
-  background: rgba(139,123,230,0.1);
-  border-color: rgba(139,123,230,0.22);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(139,92,246,0.15);
+  background: linear-gradient(145deg, rgba(125, 111, 224, 0.13), rgba(36, 130, 158, 0.07));
+  border-color: rgba(137, 161, 242, 0.24);
+  transform: perspective(650px) translateY(-4px) rotateX(1.2deg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.065),
+    0 12px 24px rgba(0, 0, 0, 0.26),
+    0 0 24px rgba(89, 100, 220, 0.1);
+}
+.entry-item:focus-visible {
+  outline: 2px solid rgba(110, 220, 255, 0.65);
+  outline-offset: 2px;
 }
 
 .entry-icon {
   width: 44px; height: 44px;
   border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.22s, box-shadow 0.22s;
+}
+.entry-item:hover .entry-icon {
+  transform: translateZ(12px) scale(1.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 6px 16px rgba(42, 45, 105, 0.16);
 }
 .entry-icon svg { width: 22px; height: 22px; }
 .entry-icon--mission { background: rgba(244,114,182,0.16); color: #f472b6; }
@@ -847,5 +1255,14 @@ onBeforeUnmount(() => {
   }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .entry-grid--4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .entry-item,
+  .entry-icon,
+  .stat-item,
+  .banner-start-btn { transition-duration: 0.01ms; }
+  .entry-item:hover,
+  .stat-item:hover,
+  .banner-start-btn:hover { transform: none; }
 }
 </style>

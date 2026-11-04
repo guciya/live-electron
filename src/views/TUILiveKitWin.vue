@@ -1,45 +1,10 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="tui-livekit-win" :class="{ 'is-logout-transitioning': isGoingToLoginPage }">
-      <div v-if="!loginReady" class="login-loading">
-        <!-- 科幻背景层：深空 + 网格 + 扫描线 + 粒子 -->
-        <div class="ll-bg">
-          <canvas ref="llStarEl" class="ll-stars"></canvas>
-          <div class="ll-grid"></div>
-          <div class="ll-scan"></div>
-          <div class="ll-vignette"></div>
-        </div>
-
-        <!-- 中心 loading 核心 -->
-        <div class="ll-core">
-          <div class="ll-ring ll-ring--outer"></div>
-          <div class="ll-ring ll-ring--inner"></div>
-          <div class="ll-ring ll-ring--corner"></div>
-
-          <div class="ll-center">
-            <div class="ll-pulse"></div>
-            <div class="ll-label">
-              <span class="ll-label-main">欢迎来到 Niko直播伴侣</span>
-              <span class="ll-label-sub">SIGNAL ESTABLISHED</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 底部信息条 -->
-        <div class="ll-footer">
-          <div class="ll-bar">
-            <span class="ll-bar-fill"></span>
-          </div>
-          <div class="ll-meta">
-            <span class="ll-meta-item">SYS://BOOTING</span>
-            <span class="ll-meta-dot"></span>
-            <span class="ll-meta-item">UPLINK OK</span>
-            <span class="ll-meta-dot"></span>
-            <span class="ll-meta-item">SINK://READY</span>
-          </div>
-        </div>
-      </div>
+      <NikoTransitionScene v-if="!loginReady" variant="broadcast" />
       <template v-else>
+      <canvas ref="liveConsoleCanvas" class="live-console-three" aria-hidden="true"></canvas>
+      <div class="live-console-aurora" aria-hidden="true"></div>
       <LiveHeader
         ref="headerRef"
         @logout="handleLogout"
@@ -399,6 +364,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, nextTick } from 'vue';
+import * as THREE from 'three/src/Three.js';
 import { useRouter } from 'vue-router';
 import trtcCloud from '../TUILiveKit/utils/trtcCloud';
 import { TRTCVideoMirrorType, TRTCParams, TRTCAppScene, TRTCRoleType, TRTCVideoFillMode } from 'trtc-electron-sdk';
@@ -501,6 +467,7 @@ import PreLiveDialog from '../niko/components/PreLiveDialog.vue';
 import { stopLive as nikoStopLive, getAudienceCardInfo, getPkAnchorList, invitePk, replyPk, startPk, quitPk } from '../niko/api/live';
 import type { PrepareLiveResult, AnchorPrepareWhitelistUser } from '../niko/api/live';
 import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
+import NikoTransitionScene from '../niko/components/NikoTransitionScene.vue';
 
 console.log('TRTC SDK version:', trtcCloud.getSDKVersion());
 
@@ -513,6 +480,196 @@ const { loginUserInfo, login: loginIm } = useLoginState();
 const { t, language } = useUIKit();
 const loading = ref(false);
 const isToolsExpanded = ref(true);
+const liveConsoleCanvas = ref<HTMLCanvasElement | null>(null);
+let cleanupLiveConsoleScene: (() => void) | null = null;
+
+function createLiveConsoleScene(canvas: HTMLCanvasElement) {
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    alpha: true,
+    antialias: false,
+    powerPreference: 'low-power',
+  });
+  renderer.setClearColor(0x020610, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 60);
+  camera.position.set(0, 0.2, 9);
+
+  const universe = new THREE.Group();
+  scene.add(universe);
+
+  const starCount = 420;
+  const positions = new Float32Array(starCount * 3);
+  const colors = new Float32Array(starCount * 3);
+  const cyan = new THREE.Color(0x55d9ff);
+  const violet = new THREE.Color(0x737dff);
+  for (let i = 0; i < starCount; i += 1) {
+    positions[i * 3] = (Math.random() - 0.5) * 24;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
+    positions[i * 3 + 2] = -10 + Math.random() * 11;
+    const color = i % 5 === 0 ? violet : cyan;
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const stars = new THREE.Points(
+    starGeometry,
+    new THREE.PointsMaterial({
+      size: 0.035,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.58,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    }),
+  );
+  universe.add(stars);
+
+  const grid = new THREE.GridHelper(34, 44, 0x2ba9e8, 0x153a66);
+  grid.position.set(0, -3.4, -4);
+  const gridMaterial = grid.material as THREE.LineBasicMaterial;
+  gridMaterial.transparent = true;
+  gridMaterial.opacity = 0.2;
+  gridMaterial.depthWrite = false;
+  universe.add(grid);
+
+  const wallGrid = new THREE.GridHelper(26, 32, 0x245f9c, 0x142e52);
+  wallGrid.rotation.x = Math.PI / 2;
+  wallGrid.position.set(0, 0, -9);
+  const wallGridMaterial = wallGrid.material as THREE.LineBasicMaterial;
+  wallGridMaterial.transparent = true;
+  wallGridMaterial.opacity = 0.055;
+  wallGridMaterial.depthWrite = false;
+  universe.add(wallGrid);
+
+  const orbitals = new THREE.Group();
+  orbitals.position.set(4.8, 1.2, -5);
+  orbitals.rotation.set(0.7, 0.25, 0);
+  const rings: THREE.Mesh[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.25 + i * 0.34, 0.012, 6, 96),
+      new THREE.MeshBasicMaterial({
+        color: i === 1 ? 0x7181ff : 0x45ccff,
+        transparent: true,
+        opacity: 0.2 - i * 0.035,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    ring.scale.y = 0.62;
+    ring.rotation.x = i * 0.45;
+    ring.rotation.y = i * 0.35;
+    orbitals.add(ring);
+    rings.push(ring);
+  }
+  const orbitalCore = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.62, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x58cfff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    }),
+  );
+  orbitals.add(orbitalCore);
+  universe.add(orbitals);
+
+  const polyhedron = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.5, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x477ed8,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.1,
+      depthWrite: false,
+    }),
+  );
+  polyhedron.position.set(-4.9, 1.1, -6);
+  polyhedron.rotation.set(0.35, 0.2, -0.2);
+  universe.add(polyhedron);
+
+  const pointer = { x: 0, y: 0 };
+  const handlePointerMove = (event: PointerEvent) => {
+    pointer.x = (event.clientX / Math.max(window.innerWidth, 1) - 0.5) * 2;
+    pointer.y = (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 2;
+  };
+  window.addEventListener('pointermove', handlePointerMove, { passive: true });
+
+  const resize = () => {
+    const width = canvas.clientWidth || window.innerWidth;
+    const height = canvas.clientHeight || window.innerHeight;
+    if (!width || !height) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+  resize();
+
+  const clock = new THREE.Clock();
+  let lastFrame = -1;
+  let raf = 0;
+  const animate = () => {
+    raf = requestAnimationFrame(animate);
+    const elapsed = clock.getElapsedTime();
+    if (elapsed - lastFrame < 1 / 30) return;
+    lastFrame = elapsed;
+
+    universe.rotation.y = pointer.x * 0.025 + Math.sin(elapsed * 0.12) * 0.012;
+    universe.rotation.x = pointer.y * 0.015;
+    stars.rotation.y = elapsed * 0.006;
+    grid.position.z = -4 + (elapsed * 0.22) % 0.77;
+    orbitals.rotation.y = 0.25 + Math.sin(elapsed * 0.22) * 0.08;
+    rings.forEach((ring, index) => {
+      ring.rotation.z = elapsed * (0.06 + index * 0.025) * (index % 2 === 0 ? 1 : -1);
+    });
+    orbitalCore.rotation.x = elapsed * 0.08;
+    orbitalCore.rotation.y = elapsed * 0.11;
+    polyhedron.rotation.x = 0.35 + elapsed * 0.025;
+    polyhedron.rotation.y = 0.2 + elapsed * 0.04;
+    camera.position.x += (pointer.x * 0.22 - camera.position.x) * 0.025;
+    camera.position.y += (0.2 - pointer.y * 0.14 - camera.position.y) * 0.025;
+    camera.lookAt(0, 0, -3);
+    renderer.render(scene, camera);
+  };
+  animate();
+
+  return () => {
+    cancelAnimationFrame(raf);
+    resizeObserver.disconnect();
+    window.removeEventListener('pointermove', handlePointerMove);
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh;
+      drawable.geometry?.dispose?.();
+      if (Array.isArray(drawable.material)) {
+        drawable.material.forEach((material) => material.dispose());
+      } else {
+        drawable.material?.dispose?.();
+      }
+    });
+    renderer.dispose();
+  };
+}
+
+watch(liveConsoleCanvas, (canvas) => {
+  cleanupLiveConsoleScene?.();
+  cleanupLiveConsoleScene = null;
+  if (!canvas) return;
+  try {
+    cleanupLiveConsoleScene = createLiveConsoleScene(canvas);
+  } catch (error) {
+    console.error('[Niko Live Console] Three.js background initialization failed:', error);
+  }
+}, { flush: 'post' });
 
 const props = defineProps<{
   liveId?: string;
@@ -903,69 +1060,6 @@ const isGoingToLoginPage = ref(false);
 // 登录完成前不渲染子组件，避免 TRTC 未初始化时拉直播列表/连麦候选报错
 const loginReady = ref(false);
 
-// ================ login-loading 星空 canvas ================
-const llStarEl = ref<HTMLCanvasElement | null>(null);
-let _llStarRaf = 0;
-function startLandingStars() {
-  const canvas = llStarEl.value;
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  let w = 0, h = 0;
-  function resize() {
-    const dpr = window.devicePixelRatio || 1;
-    w = canvas.clientWidth;
-    h = canvas.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.scale(dpr, dpr);
-  }
-  resize();
-  const ro = new ResizeObserver(resize);
-  ro.observe(canvas);
-
-  // 粒子
-  const N = 120;
-  const stars = Array.from({ length: N }, () => ({
-    x: Math.random(),
-    y: Math.random(),
-    r: Math.random() * 1.4 + 0.3,
-    a: Math.random() * 0.8 + 0.2,
-    v: Math.random() * 0.04 + 0.01, // 纵向缓慢漂移（视角前进感）
-    tw: Math.random() * Math.PI * 2,
-  }));
-
-  function frame() {
-    ctx.clearRect(0, 0, w, h);
-    for (const s of stars) {
-      s.y += s.v * 0.016;
-      s.tw += 0.02;
-      if (s.y > 1.02) s.y = -0.02;
-      const twinkle = 0.6 + Math.sin(s.tw) * 0.4;
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(170, 210, 255, ${s.a * twinkle})`;
-      ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    _llStarRaf = requestAnimationFrame(frame);
-  }
-  frame();
-
-  // loginReady 变 true 后停止（UI 会卸载这个 canvas）
-  const stopWhenReady = watch(loginReady, (ready) => {
-    if (ready) {
-      cancelAnimationFrame(_llStarRaf);
-      ro.disconnect();
-      stopWhenReady();
-    }
-  });
-}
-
-// 给 loginReady 一个延迟开启：等 TRTC 初始化 + 用户数据拉好，同时至少展示 800ms 动画让视觉连贯
-watch(loginReady, (ready) => {
-  if (ready) cancelAnimationFrame(_llStarRaf);
-});
 // 预开播弹窗（标题/封面/分类/方向）
 const showPreLiveDialog = ref(false);
 // 等待用户添加摄像头后自动弹 PreLiveDialog 的 flag
@@ -2592,9 +2686,6 @@ const handleLiveEnded = (eventInfo: LiveListEventInfo) => {
 };
 
 onMounted(async () => {
-  // ====== 0) 启动科幻 loading 星空动画 ======
-  startLandingStars();
-
   // ====== 第一步：确保 TRTCCloud 旧房间彻底退出 ======
   // 从 LivePlayer（观众房）或其他页面跳过来时，trtcCloud 单例可能还残留旧房间状态
   // （连线用户、远端视频回调等），必须在任何初始化（IM login / RoomEngine 绑定 / MediaMixing）
@@ -2837,25 +2928,14 @@ onMounted(async () => {
       console.log('[Niko onMounted] mmm ready, running full camera restore');
       await scheduleCameraRestore();
     } else if (roomEngine.instance) {
-      // roomEngine 有了但 mmm 还是 null（enable 失败），再试一次 ensureDefaultCamera
-      // 因为 addMediaSource 内部也会调 enableLocalVideoMixer
-      console.warn('[Niko onMounted] mmm still null after enableLocalVideoMixer, trying direct ensureDefaultCamera');
-      try {
-        await ensureDefaultCamera();
-        console.log('[Niko onMounted] ensureDefaultCamera succeeded despite mmm being null');
-        // ensureDefaultCamera 里的 addMediaSource 会触发 enable → 此时 mmm 应该有了
-        const mmmRetry = (roomEngine.instance as any)?.getTRTCCloud?.()?.getMediaMixingManager?.();
-        if (mmmRetry) {
-          await new Promise((r) => setTimeout(r, 300));
-          try {
-            await mmmRetry.setStreamLayout({ layoutMode: 'None' });
-            await mmmRetry.startPublish();
-            console.log('[Niko onMounted] retry force refreshLayout done');
-          } catch (e) { console.warn('[Niko onMounted] retry refreshLayout:', e); }
-        }
-      } catch (e) {
-        console.warn('[Niko onMounted] ensureDefaultCamera also failed:', e);
-      }
+      // 管理器仍为空时禁止直接 addMediaSource，否则 SDK 会抛出
+      // "Failed to initialize MediaSourceManager"。入口已保证 IPC 单例优先创建，
+      // 走到这里说明引擎初始化异常，应明确提示而不是继续调用摄像头。
+      console.error('[Niko onMounted] MediaMixingManager unavailable after enableLocalVideoMixer');
+      showMessage({
+        type: MessageToastType.Error,
+        message: '直播引擎初始化失败，请重启应用后重试',
+      });
       applyPreviewRegion();
     } else {
       // roomEngine.instance 真的还没 ready（极罕见），等 once
@@ -3053,12 +3133,31 @@ let cameraEnsurePromise: Promise<void> | null = null;
 const hasCameraInMixer = () => videoMixerState.mediaSourceList.value.some(
   (m: MediaSource) => m.sourceType === TRTCMediaSourceType.kCamera,
 );
+
+// addMediaSource 内部依赖 AtomicX 自己的 RoomEngine ready 状态和 IPC 混流管理器。
+// 登录复用、冷启动等路径下不能只凭页面 loginReady 就直接打开摄像头。
+const waitForCameraMixer = async (timeoutMs = 15000): Promise<any> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const cloud = (roomEngine.instance as any)?.getTRTCCloud?.();
+    const mixingManager = cloud?.getMediaMixingManager?.();
+    if (roomEngine.instance && mixingManager) {
+      return mixingManager;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('直播引擎或摄像头混流管理器初始化超时，请重启应用后重试');
+};
+
 const ensureDefaultCamera = (): Promise<void> => {
   if (hasCameraInMixer()) {
     return Promise.resolve();
   }
   if (!cameraEnsurePromise) {
-    cameraEnsurePromise = restoreCamerasFromConfig().finally(() => {
+    cameraEnsurePromise = (async () => {
+      await waitForCameraMixer();
+      await restoreCamerasFromConfig();
+    })().finally(() => {
       cameraEnsurePromise = null;
     });
   }
@@ -3142,6 +3241,8 @@ const handleLiveSettingConfirm = async (form: { liveName: string; coverUrl?: str
 };
 
 onBeforeUnmount(() => {
+  cleanupLiveConsoleScene?.();
+  cleanupLiveConsoleScene = null;
   unsubscribeEvent(LiveListEvent.onLiveEnded, handleLiveEnded);
   unsubscribeBattleEvent(BattleEvent.onBattleStarted, handleBattleStartedForCover);
   unsubscribeBattleEvent(BattleEvent.onBattleEnded, handleBattleEndedForCover);
@@ -3748,8 +3849,52 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   /* 自己开播页统一黑色系 */
-  --live-shell-bg: #050506;
+  --live-shell-bg: #040914;
   background-color: var(--live-shell-bg);
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(38, 108, 211, 0.2), transparent 46%),
+    radial-gradient(circle at 100% 100%, rgba(38, 70, 180, 0.12), transparent 42%);
+
+  .live-console-three,
+  .live-console-aurora {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .live-console-three {
+    z-index: 0;
+    display: block;
+  }
+
+  .live-console-aurora {
+    z-index: 0;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 50% 115%, rgba(26, 107, 224, 0.13), transparent 52%),
+      linear-gradient(180deg, rgba(2, 7, 18, 0.02), rgba(2, 7, 18, 0.24));
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      opacity: 0;
+      background: linear-gradient(90deg, transparent, rgba(80, 207, 255, 0.32), transparent);
+      box-shadow: 0 0 14px rgba(62, 179, 255, 0.2);
+      animation: live-console-scan 9s linear infinite;
+    }
+  }
+
+  @keyframes live-console-scan {
+    0% { opacity: 0; transform: translateY(44px); }
+    15%, 85% { opacity: 0.65; }
+    100% { opacity: 0; transform: translateY(100vh); }
+  }
 
     /* ================ 科幻登录 Loading（流浪地球风） ================ */
   .login-loading {
@@ -4029,8 +4174,8 @@ onBeforeUnmount(() => {
       50%      { opacity: 0.25; }
     }
   }
-  --live-panel-bg: #101013;
-  --live-panel-border: #232329;
+  --live-panel-bg: rgba(8, 15, 28, 0.88);
+  --live-panel-border: rgba(105, 203, 255, 0.14);
   --live-stage-bg: #000000;
   --live-stage-border: rgba(255, 255, 255, 0.14);
   --live-stage-highlight: rgba(255, 255, 255, 0.1);
@@ -4054,15 +4199,33 @@ onBeforeUnmount(() => {
     pointer-events: none;
   }
 
+  :deep(.live-header) {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    background: linear-gradient(90deg, rgba(5, 13, 28, 0.97), rgba(10, 23, 44, 0.93), rgba(5, 13, 28, 0.97));
+    border-bottom: 1px solid rgba(87, 199, 255, 0.14);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 -1px rgba(107, 216, 255, 0.04);
+    backdrop-filter: blur(18px);
+
+    .logo-badge {
+      background: linear-gradient(145deg, rgba(50, 120, 196, 0.2), rgba(11, 25, 46, 0.48));
+      border-color: rgba(118, 213, 255, 0.2);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 5px 16px rgba(0, 0, 0, 0.22);
+    }
+  }
+
   .live-pusher-main {
     width: 100%;
     height: calc(100% - 44px);
     display: flex;
     flex-direction: row;
     user-select: none;
+    position: relative;
+    z-index: 1;
     padding: 10px 12px 12px 12px;
     gap: 10px;
-    background-color: var(--bg-color-topbar);
+    background-color: transparent;
     @include scrollbar;
 
     .main-left {
@@ -4455,6 +4618,52 @@ onBeforeUnmount(() => {
           user-select: text;
         }
       }
+    }
+
+    .main-left .main-left-top,
+    .main-left .main-left-bottom,
+    .main-center,
+    .main-right .main-right-top,
+    .main-right .main-right-bottom {
+      background:
+        linear-gradient(135deg, rgba(65, 167, 255, 0.055), transparent 42%),
+        linear-gradient(160deg, rgba(13, 24, 43, 0.9), rgba(5, 11, 23, 0.85));
+      border-color: rgba(105, 203, 255, 0.15);
+      box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.045),
+        inset 0 0 24px rgba(45, 128, 222, 0.025),
+        0 12px 30px rgba(0, 0, 0, 0.32),
+        0 0 24px rgba(26, 115, 255, 0.045);
+      backdrop-filter: blur(12px);
+    }
+
+    .main-center {
+      border-color: rgba(82, 190, 255, 0.23);
+      box-shadow:
+        inset 0 1px rgba(255, 255, 255, 0.05),
+        0 14px 36px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(39, 137, 255, 0.08);
+      backdrop-filter: none;
+
+      .main-center-top {
+        background: linear-gradient(90deg, rgba(21, 40, 67, 0.38), rgba(7, 16, 31, 0.12));
+      }
+
+      .main-center-center {
+        box-shadow: inset 0 0 42px rgba(16, 91, 170, 0.11);
+      }
+
+      .main-center-bottom {
+        background: rgba(6, 14, 27, 0.72);
+      }
+    }
+
+    .main-left .main-left-top .title-text,
+    .main-left .main-left-bottom-title,
+    .main-right .main-right-top .title-text,
+    .main-right .main-right-bottom-title {
+      color: #e5f6ff;
+      text-shadow: 0 0 14px rgba(80, 190, 255, 0.16);
     }
   }
 

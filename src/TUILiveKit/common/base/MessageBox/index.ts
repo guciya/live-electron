@@ -9,9 +9,10 @@ export type MessageProps = {
     confirmButtonText?: string,
     cancelButtonText?: string;
     cancelCallback?: () => Promise<void>;
+    customClass?: string;
     timeout?: number;
 }
-const MessageBox = ({ title, message, callback, confirmButtonText, cancelButtonText, cancelCallback, timeout }: MessageProps) => {
+const MessageBox = ({ title, message, callback, confirmButtonText, cancelButtonText, cancelCallback, customClass, timeout }: MessageProps) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -27,6 +28,7 @@ const MessageBox = ({ title, message, callback, confirmButtonText, cancelButtonT
     confirmButtonText,
     cancelButtonText,
     cancelCallback,
+    customClass,
     timeout,
     remove: onRemove,
   });

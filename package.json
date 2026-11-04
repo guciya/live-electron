@@ -24,6 +24,15 @@
       {
         "from": "node_modules/trtc-electron-sdk/build/Release",
         "to": "."
+      },
+      {
+        "from": "build",
+        "to": "build",
+        "filter": [
+          "icon.ico",
+          "icon.png",
+          "icon-round-*.png"
+        ]
       }
     ],
     "win": {

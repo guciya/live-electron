@@ -84,7 +84,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, Ref } from 'vue';
 import * as THREE from 'three';
 import loginStageVideo from '../../assets/niko-login-stage.mp4';
-import loginDjAudioSrc from '../../assets/niko-login-dj.mp4';
+import loginDjAudioSrc from '../../assets/niko-login-stage.mp4';
 import router from '../../router';
 import { getWindowType } from '../../TUILiveKit/utils/envUtils';
 import { UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
@@ -145,59 +145,183 @@ function initLoginThree(canvas: HTMLCanvasElement) {
 
 
 
+  const particleTexture = (() => {
+    const textureCanvas = document.createElement('canvas');
+    textureCanvas.width = 64;
+    textureCanvas.height = 64;
+    const context = textureCanvas.getContext('2d')!;
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.25, 'rgba(255,255,255,0.95)');
+    gradient.addColorStop(0.6, 'rgba(255,255,255,0.28)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(textureCanvas);
+  })();
+
+  const starCount = 1000;
+  const starPositions = new Float32Array(starCount * 3);
+  const starBasePositions = new Float32Array(starCount * 3);
+  const starColors = new Float32Array(starCount * 3);
+  const starPhases = new Float32Array(starCount);
+  const starPalette = [0x62e9ff, 0x7797ff, 0xc47cff, 0xffffff];
+  for (let index = 0; index < starCount; index += 1) {
+    const offset = index * 3;
+    starBasePositions[offset] = (Math.random() - 0.5) * 17;
+    starBasePositions[offset + 1] = (Math.random() - 0.5) * 10.4;
+    starBasePositions[offset + 2] = -5 + Math.random() * 6.5;
+    starPositions[offset] = starBasePositions[offset];
+    starPositions[offset + 1] = starBasePositions[offset + 1];
+    starPositions[offset + 2] = starBasePositions[offset + 2];
+    starPhases[index] = Math.random() * Math.PI * 2;
+    const color = new THREE.Color(starPalette[Math.floor(Math.random() * starPalette.length)]);
+    color.multiplyScalar(0.45 + Math.random() * 0.55);
+    starColors[offset] = color.r;
+    starColors[offset + 1] = color.g;
+    starColors[offset + 2] = color.b;
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+  const starMaterial = new THREE.PointsMaterial({
+    size: 0.055,
+    map: particleTexture,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.72,
+    alphaTest: 0.01,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const stars = new THREE.Points(starGeometry, starMaterial);
+  scene.add(stars);
+
+  const pointerTarget = new THREE.Vector2();
+  const pointerWorld = new THREE.Vector3(100, 100, 0);
+  const raycaster = new THREE.Raycaster();
+  const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const screenToWorld = (clientX: number, clientY: number, target: THREE.Vector3, pointer: THREE.Vector2) => {
+    pointer.set(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1,
+    );
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster.ray.intersectPlane(clickPlane, target);
+  };
+  const getPointerWorld = (event: PointerEvent) => (
+    screenToWorld(event.clientX, event.clientY, pointerWorld, pointerTarget)
+  );
+  const onPointerMove = (event: PointerEvent) => {
+    getPointerWorld(event);
+  };
+  const onPointerLeave = () => {
+    pointerTarget.set(0, 0);
+    pointerWorld.set(100, 100, 0);
+  };
+
   const fireworks: Array<{
     points: THREE.Points;
     velocities: Float32Array;
     life: number;
     duration: number;
+    delay: number;
   }> = [];
-  const raycaster = new THREE.Raycaster();
-  const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const onPointerDown = (event: PointerEvent) => {
-    const pointer = new THREE.Vector2(
-      (event.clientX / window.innerWidth) * 2 - 1,
-      -(event.clientY / window.innerHeight) * 2 + 1,
-    );
-    raycaster.setFromCamera(pointer, camera);
-    const origin = new THREE.Vector3();
-    if (!raycaster.ray.intersectPlane(clickPlane, origin)) return;
-
-    const count = 120;
+  const fireworkPalette = [0x62e9ff, 0xffd75e, 0xc47cff, 0xff6ea9, 0x7dffba];
+  const spawnFirework = (center: THREE.Vector3, burstIndex: number, spread = 1) => {
+    const origin = center.clone();
+    origin.x += (Math.random() - 0.5) * 2.4 * spread;
+    origin.y += (Math.random() - 0.5) * 1.6 * spread;
+    origin.z += (Math.random() - 0.5) * 0.7 * spread;
+    const count = 72 + Math.floor(Math.random() * 30);
     const positions = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
-    const fireworkPalette = [0x62e9ff, 0xffd75e, 0xc47cff, 0xff6ea9, 0xffffff];
+    const burstColor = new THREE.Color(fireworkPalette[Math.floor(Math.random() * fireworkPalette.length)]);
+    const accentColor = new THREE.Color(0xffffff);
     for (let index = 0; index < count; index += 1) {
-      positions[index * 3] = origin.x;
-      positions[index * 3 + 1] = origin.y;
-      positions[index * 3 + 2] = origin.z;
+      const offset = index * 3;
+      positions[offset] = origin.x;
+      positions[offset + 1] = origin.y;
+      positions[offset + 2] = origin.z;
       const angle = Math.random() * Math.PI * 2;
-      const speed = 1.1 + Math.random() * 2.6;
-      velocities[index * 3] = Math.cos(angle) * speed;
-      velocities[index * 3 + 1] = Math.sin(angle) * speed + 0.9;
-      velocities[index * 3 + 2] = (Math.random() - 0.5) * 1.8;
-      const color = new THREE.Color(fireworkPalette[index % fireworkPalette.length]);
-      colors[index * 3] = color.r;
-      colors[index * 3 + 1] = color.g;
-      colors[index * 3 + 2] = color.b;
+      const speed = 1.2 + Math.random() * 2.8;
+      velocities[offset] = Math.cos(angle) * speed;
+      velocities[offset + 1] = Math.sin(angle) * speed + 0.55;
+      velocities[offset + 2] = (Math.random() - 0.5) * speed * 0.9;
+      const color = Math.random() < 0.22 ? accentColor : burstColor;
+      colors[offset] = color.r;
+      colors[offset + 1] = color.g;
+      colors[offset + 2] = color.b;
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const material = new THREE.PointsMaterial({
-      size: 0.075,
+      size: 0.065 + Math.random() * 0.025,
+      map: particleTexture,
       vertexColors: true,
       transparent: true,
       opacity: 1,
+      alphaTest: 0.01,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     });
     const points = new THREE.Points(geometry, material);
+    points.visible = false;
     scene.add(points);
-    fireworks.push({ points, velocities, life: 1.65, duration: 1.65 });
+    const duration = 1.35 + Math.random() * 0.45;
+    fireworks.push({
+      points,
+      velocities,
+      life: duration,
+      duration,
+      delay: burstIndex * 0.045 + Math.random() * 0.06,
+    });
   };
+  const onPointerDown = (event: PointerEvent) => {
+    const origin = getPointerWorld(event);
+    if (!origin) return;
+    const burstCount = 5 + Math.floor(Math.random() * 2);
+    for (let index = 0; index < burstCount; index += 1) {
+      spawnFirework(origin, index);
+    }
+  };
+  const autoPointer = new THREE.Vector2();
+  const autoOrigin = new THREE.Vector3();
+  let autoEdge = 0;
+  let autoFireworkCountdown = 1;
+  const spawnAutoFirework = () => {
+    for (let burstIndex = 0; burstIndex < 6; burstIndex += 1) {
+      const edge = (autoEdge + burstIndex) % 4;
+      const along = 0.1 + Math.random() * 0.8;
+      let clientX = 0;
+      let clientY = 0;
+      if (edge === 0) {
+        clientX = window.innerWidth * along;
+        clientY = window.innerHeight * (0.1 + Math.random() * 0.08);
+      } else if (edge === 1) {
+        clientX = window.innerWidth * (0.86 + Math.random() * 0.06);
+        clientY = window.innerHeight * along;
+      } else if (edge === 2) {
+        clientX = window.innerWidth * along;
+        clientY = window.innerHeight * (0.78 + Math.random() * 0.1);
+      } else {
+        clientX = window.innerWidth * (0.08 + Math.random() * 0.06);
+        clientY = window.innerHeight * along;
+      }
+      const origin = screenToWorld(clientX, clientY, autoOrigin, autoPointer);
+      if (origin) {
+        spawnFirework(origin, burstIndex, 0.3);
+      }
+    }
+    autoEdge = (autoEdge + 1) % 4;
+  };
+  window.addEventListener('pointermove', onPointerMove, { passive: true });
   window.addEventListener('pointerdown', onPointerDown, { passive: true });
+  window.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
   const resize = () => {
     const parent = canvas.parentElement;
@@ -216,8 +340,41 @@ function initLoginThree(canvas: HTMLCanvasElement) {
   let animationFrame = 0;
   const animate = () => {
     const delta = Math.min(clock.getDelta(), 0.033);
+    const time = clock.elapsedTime;
+    const starAttribute = starGeometry.getAttribute('position') as THREE.BufferAttribute;
+    const animatedStarPositions = starAttribute.array as Float32Array;
+    for (let index = 0; index < starCount; index += 1) {
+      const offset = index * 3;
+      const baseX = starBasePositions[offset];
+      const baseY = starBasePositions[offset + 1];
+      const dx = baseX - pointerWorld.x;
+      const dy = baseY - pointerWorld.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const force = distance < 1.8 ? Math.pow(1 - distance / 1.8, 2) * 0.55 : 0;
+      const normalX = distance > 0.001 ? dx / distance : 0;
+      const normalY = distance > 0.001 ? dy / distance : 0;
+      animatedStarPositions[offset] = baseX + Math.sin(time * 0.22 + starPhases[index]) * 0.055 + normalX * force;
+      animatedStarPositions[offset + 1] = baseY + Math.cos(time * 0.18 + starPhases[index]) * 0.045 + normalY * force;
+      animatedStarPositions[offset + 2] = starBasePositions[offset + 2] + Math.sin(time * 0.15 + starPhases[index]) * 0.08;
+    }
+    starAttribute.needsUpdate = true;
+    camera.position.x += (pointerTarget.x * 0.34 - camera.position.x) * Math.min(1, delta * 3.2);
+    camera.position.y += (pointerTarget.y * 0.24 - camera.position.y) * Math.min(1, delta * 3.2);
+    camera.lookAt(0, 0, -0.8);
+
+    autoFireworkCountdown -= delta;
+    if (autoFireworkCountdown <= 0) {
+      spawnAutoFirework();
+      autoFireworkCountdown = 1;
+    }
+
     for (let index = fireworks.length - 1; index >= 0; index -= 1) {
       const firework = fireworks[index];
+      if (firework.delay > 0) {
+        firework.delay -= delta;
+        continue;
+      }
+      firework.points.visible = true;
       const attribute = firework.points.geometry.getAttribute('position') as THREE.BufferAttribute;
       const positions = attribute.array as Float32Array;
       for (let particle = 0; particle < firework.velocities.length / 3; particle += 1) {
@@ -248,7 +405,9 @@ function initLoginThree(canvas: HTMLCanvasElement) {
   return () => {
     cancelAnimationFrame(animationFrame);
     resizeObserver.disconnect();
+    window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointerleave', onPointerLeave);
     scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
       mesh.geometry?.dispose();
@@ -294,6 +453,7 @@ async function handleSendCode() {
       title: t('Note'),
       message: t('Please enter a valid mobile number'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
     return;
   }
@@ -304,6 +464,7 @@ async function handleSendCode() {
       title: t('Note'),
       message: t('Code sent'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
     startCountdown();
   } catch (error: any) {
@@ -312,6 +473,7 @@ async function handleSendCode() {
       title: t('Note'),
       message: error?.message || t('get SMS code failed!'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
   } finally {
     sending.value = false;
@@ -327,6 +489,7 @@ async function handleLogin() {
       title: t('Note'),
       message: t('Please enter a valid mobile number'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
     return;
   }
@@ -335,6 +498,7 @@ async function handleLogin() {
       title: t('Note'),
       message: t('Please enter the verification code!'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
     return;
   }
@@ -403,6 +567,7 @@ async function handleLogin() {
       title: t('Note'),
       message: error?.message || t('Login failed.'),
       confirmButtonText: t('Sure'),
+      customClass: 'login-message-box',
     });
   } finally {
     isLoggingIn.value = false;
@@ -682,6 +847,17 @@ function onClose() {
       opacity: 0.6;
       cursor: not-allowed;
     }
+  }
+}
+</style>
+
+<style lang="scss">
+.login-message-box .tui-message-confirm-button.tui-live-button-primary {
+  background: #1677ff !important;
+  border: 1px solid #1677ff !important;
+
+  &:hover {
+    background: #4096ff !important;
   }
 }
 </style>

@@ -28,7 +28,8 @@
       </header>
 
       <main class="player-body">
-        <div class="player-stage">
+        <div ref="playerStageEl" class="player-stage">
+          <canvas ref="signalCanvasEl" class="player-signal-scene" aria-hidden="true"></canvas>
           <video ref="videoEl" class="player-video" autoplay playsinline></video>
 
           <!-- 独立 TRTC 连麦宫格：主播主画面 + 连麦观众小图，叠在 FLV 主画面之上 -->
@@ -270,6 +271,7 @@ import MoreLiveTray from '../niko/components/MoreLiveTray.vue';
 import trtcCloud from '../TUILiveKit/utils/trtcCloud';
 import { TRTCParams, TRTCAppScene, TRTCRoleType } from 'trtc-electron-sdk';
 import type { CoGuestUser } from '../niko/components/CoGuestGrid.vue';
+import * as THREE from 'three/src/Three.js';
 
 const { t } = useUIKit();
 const route = useRoute();
@@ -293,6 +295,8 @@ let playUrl = String((window.history.state as Record<string, unknown> | null)?.p
 const { login, logout } = useLoginState();
 
 const videoEl: Ref<HTMLVideoElement | null> = ref(null);
+const playerStageEl: Ref<HTMLElement | null> = ref(null);
+const signalCanvasEl: Ref<HTMLCanvasElement | null> = ref(null);
 const errorText = ref('');
 const muted = ref(true);
 const avatarError = ref(false);
@@ -305,6 +309,349 @@ const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
 const popularityPanelVisible = ref(false);
+
+// 视频后方的信号舱只随组件创建一次，同路由切房间时保留。
+let signalRenderer: THREE.WebGLRenderer | null = null;
+let signalScene: THREE.Scene | null = null;
+let signalResizeObserver: ResizeObserver | null = null;
+let signalStageElement: HTMLElement | null = null;
+let signalRafId: number | null = null;
+const signalPointer = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+function handleSignalPointerMove(event: PointerEvent) {
+  const stage = signalStageElement;
+  if (!stage) return;
+  const rect = stage.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  signalPointer.targetX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+  signalPointer.targetY = -((event.clientY - rect.top) / rect.height - 0.5) * 2;
+}
+
+function handleSignalPointerLeave() {
+  signalPointer.targetX = 0;
+  signalPointer.targetY = 0;
+}
+
+function disposeSignalScene() {
+  if (signalRafId !== null) {
+    cancelAnimationFrame(signalRafId);
+    signalRafId = null;
+  }
+  signalResizeObserver?.disconnect();
+  signalResizeObserver = null;
+  if (signalStageElement) {
+    signalStageElement.removeEventListener('pointermove', handleSignalPointerMove);
+    signalStageElement.removeEventListener('pointerleave', handleSignalPointerLeave);
+    signalStageElement = null;
+  }
+  if (signalScene) {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    signalScene.traverse((object) => {
+      const renderable = object as THREE.Object3D & {
+        geometry?: THREE.BufferGeometry;
+        material?: THREE.Material | THREE.Material[];
+      };
+      if (renderable.geometry) geometries.add(renderable.geometry);
+      if (Array.isArray(renderable.material)) {
+        renderable.material.forEach((material) => materials.add(material));
+      } else if (renderable.material) {
+        materials.add(renderable.material);
+      }
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    signalScene.clear();
+  }
+  signalRenderer?.dispose();
+  signalRenderer?.forceContextLoss();
+  signalRenderer = null;
+  signalScene = null;
+  signalPointer.x = 0;
+  signalPointer.y = 0;
+  signalPointer.targetX = 0;
+  signalPointer.targetY = 0;
+}
+
+function initSignalScene() {
+  const canvas = signalCanvasEl.value;
+  const stage = playerStageEl.value;
+  if (signalRenderer || !canvas || !stage) return;
+
+  try {
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance',
+    });
+    signalRenderer = renderer;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.9;
+    renderer.setClearColor(0x02050d, 1);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x02050d);
+    scene.fog = new THREE.FogExp2(0x02050d, 0.038);
+    signalScene = scene;
+    const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 80);
+    camera.position.set(0, 0.25, 11);
+
+    const world = new THREE.Group();
+    scene.add(world);
+    scene.add(new THREE.HemisphereLight(0x80dfff, 0x080311, 0.85));
+    const cyanLight = new THREE.PointLight(0x31dcff, 20, 24, 2);
+    cyanLight.position.set(-5, 2.5, 3);
+    scene.add(cyanLight);
+    const pinkLight = new THREE.PointLight(0xff3d9a, 18, 24, 2);
+    pinkLight.position.set(5, -1, 2);
+    scene.add(pinkLight);
+
+    const rings: {
+      mesh: THREE.Mesh<THREE.TorusGeometry, THREE.MeshStandardMaterial>;
+      speed: number;
+      phase: number;
+    }[] = [];
+    const sideGroups: { group: THREE.Group; side: number; offset: number }[] = [];
+    const tunnel: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>[] = [];
+    const beams: {
+      mesh: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
+      phase: number;
+    }[] = [];
+
+    [-1, 1].forEach((side) => {
+      const color = side < 0 ? 0x42e8ff : 0xff4b9f;
+      const darkColor = side < 0 ? 0x123f52 : 0x4b1535;
+      const ringGroup = new THREE.Group();
+      ringGroup.position.set(0, 0.1, -3);
+      ringGroup.rotation.set(0.12, side * -0.42, side * 0.08);
+      world.add(ringGroup);
+      sideGroups.push({ group: ringGroup, side, offset: 0 });
+
+      for (let i = 0; i < 3; i += 1) {
+        const material = new THREE.MeshStandardMaterial({
+          color: darkColor,
+          emissive: color,
+          emissiveIntensity: i === 1 ? 0.42 : 0.72,
+          metalness: 0.9,
+          roughness: 0.24,
+          transparent: true,
+          opacity: i === 1 ? 0.88 : 0.68,
+          depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(
+          new THREE.TorusGeometry(1.55 + i * 0.34, i === 1 ? 0.055 : 0.024, 8, 96),
+          material,
+        );
+        mesh.position.z = -i * 0.38;
+        mesh.rotation.x = (i - 1) * 0.09;
+        ringGroup.add(mesh);
+        rings.push({ mesh, speed: side * (0.025 + i * 0.009), phase: i + side });
+      }
+
+      const innerRing = new THREE.Mesh(
+        new THREE.TorusGeometry(1.17, 0.012, 6, 96),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.62,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      innerRing.position.z = 0.16;
+      ringGroup.add(innerRing);
+
+      const frameGroup = new THREE.Group();
+      frameGroup.position.z = -4.2;
+      frameGroup.rotation.set(0.03, side * 0.22, side * -0.025);
+      world.add(frameGroup);
+      sideGroups.push({ group: frameGroup, side, offset: 0.5 });
+      const panelGeometry = new THREE.BoxGeometry(2.9, 5.8, 0.08);
+      const panel = new THREE.Mesh(
+        panelGeometry,
+        new THREE.MeshPhysicalMaterial({
+          color,
+          metalness: 0.12,
+          roughness: 0.16,
+          clearcoat: 1,
+          clearcoatRoughness: 0.12,
+          transparent: true,
+          opacity: 0.065,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      frameGroup.add(panel);
+      const frameMaterial = new THREE.MeshStandardMaterial({
+        color: darkColor,
+        emissive: color,
+        emissiveIntensity: 0.18,
+        metalness: 0.96,
+        roughness: 0.2,
+      });
+      const verticalGeometry = new THREE.BoxGeometry(0.065, 5.95, 0.13);
+      const horizontalGeometry = new THREE.BoxGeometry(2.96, 0.065, 0.13);
+      [-1, 1].forEach((direction) => {
+        const vertical = new THREE.Mesh(verticalGeometry, frameMaterial);
+        vertical.position.x = direction * 1.47;
+        frameGroup.add(vertical);
+        const horizontal = new THREE.Mesh(horizontalGeometry, frameMaterial);
+        horizontal.position.y = direction * 2.94;
+        frameGroup.add(horizontal);
+      });
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(panelGeometry),
+        new THREE.LineBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.38,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      frameGroup.add(edges);
+
+      for (let i = 0; i < 2; i += 1) {
+        const beam = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.065, 10, 6, 1, true),
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.12,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        );
+        beam.position.set(side * (3.1 + i * 1.7), 0, -5 - i * 3);
+        beam.rotation.set(0.16, 0, side * (0.24 + i * 0.13));
+        world.add(beam);
+        beams.push({ mesh: beam, phase: i * 1.7 + side });
+      }
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      const hoop = new THREE.Mesh(
+        new THREE.TorusGeometry(3.65 + i * 0.24, 0.016, 6, 112),
+        new THREE.MeshBasicMaterial({
+          color: i % 2 === 0 ? 0x2dcde8 : 0xb52c78,
+          transparent: true,
+          opacity: 0.16 - i * 0.018,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      hoop.position.z = -7 - i * 3.1;
+      hoop.scale.y = 0.74;
+      hoop.rotation.z = i * 0.16;
+      world.add(hoop);
+      tunnel.push(hoop);
+    }
+
+    const grid = new THREE.GridHelper(28, 28, 0x16445f, 0x0b243c);
+    grid.position.set(0, -3.15, -7);
+    const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
+    gridMaterials.forEach((material) => {
+      material.transparent = true;
+      material.opacity = 0.16;
+      material.depthWrite = false;
+    });
+    world.add(grid);
+
+    const particleCount = 280;
+    const particlePositions = new Float32Array(particleCount * 3);
+    const particleColors = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i += 1) {
+      particlePositions[i * 3] = (Math.random() - 0.5) * 19;
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 11;
+      particlePositions[i * 3 + 2] = -26 + Math.random() * 29;
+      const tint = new THREE.Color(i % 4 === 0 ? 0xff4da6 : 0x55e7ff);
+      tint.toArray(particleColors, i * 3);
+    }
+    const particleGeometry = new THREE.BufferGeometry();
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    particleGeometry.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+    const particles = new THREE.Points(
+      particleGeometry,
+      new THREE.PointsMaterial({
+        size: 0.045,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.78,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+      }),
+    );
+    world.add(particles);
+
+    const resize = () => {
+      const width = Math.max(1, stage.clientWidth);
+      const height = Math.max(1, stage.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      sideGroups.forEach(({ group, side, offset }) => {
+        group.position.x = side * (Math.max(3.8, camera.aspect * 3.25) + offset);
+      });
+    };
+    signalResizeObserver = new ResizeObserver(resize);
+    signalResizeObserver.observe(stage);
+    resize();
+
+    signalStageElement = stage;
+    stage.addEventListener('pointermove', handleSignalPointerMove, { passive: true });
+    stage.addEventListener('pointerleave', handleSignalPointerLeave);
+
+    const frameInterval = 1000 / 30;
+    let lastFrame = 0;
+    let previousFrame = performance.now();
+    const animate = (now: number) => {
+      if (signalRenderer !== renderer) return;
+      signalRafId = requestAnimationFrame(animate);
+      if (now - lastFrame < frameInterval - 1) return;
+      const delta = Math.min((now - previousFrame) / 1000, 0.05);
+      previousFrame = now;
+      lastFrame = now;
+      const elapsed = now * 0.001;
+
+      signalPointer.x += (signalPointer.targetX - signalPointer.x) * 0.055;
+      signalPointer.y += (signalPointer.targetY - signalPointer.y) * 0.055;
+      camera.position.x = signalPointer.x * 0.38;
+      camera.position.y = 0.25 + signalPointer.y * 0.24;
+      camera.lookAt(signalPointer.x * 0.08, signalPointer.y * 0.05, -4);
+      world.rotation.y = signalPointer.x * 0.018;
+      world.rotation.x = signalPointer.y * -0.012;
+
+      rings.forEach(({ mesh, speed, phase }) => {
+        mesh.rotation.z = elapsed * speed;
+        mesh.rotation.y = Math.sin(elapsed * 0.22 + phase) * 0.07;
+      });
+      tunnel.forEach((hoop, index) => {
+        hoop.rotation.z = index * 0.16 + elapsed * (index % 2 === 0 ? 0.009 : -0.009);
+      });
+      beams.forEach(({ mesh, phase }) => {
+        mesh.material.opacity = 0.09 + (Math.sin(elapsed * 0.7 + phase) + 1) * 0.032;
+      });
+
+      for (let i = 0; i < particleCount; i += 1) {
+        const zIndex = i * 3 + 2;
+        particlePositions[zIndex] += delta * 0.62;
+        if (particlePositions[zIndex] > 3) particlePositions[zIndex] = -26;
+      }
+      particleGeometry.attributes.position.needsUpdate = true;
+      particles.rotation.y = Math.sin(elapsed * 0.05) * 0.025;
+      renderer.render(scene, camera);
+    };
+    signalRafId = requestAnimationFrame(animate);
+  } catch (error) {
+    console.warn('[LivePlayer] signal scene init failed:', error);
+    disposeSignalScene();
+  }
+}
 
 // ========== TRTC 独立连麦宫格 ==========
 // 主播端推流用 liveIndexId 作为 TRTC strRoomId，观众端进房同理
@@ -969,7 +1316,10 @@ function toggleSound() {
  * 所有模块级单例都被 reset 到和初始化一样的干净状态，
  * 不会把任何画面/事件/状态带到其他页面（尤其 TUILiveKitWin）。
  */
-async function doFullCleanup(): Promise<void> {
+async function doFullCleanup(preserveSignalScene = false): Promise<void> {
+  if (!preserveSignalScene) {
+    disposeSignalScene();
+  }
   if (_cleanupStarted) return;
   _cleanupStarted = true;
   destroyed = true;
@@ -1246,6 +1596,7 @@ async function initLiveModules() {
 }
 
 onMounted(() => {
+  initSignalScene();
   void initLiveModules();
 });
 
@@ -1260,7 +1611,7 @@ watch(
   async (newId, oldId) => {
     if (!newId || newId === oldId) return;
     console.log('[LivePlayer] switch live room:', oldId, '->', newId);
-    await doFullCleanup();
+    await doFullCleanup(true);
     await initLiveModules();
   },
 );
@@ -1291,7 +1642,7 @@ onBeforeUnmount(() => {
   height: 100vh;
   overflow: hidden;
   color: var(--text-color-primary, #ffffff);
-  background-color: #0b0b0d;
+  background: radial-gradient(circle at 35% 0%, #101a2b 0%, #070b13 48%, #04060b 100%);
   box-sizing: border-box;
 }
 
@@ -1300,12 +1651,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 2.75rem;
-  padding: 0 1rem;
+  height: 3rem;
+  padding: 0 0.875rem 0 1rem;
   user-select: none;
   -webkit-user-select: none;
   -webkit-app-region: drag;
-  background-color: var(--bg-color-topbar, #141518);
+  background: linear-gradient(180deg, rgba(18, 27, 43, 0.98), rgba(9, 14, 24, 0.96));
+  border-bottom: 1px solid rgba(105, 211, 255, 0.1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.035);
+  box-sizing: border-box;
 }
 
 .player-header-left {
@@ -1336,6 +1690,8 @@ onBeforeUnmount(() => {
   .player-title {
     font-size: 0.875rem;
     font-weight: 600;
+    color: rgba(242, 249, 255, 0.96);
+    letter-spacing: 0.02em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1349,8 +1705,25 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
 
   .player-viewers {
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
     font-size: 0.75rem;
-    color: var(--text-color-secondary, rgba(255, 255, 255, 0.65));
+    color: rgba(208, 229, 241, 0.72);
+    background: rgba(91, 171, 211, 0.06);
+    border: 1px solid rgba(127, 209, 241, 0.09);
+    border-radius: 999px;
+
+    &::before {
+      width: 0.3125rem;
+      height: 0.3125rem;
+      content: '';
+      background: #52e2ef;
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(82, 226, 239, 0.65);
+    }
   }
 
   .window-tool {
@@ -1383,68 +1756,99 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: row;
   overflow: hidden;
-  background-color: #000;
+  background-color: #02050c;
 }
 
 .player-stage {
   position: relative;
+  isolation: isolate;
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background-color: #000;
+  background: radial-gradient(ellipse at center, #07101e 0%, #02060e 58%, #010308 100%);
+}
+
+.player-signal-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
 }
 
 .player-side {
+  position: relative;
   flex: none;
   width: 20rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: var(--bg-color-topbar, #141518);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 22, 36, 0.99), rgba(7, 11, 20, 0.99));
+  border-left: 1px solid rgba(105, 211, 255, 0.12);
+  box-shadow: -16px 0 42px rgba(0, 0, 0, 0.3), inset 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 .player-side-hint {
   margin: auto;
-  padding: 0 1rem;
+  padding: 0.75rem 1rem;
   font-size: 0.75rem;
   text-align: center;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(196, 220, 235, 0.52);
+  background: rgba(89, 160, 199, 0.05);
+  border: 1px solid rgba(114, 195, 234, 0.08);
+  border-radius: 0.75rem;
 }
 
 .player-video {
+  position: relative;
+  z-index: 1;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background-color: #000;
+  background-color: transparent;
+}
+
+.player-stage :deep(.cogrid) {
+  z-index: 5;
 }
 
 .player-status {
   position: absolute;
   top: 50%;
   left: 50%;
+  z-index: 30;
   transform: translate(-50%, -50%);
-  padding: 0.5rem 1rem;
+  padding: 0.625rem 1rem;
   font-size: 0.8125rem;
   color: #fff;
-  border-radius: 0.375rem;
-  background-color: rgba(0, 0, 0, 0.6);
+  background: rgba(7, 14, 25, 0.78);
+  border: 1px solid rgba(127, 211, 245, 0.14);
+  border-radius: 0.625rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
 }
 
 .player-anchor {
   position: absolute;
   left: 1rem;
-  top: 0rem;
+  top: 0.75rem;
   z-index: 25;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
+  padding: 0.4375rem 0.75rem;
+  background: linear-gradient(135deg, rgba(17, 29, 45, 0.76), rgba(7, 13, 24, 0.62));
+  border: 1px solid rgba(126, 216, 249, 0.15);
   border-radius: 1rem;
-  background-color: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(1.25);
 
   /* 头像列：头像（含直播中角标）+ 人气榜入口 */
   .player-anchor-side {
@@ -1466,9 +1870,12 @@ onBeforeUnmount(() => {
   .player-avatar {
     width: 2rem;
     height: 2rem;
-    border-radius: 50%;
     object-fit: cover;
     background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(100, 226, 255, 0.42);
+    border-radius: 50%;
+    box-shadow: 0 0 16px rgba(49, 211, 241, 0.13);
+    box-sizing: border-box;
   }
 
   .player-avatar-empty {
@@ -1558,9 +1965,10 @@ onBeforeUnmount(() => {
     line-height: 1.375rem;
     color: #fff;
     cursor: pointer;
-    background-image: linear-gradient(90deg, #ff6a9c, #ff3d71);
-    border: none;
+    background-image: linear-gradient(100deg, #ff6cae, #ff3d78 58%, #ee3965);
+    border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 0.75rem;
+    box-shadow: 0 5px 16px rgba(255, 61, 113, 0.2);
 
     &:hover {
       filter: brightness(1.08);
@@ -1596,7 +2004,13 @@ onBeforeUnmount(() => {
 .player-top-right-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
+  padding: 0.25rem;
+  background: rgba(7, 14, 25, 0.58);
+  border: 1px solid rgba(126, 216, 249, 0.12);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .player-more-live {
@@ -1612,14 +2026,15 @@ onBeforeUnmount(() => {
   font-size: 0.6875rem;
   color: #fff;
   cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(19, 31, 47, 0.72);
+  border: 1px solid rgba(137, 213, 241, 0.14);
   border-radius: 999px;
-  backdrop-filter: blur(4px);
-  transition: background-color 0.2s ease;
+  backdrop-filter: blur(12px);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.65);
+    background-color: rgba(31, 49, 69, 0.86);
+    border-color: rgba(137, 213, 241, 0.26);
   }
 }
 
@@ -1636,7 +2051,8 @@ onBeforeUnmount(() => {
   background-image: linear-gradient(135deg, rgba(255, 122, 162, 0.9), rgba(255, 61, 113, 0.9));
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  backdrop-filter: blur(4px);
+  box-shadow: 0 5px 18px rgba(255, 61, 113, 0.17);
+  backdrop-filter: blur(12px);
   transition: filter 0.2s ease, transform 0.12s ease;
 
   &:hover {
@@ -1658,14 +2074,15 @@ onBeforeUnmount(() => {
   padding: 0;
   color: #fff;
   cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(19, 31, 47, 0.72);
+  border: 1px solid rgba(137, 213, 241, 0.14);
   border-radius: 999px;
-  backdrop-filter: blur(4px);
-  transition: background-color 0.2s ease, transform 0.12s ease;
+  backdrop-filter: blur(12px);
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.65);
+    background-color: rgba(31, 49, 69, 0.86);
+    border-color: rgba(137, 213, 241, 0.26);
   }
 
   &:active {
@@ -1685,14 +2102,15 @@ onBeforeUnmount(() => {
   height: 1.75rem;
   padding: 0 0.625rem 0 0.375rem;
   cursor: pointer;
-  background-color: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(19, 31, 47, 0.72);
+  border: 1px solid rgba(137, 213, 241, 0.14);
   border-radius: 999px;
-  backdrop-filter: blur(4px);
-  transition: background-color 0.2s ease;
+  backdrop-filter: blur(12px);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.65);
+    background-color: rgba(31, 49, 69, 0.86);
+    border-color: rgba(137, 213, 241, 0.26);
   }
 }
 

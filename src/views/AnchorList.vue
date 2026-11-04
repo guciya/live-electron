@@ -1,6 +1,9 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="anchor-list-page">
+      <canvas ref="anchorSpaceCanvas" class="anchor-space-canvas" aria-hidden="true"></canvas>
+      <div class="anchor-space-haze" aria-hidden="true"></div>
+      <canvas v-if="isAnchor" ref="liveCameraCanvas" class="anchor-live-particle-canvas" aria-hidden="true"></canvas>
       <header class="anchor-header tui-window-header">
         <div class="anchor-header-left">
           <img class="logo-icon" src="../assets/niko-logo.png" alt="Niko直播伴侣" />
@@ -39,14 +42,14 @@
             </svg>
             <span>公会|家族</span>
           </button>
-          <button class="anchor-text-btn" type="button" @click="openWithdrawPage()">
+          <!-- <button class="anchor-text-btn" type="button" @click="openWithdrawPage()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="6" width="20" height="14" rx="2" />
               <path d="M2 10h20" />
               <path d="M6 15h4" />
             </svg>
             <span>提现</span>
-          </button>
+          </button> -->
           <button class="anchor-text-btn" type="button" @click="openSettlePage('family')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 10.5 12 3l9 7.5" />
@@ -228,22 +231,25 @@
         </div>
       </main>
 
-      <!-- 悬浮圆形开播按钮：页面底部居中（仅主播展示） -->
-      <button v-if="isAnchor" class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
-        <svg class="anchor-fab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="6" width="12" height="12" rx="2" />
-          <path d="m15 10 4.55-2.27A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.89L15 14" />
-        </svg>
-        <span>开播</span>
+      <!-- 全页粒子汇聚开播按钮：悬停后在页面底部居中成型 -->
+      <button v-if="isAnchor" ref="liveStartButton" class="anchor-fab-start" type="button" aria-label="去开播" @click="handleStartLive">
+        <span class="anchor-fab-hint">开播</span>
       </button>
 
       <!-- 关注列表弹窗：/live/attentionLiveList 在播的关注主播 -->
       <div v-if="followListVisible" class="follow-mask" @click.self="closeFollowList">
         <div class="follow-panel">
+          <canvas ref="followGravityCanvas" class="follow-gravity-canvas" aria-hidden="true"></canvas>
           <div class="follow-panel-header">
             <div class="follow-panel-title">
-              <span>关注列表</span>
-              <span class="follow-panel-count">{{ followList.length }} 位正在直播</span>
+              <span class="follow-panel-title-orbit" aria-hidden="true"><span></span></span>
+              <span class="follow-panel-title-copy">
+                <span class="follow-panel-eyebrow">FOLLOWING · LIVE ORBIT</span>
+                <span class="follow-panel-heading">
+                  <span>关注列表</span>
+                  <span class="follow-panel-count">{{ followList.length }} 位正在直播</span>
+                </span>
+              </span>
             </div>
             <button class="follow-panel-close" type="button" aria-label="关闭" @click="closeFollowList">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -288,7 +294,10 @@
                   <div v-else class="follow-card-empty">
                     <IconLive />
                   </div>
-                  <span class="follow-card-enter">进入直播间</span>
+                  <div class="follow-card-cover-shade" aria-hidden="true"></div>
+                  <span class="follow-card-live"><span></span>LIVE</span>
+                  <span class="follow-card-viewers">{{ item.viewerCount }} 人观看</span>
+                  <span class="follow-card-enter">进入直播间 <span aria-hidden="true">↗</span></span>
                 </div>
                 <div class="follow-card-info">
                   <img
@@ -348,6 +357,7 @@
 
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance, type Ref } from 'vue';
+import * as THREE from 'three/src/Three.js';
 import { useRoute, useRouter } from 'vue-router';
 import { IconLive, UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
 import TUIMessageBox from '../TUILiveKit/common/base/MessageBox';
@@ -388,6 +398,11 @@ const userAvatar = computed(() => {
 const userInitial = computed(() => (userInfo.value?.nickname || userInfo.value?.userShowId || 'N').slice(0, 1).toUpperCase());
 /** 是否主播（/api/user/personalInfo 的 is_anchor）：非主播隐藏开播入口 */
 const isAnchor = computed(() => authStore.isAnchor);
+const liveCameraCanvas = ref<HTMLCanvasElement | null>(null);
+const liveStartButton = ref<HTMLButtonElement | null>(null);
+const anchorSpaceCanvas = ref<HTMLCanvasElement | null>(null);
+let cleanupLiveCamera: (() => void) | null = null;
+let cleanupAnchorSpace: (() => void) | null = null;
 
 /** 二维码弹窗（充值中心 / 主播认证） */
 const qrVisible = ref(false);
@@ -545,6 +560,455 @@ function handleCardClick(item: NikoLiveListItem) {
   });
 }
 
+function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
+  camera.position.set(0, 0, 8);
+
+  const starCount = 650;
+  const positions = new Float32Array(starCount * 3);
+  const colors = new Float32Array(starCount * 3);
+  const blue = new THREE.Color(0x4c8eff);
+  const cyan = new THREE.Color(0xb5f2ff);
+  for (let i = 0; i < starCount; i += 1) {
+    positions[i * 3] = (Math.random() - 0.5) * 24;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
+    positions[i * 3 + 2] = -15 + Math.random() * 17;
+    const color = blue.clone().lerp(cyan, Math.random());
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const stars = new THREE.Points(
+    starGeometry,
+    new THREE.PointsMaterial({
+      size: 0.032,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  scene.add(stars);
+
+  const grid = new THREE.GridHelper(34, 44, 0x245fa5, 0x132d53);
+  grid.position.set(0, -3.1, -4);
+  const gridMaterial = grid.material as THREE.Material;
+  gridMaterial.transparent = true;
+  gridMaterial.opacity = 0.16;
+  scene.add(grid);
+
+  const orbitals = new THREE.Group();
+  orbitals.position.set(3.7, 0.8, -4.5);
+  for (let i = 0; i < 3; i += 1) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.25 + i * 0.42, 0.009, 6, 128),
+      new THREE.MeshBasicMaterial({
+        color: i === 1 ? 0x615dff : 0x3dbbef,
+        transparent: true,
+        opacity: 0.13 - i * 0.02,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.set(0.65 + i * 0.28, i * 0.35, i * 0.5);
+    orbitals.add(ring);
+  }
+  scene.add(orbitals);
+
+  const polyhedron = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.65, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x376fc4,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.075,
+      depthWrite: false,
+    }),
+  );
+  polyhedron.position.set(-4.3, 1.4, -5);
+  scene.add(polyhedron);
+
+  const pointer = { x: 0, y: 0 };
+  const handlePointer = (event: PointerEvent) => {
+    pointer.x = (event.clientX / window.innerWidth - 0.5) * 2;
+    pointer.y = (event.clientY / window.innerHeight - 0.5) * 2;
+  };
+  window.addEventListener('pointermove', handlePointer, { passive: true });
+
+  const resize = () => {
+    const width = canvas.clientWidth || window.innerWidth;
+    const height = canvas.clientHeight || window.innerHeight;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / Math.max(height, 1);
+    camera.updateProjectionMatrix();
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+  resize();
+
+  const clock = new THREE.Clock();
+  let raf = 0;
+  let lastFrame = 0;
+  const animate = () => {
+    const elapsed = clock.getElapsedTime();
+    if (elapsed - lastFrame < 1 / 30) {
+      raf = requestAnimationFrame(animate);
+      return;
+    }
+    lastFrame = elapsed;
+    const starPositions = starGeometry.attributes.position.array as Float32Array;
+    for (let i = 0; i < starCount; i += 1) {
+      const zIndex = i * 3 + 2;
+      starPositions[zIndex] += 0.006;
+      if (starPositions[zIndex] > 2) starPositions[zIndex] = -15;
+    }
+    starGeometry.attributes.position.needsUpdate = true;
+    orbitals.rotation.y = elapsed * 0.055;
+    orbitals.rotation.z = elapsed * 0.025;
+    polyhedron.rotation.x = elapsed * 0.035;
+    polyhedron.rotation.y = elapsed * 0.05;
+    grid.position.z = -4 + (elapsed * 0.08) % 0.7;
+    camera.position.x += (pointer.x * 0.16 - camera.position.x) * 0.025;
+    camera.position.y += (-pointer.y * 0.1 - camera.position.y) * 0.025;
+    camera.lookAt(0, 0, -2);
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(animate);
+  };
+  animate();
+
+  return () => {
+    cancelAnimationFrame(raf);
+    resizeObserver.disconnect();
+    window.removeEventListener('pointermove', handlePointer);
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh;
+      drawable.geometry?.dispose?.();
+      if (Array.isArray(drawable.material)) {
+        drawable.material.forEach((material) => material.dispose());
+      } else {
+        drawable.material?.dispose?.();
+      }
+    });
+    renderer.dispose();
+  };
+}
+
+function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElement) {
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+  camera.position.z = 500;
+
+  const vertexShader = `
+    attribute float aSize;
+    uniform float uPixelRatio;
+    uniform float uFormation;
+    varying vec3 vColor;
+    void main() {
+      vColor = color;
+      vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * viewPosition;
+      gl_PointSize = aSize * uPixelRatio * mix(0.58, 1.15, uFormation);
+    }
+  `;
+  const fragmentShader = `
+    uniform float uFormation;
+    varying vec3 vColor;
+    void main() {
+      vec2 uv = gl_PointCoord * 2.0 - 1.0;
+      float radius = dot(uv, uv);
+      if (radius > 1.0) discard;
+      float sphereZ = sqrt(max(0.0, 1.0 - radius));
+      vec3 particleNormal = normalize(vec3(uv.x, -uv.y, sphereZ));
+      vec3 lightDirection = normalize(vec3(-0.45, 0.65, 1.0));
+      float diffuse = max(dot(particleNormal, lightDirection), 0.0);
+      float specular = pow(diffuse, 22.0) * 0.42;
+      float rim = pow(1.0 - sphereZ, 2.0) * 0.12;
+      vec3 shadedColor = vColor * (0.42 + diffuse * 0.82) + vec3(specular + rim);
+      float edgeAlpha = 1.0 - smoothstep(0.78, 1.0, radius);
+      gl_FragColor = vec4(shadedColor, edgeAlpha * mix(0.48, 0.98, uFormation));
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }
+  `;
+
+  type ParticleCloud = {
+    points: THREE.Points;
+    material: THREE.ShaderMaterial;
+    target: Float32Array;
+    scattered: Float32Array;
+    seeds: Float32Array;
+  };
+
+  const makeCloud = (targets: number[], colors: number[], sizes: number[]): ParticleCloud => {
+    const count = targets.length / 3;
+    const target = new Float32Array(targets);
+    const scattered = new Float32Array(target.length);
+    const positions = new Float32Array(target.length);
+    const seeds = new Float32Array(count * 4);
+    for (let i = 0; i < count; i += 1) {
+      seeds[i * 4] = Math.random() * Math.PI * 2;
+      seeds[i * 4 + 1] = Math.random() * Math.PI * 2;
+      seeds[i * 4 + 2] = Math.random();
+      seeds[i * 4 + 3] = Math.random();
+    }
+    const geometry = new THREE.BufferGeometry();
+    const position = new THREE.BufferAttribute(positions, 3);
+    position.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('position', position);
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uPixelRatio: { value: renderer.getPixelRatio() },
+        uFormation: { value: 0 },
+      },
+      vertexShader,
+      fragmentShader,
+      vertexColors: true,
+      transparent: true,
+      depthTest: true,
+      depthWrite: true,
+      blending: THREE.NormalBlending,
+    });
+    const points = new THREE.Points(geometry, material);
+    points.frustumCulled = false;
+    return { points, material, target, scattered, seeds };
+  };
+
+  const cameraTargets: number[] = [];
+  const cameraColors: number[] = [];
+  const cameraSizes: number[] = [];
+  const addCameraPoint = (x: number, y: number, z: number, color: THREE.Color) => {
+    cameraTargets.push(x, y, z);
+    cameraColors.push(color.r, color.g, color.b);
+    cameraSizes.push(1.8 + Math.random() * 1.15);
+  };
+  const bodyPalette = [0x1f5eae, 0x287fd0, 0x163d7a, 0x3a8dcc].map((color) => new THREE.Color(color));
+  const lensPalette = [0x123c68, 0x1e9cc2, 0x77e6ff].map((color) => new THREE.Color(color));
+
+  const addBoxSurface = (
+    count: number,
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    width: number,
+    height: number,
+    depth: number,
+    palette: THREE.Color[],
+  ) => {
+    for (let i = 0; i < count; i += 1) {
+      let x = centerX + (Math.random() - 0.5) * width;
+      let y = centerY + (Math.random() - 0.5) * height;
+      let z = centerZ + (Math.random() - 0.5) * depth;
+      const face = Math.floor(Math.random() * 6);
+      let shade = 1;
+      if (face === 0) { x = centerX - width / 2; shade = 0.62; }
+      if (face === 1) { x = centerX + width / 2; shade = 0.82; }
+      if (face === 2) { y = centerY - height / 2; shade = 0.52; }
+      if (face === 3) { y = centerY + height / 2; shade = 1.28; }
+      if (face === 4) { z = centerZ - depth / 2; shade = 0.58; }
+      if (face === 5) { z = centerZ + depth / 2; shade = 1.08; }
+      const color = palette[Math.floor(Math.random() * palette.length)].clone();
+      color.multiplyScalar(shade * (0.86 + Math.random() * 0.26));
+      addCameraPoint(x, y, z, color);
+    }
+  };
+
+  // 机身与取景器只保留高密度表面颗粒，利用遮挡形成实心体积。
+  addBoxSurface(2400, 0, 12, 0, 72, 44, 28, bodyPalette);
+  addBoxSurface(400, -12, 39, -2, 24, 10, 20, bodyPalette);
+
+  // 镜头包含玻璃前面、金属侧面、亮环与局部高光。
+  for (let i = 0; i < 1400; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const mode = Math.random();
+    let radius = Math.sqrt(Math.random()) * 16;
+    let z = 34 + Math.random() * 0.8;
+    let color = lensPalette[0].clone();
+    if (mode >= 0.45 && mode < 0.8) {
+      radius = 17;
+      z = 14 + Math.random() * 20;
+      color = lensPalette[1].clone().multiplyScalar(0.68 + Math.random() * 0.38);
+    } else if (mode >= 0.8) {
+      radius = 17 + (Math.random() - 0.5) * 1.1;
+      z = 34.5;
+      color = lensPalette[2].clone();
+    } else if (radius > 11) {
+      color = lensPalette[1].clone();
+    }
+    addCameraPoint(Math.cos(angle) * radius, 12 + Math.sin(angle) * radius, z, color);
+  }
+  for (let i = 0; i < 90; i += 1) {
+    addCameraPoint(
+      -5 + (Math.random() - 0.5) * 7,
+      18 + (Math.random() - 0.5) * 5,
+      35.2,
+      new THREE.Color(0xc8f7ff),
+    );
+  }
+
+  const cameraCloud = makeCloud(cameraTargets, cameraColors, cameraSizes);
+  scene.add(cameraCloud.points);
+
+  const textTargets: number[] = [];
+  const textColors: number[] = [];
+  const textSizes: number[] = [];
+  const textCanvas = document.createElement('canvas');
+  textCanvas.width = 128;
+  textCanvas.height = 48;
+  const context = textCanvas.getContext('2d', { willReadFrequently: true });
+  if (context) {
+    context.fillStyle = '#ffffff';
+    context.font = '700 30px "Microsoft YaHei", "PingFang SC", sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('开播', 64, 25);
+    const pixels = context.getImageData(0, 0, 128, 48).data;
+    const textPalette = [0xd7f6ff, 0x8fdcf2, 0x75bddd].map((color) => new THREE.Color(color));
+    for (let y = 0; y < 48; y += 2) {
+      for (let x = 0; x < 128; x += 2) {
+        if (pixels[(y * 128 + x) * 4 + 3] < 110) continue;
+        const color = textPalette[Math.floor(Math.random() * textPalette.length)].clone();
+        color.multiplyScalar(0.86 + Math.random() * 0.24);
+        textTargets.push(x - 64, -44 + 24 - y, 34 + (Math.random() - 0.5) * 2);
+        textColors.push(color.r, color.g, color.b);
+        textSizes.push(1.7 + Math.random() * 0.9);
+      }
+    }
+  }
+  const textCloud = makeCloud(textTargets, textColors, textSizes);
+  scene.add(textCloud.points);
+  const clouds = [cameraCloud, textCloud];
+
+  let formation = 0;
+  let targetFormation = 0;
+  const startFormation = () => { targetFormation = 1; };
+  const stopFormation = () => { targetFormation = 0; };
+  button.addEventListener('mouseenter', startFormation);
+  button.addEventListener('mouseleave', stopFormation);
+  button.addEventListener('focus', startFormation);
+  button.addEventListener('blur', stopFormation);
+
+  const layout = () => {
+    const pageRect = canvas.parentElement?.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    if (!pageRect || pageRect.width < 1 || pageRect.height < 1) return;
+    const { width, height } = pageRect;
+    renderer.setSize(width, height, false);
+    camera.left = -width / 2;
+    camera.right = width / 2;
+    camera.top = height / 2;
+    camera.bottom = -height / 2;
+    camera.updateProjectionMatrix();
+
+    const centerX = buttonRect.left - pageRect.left + buttonRect.width / 2 - width / 2;
+    const centerY = height / 2 - (buttonRect.top - pageRect.top + buttonRect.height / 2);
+    clouds.forEach((cloud) => {
+      cloud.points.position.set(centerX, centerY, 0);
+      const count = cloud.target.length / 3;
+      for (let i = 0; i < count; i += 1) {
+        const offset = i * 3;
+        cloud.scattered[offset] = Math.random() * width - width / 2 - centerX;
+        cloud.scattered[offset + 1] = height / 2 - Math.random() * height - centerY;
+        cloud.scattered[offset + 2] = (Math.random() - 0.5) * 180;
+      }
+    });
+  };
+  const resizeObserver = new ResizeObserver(layout);
+  resizeObserver.observe(canvas);
+  resizeObserver.observe(button);
+  layout();
+
+  const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+  const easeInOutCubic = (value: number) => (
+    value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2
+  );
+  const updateCloud = (cloud: ParticleCloud, elapsed: number) => {
+    const attribute = cloud.points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const positions = attribute.array as Float32Array;
+    const count = cloud.target.length / 3;
+    for (let i = 0; i < count; i += 1) {
+      const offset = i * 3;
+      const seedA = cloud.seeds[i * 4];
+      const seedB = cloud.seeds[i * 4 + 1];
+      const delay = cloud.seeds[i * 4 + 2] * 0.18;
+      const driftSpeed = 0.6 + cloud.seeds[i * 4 + 3] * 0.5;
+      const progress = easeInOutCubic(clamp01((formation - delay) / 0.82));
+      const arc = Math.sin(progress * Math.PI) * 10;
+      const drift = (1 - progress) * 2.2;
+      const settledGrain = Math.sin(elapsed * 1.8 + seedA) * 0.12 * progress;
+      positions[offset] = cloud.scattered[offset]
+        + (cloud.target[offset] - cloud.scattered[offset]) * progress
+        + Math.sin(seedA + elapsed * 0.9) * arc
+        + Math.sin(elapsed * driftSpeed + seedB) * drift
+        + settledGrain;
+      positions[offset + 1] = cloud.scattered[offset + 1]
+        + (cloud.target[offset + 1] - cloud.scattered[offset + 1]) * progress
+        + Math.cos(seedB + elapsed * 0.8) * arc
+        + Math.cos(elapsed * driftSpeed + seedA) * drift
+        + settledGrain;
+      positions[offset + 2] = cloud.scattered[offset + 2]
+        + (cloud.target[offset + 2] - cloud.scattered[offset + 2]) * progress
+        + Math.sin(seedA + seedB + elapsed) * arc
+        + Math.sin(elapsed * driftSpeed + seedB) * drift * 2;
+    }
+    attribute.needsUpdate = true;
+  };
+
+  const clock = new THREE.Clock();
+  let raf = 0;
+  const animate = () => {
+    const delta = Math.min(clock.getDelta(), 0.05);
+    const elapsed = clock.elapsedTime;
+    const duration = targetFormation > formation ? 1.6 : 1.05;
+    if (targetFormation > formation) formation = Math.min(targetFormation, formation + delta / duration);
+    if (targetFormation < formation) formation = Math.max(targetFormation, formation - delta / duration);
+    const formed = easeInOutCubic(formation);
+
+    clouds.forEach((cloud) => {
+      updateCloud(cloud, elapsed);
+      cloud.material.uniforms.uFormation.value = formed;
+    });
+    cameraCloud.points.rotation.y = (-0.22 + Math.sin(elapsed * 0.7) * 0.04) * formed;
+    cameraCloud.points.rotation.x = (-0.06 + Math.sin(elapsed * 0.55) * 0.025) * formed;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(animate);
+  };
+  animate();
+
+  return () => {
+    cancelAnimationFrame(raf);
+    resizeObserver.disconnect();
+    button.removeEventListener('mouseenter', startFormation);
+    button.removeEventListener('mouseleave', stopFormation);
+    button.removeEventListener('focus', startFormation);
+    button.removeEventListener('blur', stopFormation);
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh;
+      drawable.geometry?.dispose?.();
+      if (Array.isArray(drawable.material)) {
+        drawable.material.forEach((material) => material.dispose());
+      } else {
+        drawable.material?.dispose?.();
+      }
+    });
+    renderer.dispose();
+  };
+}
+
 function handleStartLive() {
   router.push({ name: isMacPlatform() ? 'tui-livekit-mac' : 'tui-live-kit-main' });
 }
@@ -554,6 +1018,382 @@ const followListVisible = ref(false);
 const followList = ref<NikoLiveListItem[]>([]);
 const followLoading = ref(false);
 const followError = ref('');
+const followGravityCanvas = ref<HTMLCanvasElement | null>(null);
+let cleanupFollowGravity: (() => void) | null = null;
+
+function createFollowGravityScene(canvas: HTMLCanvasElement) {
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.18;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 60);
+  camera.position.set(0, 0.1, 10.5);
+
+  const root = new THREE.Group();
+  root.rotation.set(-0.04, -0.12, -0.08);
+  scene.add(root);
+
+  scene.add(new THREE.AmbientLight(0xa99bff, 1.25));
+  const keyLight = new THREE.DirectionalLight(0xffd6e5, 3.2);
+  keyLight.position.set(3, 5, 7);
+  scene.add(keyLight);
+  const rimLight = new THREE.PointLight(0x62e8ff, 18, 18, 2);
+  rimLight.position.set(-4, 1, 4);
+  scene.add(rimLight);
+  const violetLight = new THREE.PointLight(0x9b6cff, 15, 16, 2);
+  violetLight.position.set(4, -3, 2);
+  scene.add(violetLight);
+
+  const core = new THREE.Group();
+  root.add(core);
+  const heartShape = new THREE.Shape();
+  heartShape.moveTo(0, -1.18);
+  heartShape.bezierCurveTo(-0.32, -0.86, -1.45, 0.02, -1.45, 0.76);
+  heartShape.bezierCurveTo(-1.45, 1.52, -0.42, 1.82, 0, 1.05);
+  heartShape.bezierCurveTo(0.42, 1.82, 1.45, 1.52, 1.45, 0.76);
+  heartShape.bezierCurveTo(1.45, 0.02, 0.32, -0.86, 0, -1.18);
+  const heartGeometry = new THREE.ExtrudeGeometry(heartShape, {
+    depth: 0.5,
+    steps: 1,
+    curveSegments: 36,
+    bevelEnabled: true,
+    bevelThickness: 0.13,
+    bevelSize: 0.12,
+    bevelSegments: 5,
+  });
+  heartGeometry.center();
+  const heartMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0xd986a8,
+    emissive: 0x49152f,
+    emissiveIntensity: 0.62,
+    metalness: 0.72,
+    roughness: 0.22,
+    clearcoat: 1,
+    clearcoatRoughness: 0.16,
+  });
+  const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+  heart.scale.setScalar(0.78);
+  core.add(heart);
+
+  const heartAuraMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff6da7,
+    transparent: true,
+    opacity: 0.085,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const heartAura = new THREE.Mesh(heartGeometry, heartAuraMaterial);
+  heartAura.scale.setScalar(0.9);
+  core.add(heartAura);
+
+  const heartEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(heartGeometry, 28),
+    new THREE.LineBasicMaterial({
+      color: 0xffd3e1,
+      transparent: true,
+      opacity: 0.2,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  heartEdges.scale.setScalar(0.785);
+  core.add(heartEdges);
+
+  const coreLight = new THREE.PointLight(0xff7eae, 12, 9, 2);
+  coreLight.position.set(0, 0, 2);
+  core.add(coreLight);
+
+  type FollowOrbit = {
+    radius: number;
+    stretchX: number;
+    stretchY: number;
+  };
+  type FollowSatellite = {
+    node: THREE.Group;
+    orbit: FollowOrbit;
+    phase: number;
+    speed: number;
+  };
+  type FollowFlow = {
+    node: THREE.Mesh;
+    orbit: FollowOrbit;
+    phase: number;
+    speed: number;
+  };
+
+  const orbitConfigs = [
+    { radius: 1.9, stretchX: 1.18, stretchY: 0.8, rotation: [1.02, 0.18, 0.2], color: 0xff8fb6 },
+    { radius: 2.5, stretchX: 1.12, stretchY: 0.72, rotation: [0.44, 0.82, -0.48], color: 0xaa82ff },
+    { radius: 3.08, stretchX: 1.08, stretchY: 0.68, rotation: [1.18, -0.5, 0.72], color: 0x62deef },
+    { radius: 3.58, stretchX: 1.04, stretchY: 0.62, rotation: [0.72, 0.38, 1.16], color: 0xe4a2ff },
+  ];
+  const satellites: FollowSatellite[] = [];
+  const flows: FollowFlow[] = [];
+  const satelliteGeometry = new THREE.SphereGeometry(0.09, 16, 12);
+  const satelliteHaloGeometry = new THREE.SphereGeometry(0.18, 12, 8);
+  const satelliteRingGeometry = new THREE.TorusGeometry(0.145, 0.008, 5, 28);
+  const flowGeometry = new THREE.SphereGeometry(0.032, 8, 6);
+  const haloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xd7b7ff,
+    transparent: true,
+    opacity: 0.1,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const setOrbitPosition = (object: THREE.Object3D, orbit: FollowOrbit, angle: number) => {
+    object.position.set(
+      Math.cos(angle) * orbit.radius * orbit.stretchX,
+      Math.sin(angle) * orbit.radius * orbit.stretchY,
+      0,
+    );
+  };
+
+  orbitConfigs.forEach((config, orbitIndex) => {
+    const group = new THREE.Group();
+    const [rotationX, rotationY, rotationZ] = config.rotation;
+    group.rotation.set(rotationX, rotationY, rotationZ);
+    root.add(group);
+    const orbit: FollowOrbit = {
+      radius: config.radius,
+      stretchX: config.stretchX,
+      stretchY: config.stretchY,
+    };
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(config.radius, 0.009, 5, 180),
+      new THREE.MeshBasicMaterial({
+        color: config.color,
+        transparent: true,
+        opacity: 0.3 - orbitIndex * 0.035,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    ring.scale.set(config.stretchX, config.stretchY, 1);
+    group.add(ring);
+
+    for (let i = 0; i < 2; i += 1) {
+      const node = new THREE.Group();
+      const material = new THREE.MeshStandardMaterial({
+        color: config.color,
+        emissive: config.color,
+        emissiveIntensity: 1.4,
+        metalness: 0.35,
+        roughness: 0.2,
+      });
+      node.add(new THREE.Mesh(satelliteGeometry, material));
+      node.add(new THREE.Mesh(satelliteHaloGeometry, haloMaterial));
+      const satelliteRing = new THREE.Mesh(
+        satelliteRingGeometry,
+        new THREE.MeshBasicMaterial({
+          color: config.color,
+          transparent: true,
+          opacity: 0.65,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      satelliteRing.rotation.set(0.7, 0.35, orbitIndex * 0.4);
+      node.add(satelliteRing);
+      group.add(node);
+      satellites.push({
+        node,
+        orbit,
+        phase: orbitIndex * 1.37 + i * Math.PI,
+        speed: 0.1 + orbitIndex * 0.018 + i * 0.012,
+      });
+    }
+
+    const flowMaterial = new THREE.MeshBasicMaterial({
+      color: config.color,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 4; i += 1) {
+      const node = new THREE.Mesh(flowGeometry, flowMaterial);
+      group.add(node);
+      flows.push({
+        node,
+        orbit,
+        phase: (i / 4) * Math.PI * 2 + orbitIndex * 0.6,
+        speed: 0.24 + orbitIndex * 0.025,
+      });
+    }
+  });
+
+  const connectionPositions = new Float32Array(satellites.length * 6);
+  const connectionGeometry = new THREE.BufferGeometry();
+  const connectionAttribute = new THREE.BufferAttribute(connectionPositions, 3);
+  connectionAttribute.setUsage(THREE.DynamicDrawUsage);
+  connectionGeometry.setAttribute('position', connectionAttribute);
+  const connections = new THREE.LineSegments(
+    connectionGeometry,
+    new THREE.LineBasicMaterial({
+      color: 0xb9a2ff,
+      transparent: true,
+      opacity: 0.1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  root.add(connections);
+
+  const palette = [new THREE.Color(0xffb0c8), new THREE.Color(0xb59aff), new THREE.Color(0x8eefff)];
+  const makeStars = (count: number, local: boolean) => {
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    for (let i = 0; i < count; i += 1) {
+      const offset = i * 3;
+      if (local) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 1.25 + Math.pow(Math.random(), 0.65) * 3.7;
+        positions[offset] = Math.cos(angle) * radius;
+        positions[offset + 1] = (Math.random() - 0.5) * 4.8;
+        positions[offset + 2] = Math.sin(angle) * radius * 0.65;
+      } else {
+        positions[offset] = (Math.random() - 0.5) * 20;
+        positions[offset + 1] = (Math.random() - 0.5) * 12;
+        positions[offset + 2] = -10 + Math.random() * 11;
+      }
+      const color = palette[Math.floor(Math.random() * palette.length)].clone();
+      color.multiplyScalar(0.55 + Math.random() * 0.45);
+      colors[offset] = color.r;
+      colors[offset + 1] = color.g;
+      colors[offset + 2] = color.b;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        size: local ? 0.035 : 0.027,
+        vertexColors: true,
+        transparent: true,
+        opacity: local ? 0.62 : 0.48,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+  };
+  const backgroundStars = makeStars(560, false);
+  const orbitalDust = makeStars(340, true);
+  scene.add(backgroundStars);
+  root.add(orbitalDust);
+
+  const pointerTarget = canvas.parentElement || canvas;
+  const pointer = { targetX: 0, targetY: 0, x: 0, y: 0 };
+  const handlePointer = (event: PointerEvent) => {
+    const rect = pointerTarget.getBoundingClientRect();
+    pointer.targetX = THREE.MathUtils.clamp(((event.clientX - rect.left) / Math.max(rect.width, 1) - 0.5) * 2, -1, 1);
+    pointer.targetY = THREE.MathUtils.clamp(((event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5) * 2, -1, 1);
+  };
+  const resetPointer = () => {
+    pointer.targetX = 0;
+    pointer.targetY = 0;
+  };
+  pointerTarget.addEventListener('pointermove', handlePointer, { passive: true });
+  pointerTarget.addEventListener('pointerleave', resetPointer);
+
+  const resize = () => {
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (width < 1 || height < 1) return;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
+    const viewWidth = viewHeight * camera.aspect;
+    root.scale.setScalar(THREE.MathUtils.clamp(viewWidth / 10.5, 0.56, 1.02));
+    root.position.x = viewWidth * (camera.aspect > 1.1 ? 0.23 : 0.16);
+    root.position.y = camera.aspect < 0.9 ? -0.72 : -0.48;
+  };
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+  resize();
+
+  const clock = new THREE.Clock();
+  const worldPosition = new THREE.Vector3();
+  let raf = 0;
+  let lastFrame = 0;
+  const animate = (timestamp: number) => {
+    raf = requestAnimationFrame(animate);
+    if (timestamp - lastFrame < 1000 / 30) return;
+    lastFrame = timestamp;
+    const elapsed = clock.getElapsedTime();
+    pointer.x += (pointer.targetX - pointer.x) * 0.045;
+    pointer.y += (pointer.targetY - pointer.y) * 0.045;
+
+    root.rotation.y = -0.12 + elapsed * 0.025 + pointer.x * 0.075;
+    root.rotation.x = -0.04 + Math.sin(elapsed * 0.22) * 0.025 - pointer.y * 0.045;
+    core.rotation.y = -0.2 + Math.sin(elapsed * 0.35) * 0.16 + pointer.x * 0.08;
+    core.rotation.x = 0.06 + Math.sin(elapsed * 0.28) * 0.045;
+    const breath = 1 + Math.sin(elapsed * 1.35) * 0.035;
+    core.scale.setScalar(breath);
+    heartMaterial.emissiveIntensity = 0.62 + Math.sin(elapsed * 1.35) * 0.14;
+    heartAuraMaterial.opacity = 0.075 + (Math.sin(elapsed * 1.35) + 1) * 0.018;
+    coreLight.intensity = 11 + (Math.sin(elapsed * 1.35) + 1) * 2;
+
+    satellites.forEach((satellite) => {
+      const angle = satellite.phase + elapsed * satellite.speed;
+      setOrbitPosition(satellite.node, satellite.orbit, angle);
+      satellite.node.scale.setScalar(1 + Math.sin(elapsed * 1.8 + satellite.phase) * 0.12);
+    });
+    flows.forEach((flow) => {
+      setOrbitPosition(flow.node, flow.orbit, flow.phase + elapsed * flow.speed);
+    });
+
+    root.updateMatrixWorld(true);
+    satellites.forEach((satellite, index) => {
+      satellite.node.getWorldPosition(worldPosition);
+      root.worldToLocal(worldPosition);
+      const offset = index * 6;
+      connectionPositions[offset] = 0;
+      connectionPositions[offset + 1] = 0;
+      connectionPositions[offset + 2] = 0;
+      connectionPositions[offset + 3] = worldPosition.x;
+      connectionPositions[offset + 4] = worldPosition.y;
+      connectionPositions[offset + 5] = worldPosition.z;
+    });
+    connectionAttribute.needsUpdate = true;
+    orbitalDust.rotation.y = -elapsed * 0.018;
+    orbitalDust.rotation.z = elapsed * 0.008;
+    backgroundStars.rotation.z = elapsed * 0.0015;
+    camera.position.x += (pointer.x * 0.14 - camera.position.x) * 0.035;
+    camera.position.y += (0.1 - pointer.y * 0.1 - camera.position.y) * 0.035;
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+  };
+  raf = requestAnimationFrame(animate);
+
+  return () => {
+    cancelAnimationFrame(raf);
+    resizeObserver.disconnect();
+    pointerTarget.removeEventListener('pointermove', handlePointer);
+    pointerTarget.removeEventListener('pointerleave', resetPointer);
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh;
+      if (drawable.geometry) geometries.add(drawable.geometry);
+      if (Array.isArray(drawable.material)) {
+        drawable.material.forEach((material) => materials.add(material));
+      } else if (drawable.material) {
+        materials.add(drawable.material);
+      }
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    renderer.dispose();
+  };
+}
 
 async function loadFollowList() {
   followLoading.value = true;
@@ -813,7 +1653,36 @@ async function refreshSilently() {
   }
 }
 
+watch([followListVisible, followGravityCanvas], ([visible, canvas]) => {
+  cleanupFollowGravity?.();
+  cleanupFollowGravity = null;
+  if (!visible || !canvas) return;
+  try {
+    cleanupFollowGravity = createFollowGravityScene(canvas);
+  } catch (error) {
+    console.error('[AnchorList] follow gravity scene initialization failed:', error);
+  }
+}, { flush: 'post' });
+
+watch([liveCameraCanvas, liveStartButton], ([canvas, button]) => {
+  cleanupLiveCamera?.();
+  cleanupLiveCamera = null;
+  if (!canvas || !button) return;
+  try {
+    cleanupLiveCamera = createLiveCameraScene(canvas, button);
+  } catch (error) {
+    console.error('[AnchorList] 3D live camera initialization failed:', error);
+  }
+}, { flush: 'post' });
+
 onMounted(() => {
+  if (anchorSpaceCanvas.value) {
+    try {
+      cleanupAnchorSpace = createAnchorSpaceScene(anchorSpaceCanvas.value);
+    } catch (error) {
+      console.error('[AnchorList] 3D background initialization failed:', error);
+    }
+  }
   // 恢复登录态的会话没有登录回调，这里补拉一次个人信息（is_anchor / organization_info）
   void authStore.loadPersonalInfo();
   void loadList();
@@ -843,6 +1712,12 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  cleanupFollowGravity?.();
+  cleanupFollowGravity = null;
+  cleanupLiveCamera?.();
+  cleanupLiveCamera = null;
+  cleanupAnchorSpace?.();
+  cleanupAnchorSpace = null;
   if (silentTimer !== null) {
     window.clearInterval(silentTimer);
     silentTimer = null;
@@ -857,68 +1732,139 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .anchor-list-page {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100vh;
   overflow: hidden;
   color: var(--text-color-primary, #ffffff);
-  background-color: var(--bg-color-topbar, #141518);
+  background: #050914;
   box-sizing: border-box;
 }
 
-/* 悬浮圆形开播按钮 */
+.anchor-space-canvas,
+.anchor-space-haze {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.anchor-space-haze {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(42, 91, 190, 0.12), transparent 34%),
+    radial-gradient(circle at 12% 82%, rgba(33, 127, 178, 0.08), transparent 38%),
+    linear-gradient(180deg, rgba(3, 7, 17, 0.1), rgba(3, 7, 17, 0.52));
+}
+
+.anchor-live-particle-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 悬浮粒子聚合成型开播按钮 */
 .anchor-fab-start {
   position: absolute;
-  bottom: 2rem;
+  bottom: 1.25rem;
   left: 50%;
   z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.125rem;
-  width: 3.75rem;
-  height: 3.75rem;
+  width: 8.5rem;
+  height: 8.5rem;
   padding: 0;
   color: #fff;
   cursor: pointer;
-  background-image: linear-gradient(135deg, #ff7aa2, #ff3d71);
+  background: radial-gradient(circle at 50% 43%, rgba(38, 116, 220, 0.24), rgba(5, 16, 38, 0.08) 48%, transparent 70%);
   border: none;
   border-radius: 50%;
-  box-shadow: 0 8px 20px rgba(255, 61, 113, 0.4);
+  filter: drop-shadow(0 8px 18px rgba(32, 134, 255, 0.24));
   transform: translateX(-50%);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.2s ease, filter 0.2s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 22%;
+    border-radius: 50%;
+    background: rgba(45, 139, 255, 0.14);
+    box-shadow: 0 0 24px rgba(52, 196, 255, 0.35), inset 0 0 18px rgba(92, 119, 255, 0.24);
+    animation: anchor-camera-glow 2.2s ease-in-out infinite;
+  }
 
   &:hover {
-    box-shadow: 0 10px 26px rgba(255, 61, 113, 0.55);
-    transform: translateX(-50%) translateY(-2px);
+    filter: drop-shadow(0 10px 24px rgba(61, 198, 255, 0.5)) brightness(1.16);
+    transform: translateX(-50%);
   }
 
-  .anchor-fab-icon {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-
-  span {
-    font-size: 0.625rem;
-    font-weight: 600;
+  .anchor-fab-hint {
+    position: absolute;
+    z-index: 2;
+    bottom: 1.15rem;
+    left: 50%;
+    color: rgba(177, 228, 255, 0.72);
+    font-size: 0.75rem;
+    font-weight: 700;
     line-height: 1;
+    letter-spacing: 0.1875rem;
+    text-shadow: 0 0 10px rgba(101, 221, 255, 0.7);
+    transform: translateX(calc(-50% + 0.0625rem));
+    transition: opacity 0.2s ease 0.75s;
+  }
+
+  &:hover .anchor-fab-hint,
+  &:focus-visible .anchor-fab-hint {
+    opacity: 0;
+    transition-delay: 0s;
   }
 }
 
+@keyframes anchor-camera-glow {
+  50% { opacity: 0.5; transform: scale(1.12); }
+}
+
+@keyframes anchor-header-scan {
+  0% { opacity: 0; transform: translateX(-100%); }
+  20%, 80% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(360%); }
+}
+
 .anchor-header {
+  position: relative;
+  z-index: 2;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 2.75rem;
+  height: 3.25rem;
   padding: 0 1rem;
   user-select: none;
   -webkit-user-select: none;
   -webkit-app-region: drag;
-  background-color: var(--bg-color-topbar, #141518);
+  background: linear-gradient(180deg, rgba(21, 32, 55, 0.96), rgba(7, 13, 27, 0.94));
+  border-bottom: 1px solid rgba(105, 201, 255, 0.18);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.36), inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+  box-sizing: border-box;
   cursor: move;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 28%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #60dfff, #7187ff, transparent);
+    filter: drop-shadow(0 0 5px #4ecfff);
+    animation: anchor-header-scan 8s ease-in-out infinite;
+  }
 
   .anchor-header-left {
     display: inline-flex;
@@ -927,10 +1873,12 @@ onBeforeUnmount(() => {
     height: 30px;
     width: 130px;
     padding-left: 11px;
-    margin-top: 10px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 7px;
+    margin-top: 4px;
+    background: linear-gradient(145deg, rgba(74, 123, 196, 0.2), rgba(17, 27, 48, 0.5));
+    border: 1px solid rgba(137, 211, 255, 0.2);
+    border-radius: 8px;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 7px 16px rgba(0, 0, 0, 0.26), 0 0 18px rgba(54, 136, 255, 0.08);
+    transform: perspective(500px) rotateY(4deg);
     box-sizing: border-box;
 
     .logo-icon {
@@ -943,9 +1891,14 @@ onBeforeUnmount(() => {
     .logo-title {
       padding-left: 0.5rem;
       font-size: 0.75rem;
-      font-weight: 600;
+      font-weight: 700;
       color: #ffffff;
       white-space: nowrap;
+      background: linear-gradient(100deg, #ffffff, #a7e7ff 58%, #b5baff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 8px rgba(92, 198, 255, 0.18));
     }
   }
 
@@ -953,8 +1906,10 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-top: 10px;
+    margin-top: 4px;
     -webkit-app-region: no-drag;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
     /* 宽度不够时允许横向滚动，避免把其他元素挤变形 */
     overflow-x: auto;
     overflow-y: visible;
@@ -1067,11 +2022,13 @@ onBeforeUnmount(() => {
     gap: 4px;
     padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
-    color: #ffffff;
+    color: rgba(235, 244, 255, 0.88);
     cursor: pointer;
-    background: transparent;
-    border: none;
-    border-radius: 0.25rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012));
+    border: 1px solid rgba(136, 184, 255, 0.09);
+    border-radius: 0.375rem;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.045), 0 3px 7px rgba(0, 0, 0, 0.16);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
 
     svg {
       width: 0.875rem;
@@ -1080,8 +2037,11 @@ onBeforeUnmount(() => {
     }
 
     &:hover {
-      color: var(--text-color-primary, #ffffff);
-      background-color: rgba(255, 255, 255, 0.1);
+      color: #dcf8ff;
+      background: linear-gradient(180deg, rgba(75, 158, 255, 0.18), rgba(40, 94, 170, 0.08));
+      border-color: rgba(101, 215, 255, 0.34);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 7px 16px rgba(24, 119, 213, 0.2);
+      transform: translateY(-2px);
     }
   }
 
@@ -1095,14 +2055,17 @@ onBeforeUnmount(() => {
     font-weight: 600;
     color: #fff;
     cursor: pointer;
-    /* 去掉按钮底色，白字展示 */
-    background-color: transparent;
-    border: none;
+    background: linear-gradient(180deg, rgba(66, 133, 230, 0.14), rgba(30, 65, 125, 0.06));
+    border: 1px solid rgba(110, 186, 255, 0.14);
     border-radius: 0.375rem;
-    transition: background-color 0.2s ease;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.07), 0 4px 10px rgba(0, 0, 0, 0.18);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 
     &:hover {
-      background-color: rgba(255, 255, 255, 0.1);
+      background: linear-gradient(180deg, rgba(70, 163, 255, 0.25), rgba(44, 93, 180, 0.12));
+      border-color: rgba(105, 220, 255, 0.42);
+      box-shadow: 0 7px 18px rgba(36, 135, 229, 0.25), inset 0 1px rgba(255, 255, 255, 0.12);
+      transform: translateY(-2px);
     }
 
     .start-live-icon {
@@ -1143,6 +2106,8 @@ onBeforeUnmount(() => {
 }
 
 .anchor-body {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1310,8 +2275,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
   cursor: pointer;
   border-radius: 0.5rem;
-  background-color: var(--bg-color-operate, #17181a);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background-color: rgba(12, 19, 33, 0.9);
+  border: 1px solid rgba(116, 176, 255, 0.09);
+  backdrop-filter: blur(10px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 
   &:hover {
     transform: translateY(2px);
@@ -1704,45 +2671,145 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(2, 2, 10, 0.72);
+  backdrop-filter: blur(12px) saturate(0.8);
   animation: logout-mask-fade-in 0.2s ease;
 }
 
 .follow-panel {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: min(1440px, calc(50vw - 3rem));
   height: 80vh;
   max-height: calc(100vh - 3rem);
-  background: var(--bg-color-dialog, #22252b);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 70%, rgba(126, 65, 158, 0.16), transparent 40%),
+    radial-gradient(circle at 12% 4%, rgba(225, 126, 165, 0.07), transparent 34%),
+    linear-gradient(135deg, rgba(20, 14, 29, 0.97), rgba(6, 12, 23, 0.97));
+  border: 1px solid rgba(224, 190, 255, 0.17);
+  border-radius: 1.125rem;
+  box-shadow:
+    0 2rem 6rem rgba(0, 0, 0, 0.58),
+    0 0 3rem rgba(145, 85, 196, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  }
+}
+
+.follow-gravity-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .follow-panel-header {
+  position: relative;
+  z-index: 2;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  flex-shrink: 0;
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1rem 1.35rem;
+  background: linear-gradient(90deg, rgba(19, 15, 29, 0.88), rgba(10, 12, 24, 0.58));
+  border-bottom: 1px solid rgba(215, 185, 255, 0.1);
+  backdrop-filter: blur(18px);
 }
 
 .follow-panel-title {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
+  gap: 0.75rem;
   color: #ffffff;
+}
+
+.follow-panel-title-orbit {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid rgba(244, 163, 195, 0.48);
+  border-radius: 50%;
+  box-shadow: 0 0 1.2rem rgba(224, 116, 171, 0.13), inset 0 0 0.8rem rgba(132, 102, 255, 0.08);
+  transform: rotate(-24deg);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0.42rem;
+    border: 1px solid rgba(139, 226, 255, 0.36);
+    border-radius: 50%;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0.77rem;
+    background: linear-gradient(135deg, #ffc0d5, #a887ff);
+    border-radius: 50%;
+    box-shadow: 0 0 0.7rem rgba(255, 145, 190, 0.65);
+  }
+
+  > span {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.08rem;
+    width: 0.32rem;
+    height: 0.32rem;
+    background: #8defff;
+    border-radius: 50%;
+    box-shadow: 0 0 0.55rem #69dff5;
+  }
+}
+
+.follow-panel-title-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.follow-panel-eyebrow {
+  font-size: 0.5625rem;
+  font-weight: 500;
+  line-height: 1;
+  color: rgba(194, 173, 235, 0.64);
+  letter-spacing: 0.18em;
+}
+
+.follow-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
 
   .follow-panel-count {
-    font-size: 0.75rem;
+    padding: 0.2rem 0.48rem;
+    font-size: 0.625rem;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.5);
+    line-height: 1;
+    color: rgba(223, 208, 244, 0.68);
+    letter-spacing: 0;
+    background: rgba(174, 133, 218, 0.09);
+    border: 1px solid rgba(207, 178, 237, 0.1);
+    border-radius: 999px;
   }
 }
 
@@ -1750,26 +2817,42 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(236, 225, 246, 0.62);
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 50%;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 
   &:hover {
     color: #ffffff;
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(225, 142, 183, 0.12);
+    border-color: rgba(242, 172, 204, 0.25);
+    transform: rotate(90deg);
   }
 }
 
 .follow-panel-body {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
-  padding: 1rem 1.25rem 1.25rem;
+  padding: 1.25rem 1.35rem 1.5rem;
   overflow-y: auto;
+  scrollbar-color: rgba(190, 150, 220, 0.25) transparent;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(190, 150, 220, 0.25);
+    border-radius: 999px;
+  }
 }
 
 .follow-state {
@@ -1778,9 +2861,11 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
+  min-height: 45%;
   padding: 4rem 0;
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(230, 220, 241, 0.58);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
 
   p {
     margin: 0;
@@ -1790,18 +2875,19 @@ onBeforeUnmount(() => {
   .follow-empty-icon {
     width: 3rem;
     height: 3rem;
-    color: rgba(255, 255, 255, 0.28);
+    color: rgba(211, 179, 234, 0.36);
+    filter: drop-shadow(0 0 12px rgba(164, 115, 222, 0.18));
   }
 
   .anchor-retry-btn {
-    height: 1.875rem;
-    padding: 0 0.75rem;
+    height: 1.975rem;
+    padding: 0 0.9rem;
     font-size: 0.8125rem;
     color: #fff;
     cursor: pointer;
-    background-color: #dc3545;
-    border: none;
-    border-radius: 0.25rem;
+    background: linear-gradient(135deg, rgba(198, 104, 150, 0.86), rgba(119, 86, 177, 0.86));
+    border: 1px solid rgba(255, 193, 219, 0.18);
+    border-radius: 999px;
 
     &:disabled {
       opacity: 0.55;
@@ -1814,24 +2900,40 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 0.875rem;
+  gap: 1rem;
+  perspective: 1000px;
+  transform-style: preserve-3d;
 }
 
 .follow-card {
+  position: relative;
   flex: 0 0 190px;
   overflow: hidden;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.5rem;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  background: linear-gradient(155deg, rgba(24, 20, 35, 0.94), rgba(10, 14, 25, 0.92));
+  border: 1px solid rgba(221, 197, 240, 0.11);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(14px);
+  transform-style: preserve-3d;
+  transition: transform 0.28s cubic-bezier(0.2, 0.75, 0.25, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 
   &:hover {
-    border-color: rgba(255, 122, 162, 0.45);
-    transform: translateY(-2px);
+    border-color: rgba(244, 157, 196, 0.42);
+    box-shadow:
+      0 1.2rem 2.4rem rgba(0, 0, 0, 0.4),
+      0 0.5rem 1.6rem rgba(172, 92, 174, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translate3d(0, -6px, 18px);
+
+    .follow-card-video {
+      filter: saturate(1.12) brightness(1.06);
+      transform: scale(1.055);
+    }
 
     .follow-card-enter {
       opacity: 1;
+      transform: translateY(0);
     }
   }
 }
@@ -1841,15 +2943,38 @@ onBeforeUnmount(() => {
   width: 100%;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  background: #000;
+  background: radial-gradient(circle at 50% 35%, #211a31, #080a12 72%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    border-bottom: 1px solid rgba(232, 200, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  }
 }
 
 .follow-card-video {
+  position: relative;
+  z-index: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
-  background: #000;
+  background: #080910;
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.35s ease;
+}
+
+.follow-card-cover-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(6, 5, 12, 0.3), transparent 36%),
+    linear-gradient(0deg, rgba(7, 7, 15, 0.78), transparent 52%);
 }
 
 .follow-card-empty {
@@ -1858,36 +2983,89 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(214, 188, 234, 0.34);
+}
+
+.follow-card-live {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.24rem 0.4rem;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  line-height: 1;
+  color: #ffd6e5;
+  letter-spacing: 0.08em;
+  background: rgba(24, 12, 26, 0.62);
+  border: 1px solid rgba(255, 176, 207, 0.2);
+  border-radius: 0.25rem;
+  backdrop-filter: blur(8px);
+
+  > span {
+    width: 0.3rem;
+    height: 0.3rem;
+    background: #ff81ae;
+    border-radius: 50%;
+    box-shadow: 0 0 0.45rem rgba(255, 105, 161, 0.85);
+    animation: follow-live-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+.follow-card-viewers {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 0.6rem;
+  z-index: 2;
+  font-size: 0.625rem;
+  color: rgba(244, 237, 249, 0.72);
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.8);
 }
 
 .follow-card-enter {
   position: absolute;
-  inset: 0;
-  display: flex;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 3;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.5);
+  gap: 0.3rem;
+  padding: 0.34rem 0.5rem;
+  font-size: 0.625rem;
+  line-height: 1;
+  color: #fff2f8;
+  background: linear-gradient(135deg, rgba(194, 101, 147, 0.82), rgba(118, 88, 176, 0.82));
+  border: 1px solid rgba(255, 207, 229, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 0.35rem 1rem rgba(16, 6, 25, 0.28);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  backdrop-filter: blur(8px);
+  transform: translateY(5px);
+  transition: opacity 0.22s ease, transform 0.25s ease;
 }
 
 .follow-card-info {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.625rem;
+  gap: 0.55rem;
+  padding: 0.7rem 0.7rem 0.75rem;
+  background: linear-gradient(90deg, rgba(25, 19, 35, 0.72), rgba(13, 16, 28, 0.6));
 }
 
 .follow-card-avatar {
   flex-shrink: 0;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(194, 158, 218, 0.1);
+  border: 1px solid rgba(241, 184, 214, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(193, 132, 186, 0.045);
 
   &.follow-card-avatar-empty {
     display: block;
@@ -1898,12 +3076,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 0.125rem;
+  gap: 0.2rem;
 }
 
 .follow-card-title {
   font-size: 0.75rem;
-  color: #ffffff;
+  font-weight: 500;
+  color: rgba(255, 250, 255, 0.94);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1911,10 +3090,22 @@ onBeforeUnmount(() => {
 
 .follow-card-name {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(218, 203, 230, 0.5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@keyframes follow-live-pulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
 }
 
 /* ============ 充值/认证 二维码弹窗 ============ */

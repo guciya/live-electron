@@ -1,3 +1,6 @@
+// TRTC 共享单例必须先于 AtomicX / TUIRoomEngine 以 IPC 模式创建。
+// RoomEngine 模块加载时会无参数获取同一单例，若它先执行，后续再传 isIPCMode=true 也不会生效。
+import './TUILiveKit/utils/trtcCloud'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'
