@@ -188,8 +188,8 @@
               </div>
             </div>
             <GiftEffect v-if="isInLive" />
-            <!-- IM 飘屏消息（主播端同样展示） -->
-            <LiveMarquee v-if="isInLive" />
+
+            
             <!-- 更多直播：与观众端一致的底部横滑长条弹窗（自带拉流预览） -->
             <MoreLiveTray
               :visible="moreLiveVisible"
@@ -237,6 +237,8 @@
               </div>
             </div>
           </div>
+          <!-- IM 飘屏消息：铺满整个 .main-center，从右向左滚过 -->
+          <LiveMarquee v-if="isInLive" />
         </div>
         <div class="main-right">
           <div class="main-right-top">
@@ -253,6 +255,7 @@
               :visible="true"
               :live-index-id="liveIndexIdNumber"
               @count-change="onAudienceCountChange"
+              @user-click="handleUserClick"
             />
           </div>
           <div class="main-right-bottom">
@@ -266,6 +269,7 @@
                 :room-id="nikoRoomId"
                 :live-index-id="pendingPreLiveId"
                 :disabled="!isInLive"
+                :show-marquee-button="false"
                 @user-click="handleUserClick"
               />
             </div>
@@ -1386,9 +1390,14 @@ function fillSourceRectIfNeeded(source: any) {
   }
 }
 
+/** 上一次重铺时的混流画布尺寸，避免重复调用 updateMediaSource 造成画面瞬时黑一下 */
+let lastRefillCanvasSize = '';
+
 /**
  * 重新铺满已添加的摄像头 / 屏幕共享源。
  * 用于：① patch 生效前已添加的源；② 横竖屏切换后画布尺寸变化。
+ * 画布尺寸没变化时直接跳过：SDK 的 ResizeObserver / 布局事件会频繁触发这里，
+ * 而 updateMediaSource 会让混流端重新加载该源，反复调用就会表现为偶发闪屏。
  */
 function refillCameraSources() {
   try {
@@ -1396,6 +1405,13 @@ function refillCameraSources() {
     if (!mmm || typeof mmm.updateMediaSource !== 'function') {
       return;
     }
+    const { width, height } = getMixingCanvasSize();
+    const sizeKey = `${width}x${height}`;
+    if (sizeKey === lastRefillCanvasSize) {
+      return;
+    }
+    lastRefillCanvasSize = sizeKey;
+    console.log('[Niko] refill camera sources for canvas:', sizeKey);
     const sources = videoMixerState.mediaSourceList?.value || [];
     for (const source of sources) {
       if (source && (source.sourceType === 0 || source.sourceType === 1)) {
@@ -3452,6 +3468,15 @@ onBeforeUnmount(() => {
   height: 100%;
   display: block;
   background: transparent;
+
+  /* 远端连线画面铺满整个格子：cover 裁切多余部分，避免上下留黑边、看不到人像 */
+  :deep(video),
+  :deep(canvas) {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center !important;
+  }
 }
 .host-guest-name {
   position: absolute;
@@ -4333,6 +4358,7 @@ onBeforeUnmount(() => {
     }
 
     .main-center {
+      position: relative;
       flex: 1;
       min-width: 0;
       display: flex;

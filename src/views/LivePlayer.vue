@@ -11,7 +11,7 @@
           <span class="player-title">{{ title || '直播间' }}</span>
         </div>
         <div class="player-header-right">
-          <span class="player-viewers">{{ viewerCount }} 人观看</span>
+          <span class="player-viewers">{{ audienceCountText }} 人观看</span>
           <div class="window-tool">
             <button class="window-tool-btn" type="button" @click="onMinimize">
               <svg-icon :icon="MinimizeIcon"></svg-icon>
@@ -284,7 +284,8 @@ const router = useRouter();
 
 let title = String(route.query.liveTitle || '');
 let anchorName = String(route.query.anchorName || '');
-let viewerCount = String(route.query.viewerCount || '0');
+// 人数用 ref：既回退到路由初始值，也能被服务端轮询结果同步更新
+const viewerCount = ref(String(route.query.viewerCount || '0'));
 const avatarRaw = computed(() => String(route.query.avatar || ''));
 const avatar = computed(() => avatarRaw.value ? resolveImageUrl(avatarRaw.value) : '');
 // IM 群组 ID（后端 room_id）与直播场次 ID（live_index_id）
@@ -1137,7 +1138,7 @@ const audiencePanelVisible = ref(false);
 // 叠层最多展示 5 个头像，多出的只体现在人数上
 const audiencePreview = computed(() => audienceMembers.value.slice(0, 5));
 const audienceCountText = computed(() => (
-  audienceMembers.value.length > 0 ? String(audienceMembers.value.length) : viewerCount
+  audienceMembers.value.length > 0 ? String(audienceMembers.value.length) : viewerCount.value
 ));
 
 let unsubscribeMembers: (() => void) | null = null;
@@ -1215,12 +1216,16 @@ async function pollLiveStatus() {
     if (destroyed) {
       return;
     }
-    const exists = result.list.some(
+    const matched = result.list.find(
       (item) => item.roomId === roomId || (liveIndexId !== '' && item.liveIndexId === liveIndexId),
     );
+    // 顺带用服务端返回的在看人数同步顶部「x 人观看」
+    if (matched && matched.viewerCount != null) {
+      viewerCount.value = String(matched.viewerCount);
+    }
     // 只有返回不足一页的完整列表时，才能确定「不在列表里 == 已下播」
     const complete = result.list.length < LIVE_STATUS_PAGE_SIZE;
-    if (exists || !complete) {
+    if (matched || !complete) {
       missingFromListCount = 0;
       return;
     }
@@ -1721,7 +1726,7 @@ function onClose() {
 function refreshRouteBoundVars() {
   title = String(route.query.liveTitle || '');
   anchorName = String(route.query.anchorName || '');
-  viewerCount = String(route.query.viewerCount || '0');
+  viewerCount.value = String(route.query.viewerCount || '0');
   roomId = String(route.query.roomId || '');
   liveIndexId = String(route.query.liveId || '');
   anchorId = Number(route.query.anchorId || 0);

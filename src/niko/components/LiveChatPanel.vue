@@ -95,17 +95,15 @@
         {{ t('Send') }}
       </button>
       <button
+        v-if="showMarqueeButton"
         class="niko-chat-float"
         type="button"
-        title="飘屏"
-        aria-label="飘屏"
+        title="弹幕"
+        aria-label="弹幕"
         :disabled="disabled || sendingMarquee || !draft.trim()"
         @click="handleSendMarquee"
       >
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 11v2a1 1 0 0 0 1 1h2l5 3V7l-5 3H4a1 1 0 0 0-1 1z" />
-          <path d="M14 8a4 4 0 0 1 0 8" />
-        </svg>
+        弹幕
       </button>
       <button
         v-if="showGiftButton"
@@ -173,7 +171,7 @@ const ROLE_ICON = {
   manager: guanIcon,
 };
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** IM 群 ID（= 后端 room_id） */
   roomId: string;
   /** 后端直播场次 ID，发送弹幕时使用 */
@@ -181,9 +179,13 @@ const props = defineProps<{
   disabled?: boolean;
   /** 是否在发送按钮右侧展示「礼物」按钮 */
   showGiftButton?: boolean;
+  /** 是否展示「弹幕」发送按钮（主播自己的开播页不需要） */
+  showMarqueeButton?: boolean;
   /** 进入直播间时展示的本地欢迎语主播名（仅自己可见，不发送） */
   welcomeName?: string;
-}>();
+}>(), {
+  showMarqueeButton: true,
+});
 
 const emit = defineEmits<{
   (e: 'open-gift'): void;
@@ -639,14 +641,20 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
   height: 34px;
-  padding: 0;
-  border-radius: 50%;
+  padding: 0 12px;
+  border-radius: 17px;
   border: none;
-  background: linear-gradient(135deg, #ff4d9d, #7a5cff);
+  background: var(--uikit-color-primary, #2b7fff);
   color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
   cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.niko-chat-float:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
 .niko-chat-float:disabled {
