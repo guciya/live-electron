@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="sub-page">
+      <PageThreeBackdrop variant="paid" />
       <header class="sub-header">
         <div class="header-left">
           <button class="back-btn" type="button" @click="goBack">
@@ -125,6 +126,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
+import PageThreeBackdrop from '../../niko/components/PageThreeBackdrop.vue';
 import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
@@ -193,7 +195,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sub-page { display: flex; flex-direction: column; height: 100vh; background: #0a0a10; color: #e6e6ea; }
+.sub-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 84% 88%, rgba(255, 200, 97, 0.09), transparent 46%),
+    radial-gradient(circle at 6% 10%, rgba(255, 176, 102, 0.05), transparent 44%),
+    #0a0a10;
+  color: #e6e6ea;
+}
+.sub-header,
+.sub-body { position: relative; z-index: 1; }
 .sub-header { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 10px 0 0; background: rgba(20,20,28,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.05); -webkit-app-region: drag; flex-shrink: 0; }
 .sub-header .header-left, .sub-header .header-right { display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag; }
 .back-btn { width: 32px; height: 32px; border: none; background: transparent; color: rgba(255,255,255,0.7); cursor: pointer; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
@@ -206,7 +220,7 @@ onMounted(() => {
 
 .sub-body { flex: 1; overflow-y: auto; padding: 20px 28px 32px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; }
 
-.section-card { background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9)); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 18px 22px; }
+.section-card { background: linear-gradient(180deg, rgba(30,30,42,0.8), rgba(22,22,30,0.74)); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 18px 22px; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .section-title { font-size: 14px; font-weight: 700; color: #f0f0f4; }
 .header-actions { display: flex; align-items: center; gap: 8px; }

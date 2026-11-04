@@ -456,7 +456,7 @@ function createHologramScene(canvas: HTMLCanvasElement) {
   scene.add(world);
   scene.add(new THREE.AmbientLight(0x7685d8, 1.35));
 
-  const starCount = 620;
+  const starCount = 860;
   const starPositions = new Float32Array(starCount * 3);
   const starColors = new Float32Array(starCount * 3);
   const violet = new THREE.Color(0x7567e8);
@@ -607,7 +607,7 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     orbitGroups.push(orbit);
   });
 
-  const dustCount = 140;
+  const dustCount = 160;
   const dustPositions = new Float32Array(dustCount * 3);
   for (let i = 0; i < dustCount; i += 1) {
     const angle = Math.random() * Math.PI * 2;
@@ -631,6 +631,154 @@ function createHologramScene(canvas: HTMLCanvasElement) {
   );
   coreGroup.add(dust);
 
+  // 左侧伴生星体：与主核心形成左右呼应，填补画面左下方的空白
+  const miniGroup = new THREE.Group();
+  world.add(miniGroup);
+  const miniShell = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.5, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0x6fb7ff,
+      emissive: 0x1c4bd8,
+      emissiveIntensity: 1.1,
+      metalness: 0.4,
+      roughness: 0.24,
+      transparent: true,
+      opacity: 0.34,
+      flatShading: true,
+      depthWrite: false,
+    }),
+  );
+  miniGroup.add(miniShell);
+  const miniWireSource = new THREE.IcosahedronGeometry(0.68, 1);
+  const miniWire = new THREE.LineSegments(
+    new THREE.EdgesGeometry(miniWireSource),
+    new THREE.LineBasicMaterial({
+      color: 0x9ed8ff,
+      transparent: true,
+      opacity: 0.32,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  miniWireSource.dispose();
+  miniGroup.add(miniWire);
+  const miniRingA = new THREE.Mesh(
+    new THREE.TorusGeometry(0.94, 0.01, 6, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0x6fe4ff,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  miniRingA.rotation.set(1.1, 0.2, 0);
+  miniGroup.add(miniRingA);
+  const miniRingB = new THREE.Mesh(
+    new THREE.TorusGeometry(1.2, 0.008, 6, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0x8f7bff,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  miniRingB.rotation.set(0.6, 1.05, 0.4);
+  miniGroup.add(miniRingB);
+
+  // 远景漂浮线框碎片，增加纵深，避免大面积纯色空白
+  const shardPositions: [number, number, number][] = [
+    [-0.42, 0.3, -8],
+    [0.4, 0.34, -10],
+    [-0.3, -0.26, -7.5],
+    [0.46, -0.2, -11],
+    [-0.16, 0.12, -13],
+    [0.22, -0.34, -9],
+  ];
+  const shardMaterialA = new THREE.MeshBasicMaterial({
+    color: 0x7fa8ff,
+    transparent: true,
+    opacity: 0.2,
+    wireframe: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const shardMaterialB = new THREE.MeshBasicMaterial({
+    color: 0xa98cff,
+    transparent: true,
+    opacity: 0.16,
+    wireframe: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const shards = shardPositions.map(([nx, ny, z], index) => {
+    const shard = new THREE.Mesh(
+      new THREE.TetrahedronGeometry(0.26 + (index % 3) * 0.12, 0),
+      index % 2 ? shardMaterialB : shardMaterialA,
+    );
+    shard.position.set(nx, ny, z);
+    shard.rotation.set(index * 0.7, index * 0.4, index * 0.9);
+    world.add(shard);
+    return { shard, nx, ny, speed: 0.12 + index * 0.03, phase: index * 0.8 };
+  });
+
+  // 底部流动数据带：粒子沿横向正弦轨迹移动，并会轻微跟随鼠标偏移
+  const streamCount = 120;
+  const streamPositions = new Float32Array(streamCount * 3);
+  const streamOffsets = new Float32Array(streamCount);
+  const streamLanes = new Float32Array(streamCount);
+  for (let i = 0; i < streamCount; i += 1) {
+    streamOffsets[i] = Math.random();
+    streamLanes[i] = Math.random();
+  }
+  const streamGeometry = new THREE.BufferGeometry();
+  const streamAttribute = new THREE.BufferAttribute(streamPositions, 3);
+  streamAttribute.setUsage(THREE.DynamicDrawUsage);
+  streamGeometry.setAttribute('position', streamAttribute);
+  const streamMaterial = new THREE.PointsMaterial({
+    size: 0.04,
+    color: 0x7fe3ff,
+    transparent: true,
+    opacity: 0.55,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const stream = new THREE.Points(streamGeometry, streamMaterial);
+  world.add(stream);
+
+  // 鼠标光晕：跟随指针在场景中的投影位置
+  const cursorHaloMaterial = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0x9fe8ff,
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const cursorHalo = new THREE.Sprite(cursorHaloMaterial);
+  cursorHalo.scale.set(2.4, 2.4, 1);
+  cursorHalo.position.z = -2;
+  world.add(cursorHalo);
+
+  // 背景点击涟漪：仅在非交互区域触发
+  const ripples = Array.from({ length: 3 }, () => {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8fe6ff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.014, 6, 96), material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(0, -3.3, -3);
+    world.add(mesh);
+    return { mesh, material, startedAt: -10 };
+  });
+  let rippleIndex = 0;
+
   const pointerTarget = { x: 0, y: 0 };
   const pointer = { x: 0, y: 0 };
   const handlePointerMove = (event: PointerEvent) => {
@@ -641,11 +789,26 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     pointerTarget.x = 0;
     pointerTarget.y = 0;
   };
+  let rippleClock = 0;
+  const handlePointerDown = (event: PointerEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('button, a, input, select, textarea, [role="button"], .section-action')) return;
+    const ripple = ripples[rippleIndex];
+    rippleIndex = (rippleIndex + 1) % ripples.length;
+    ripple.mesh.position.x = pointer.x * viewWidth * 0.34;
+    ripple.mesh.position.z = -3 - pointer.y * 2.4;
+    ripple.startedAt = rippleClock;
+  };
   window.addEventListener('pointermove', handlePointerMove, { passive: true });
+  window.addEventListener('pointerdown', handlePointerDown, { passive: true });
   window.addEventListener('blur', resetPointer);
 
   let coreBaseX = 0;
   let coreBaseY = 0;
+  let miniBaseX = 0;
+  let miniBaseY = 0;
+  let viewWidth = 1;
+  let viewHeight = 1;
   const resize = () => {
     const host = canvas.parentElement;
     const width = Math.max(host?.clientWidth || window.innerWidth, 1);
@@ -656,9 +819,19 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     camera.updateProjectionMatrix();
     const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * camera.position.z;
     const visibleWidth = visibleHeight * camera.aspect;
+    viewWidth = visibleWidth;
+    viewHeight = visibleHeight;
     coreBaseX = visibleWidth * (width < 900 ? 0.4 : 0.31);
     coreBaseY = visibleHeight * (width < 900 ? 0.35 : 0.31);
     coreGroup.scale.setScalar(width < 700 ? 0.58 : width < 1100 ? 0.72 : 0.88);
+    miniBaseX = -visibleWidth * (width < 900 ? 0.3 : 0.28);
+    miniBaseY = -visibleHeight * 0.24;
+    miniGroup.position.set(miniBaseX, miniBaseY, -2.6);
+    miniGroup.scale.setScalar(width < 700 ? 0.6 : width < 1100 ? 0.8 : 0.95);
+    shards.forEach(({ shard, nx, ny }) => {
+      shard.position.x = nx * visibleWidth;
+      shard.position.y = ny * visibleHeight;
+    });
   };
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(canvas.parentElement || canvas);
@@ -681,8 +854,8 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     pointer.x += (pointerTarget.x - pointer.x) * 0.045;
     pointer.y += (pointerTarget.y - pointer.y) * 0.045;
     coreGroup.position.set(
-      coreBaseX + pointer.x * 0.13,
-      coreBaseY + Math.sin(t * 0.72) * 0.11 - pointer.y * 0.08,
+      coreBaseX + pointer.x * 0.4,
+      coreBaseY + Math.sin(t * 0.72) * 0.11 - pointer.y * 0.26,
       0,
     );
     coreGroup.rotation.y = t * 0.075 + pointer.x * 0.055;
@@ -708,8 +881,58 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     stars.position.y = Math.sin(t * 0.15) * 0.06;
     starMaterial.opacity = 0.54 + Math.sin(t * 0.4) * 0.06;
     grid.position.z = -5 + (t * 0.08) % 1;
-    camera.position.x += (pointer.x * 0.12 - camera.position.x) * 0.035;
-    camera.position.y += (0.25 - pointer.y * 0.075 - camera.position.y) * 0.035;
+
+    // 伴生星体：自转 + 跟随鼠标倾斜
+    miniGroup.position.y = miniBaseY + Math.sin(t * 0.8) * 0.12;
+    miniGroup.rotation.y = -t * 0.22 + pointer.x * 0.3;
+    miniGroup.rotation.x = Math.sin(t * 0.3) * 0.12 - pointer.y * 0.12;
+    miniShell.rotation.y = t * 0.3;
+    miniShell.rotation.x = -t * 0.18;
+    miniWire.rotation.y = -t * 0.16;
+    miniRingA.rotation.z = t * 0.2;
+    miniRingB.rotation.z = -t * 0.14;
+
+    // 远景碎片：缓慢漂浮旋转
+    shards.forEach(({ shard, nx, ny, speed, phase }, index) => {
+      shard.position.x = nx * viewWidth + pointer.x * 0.08 * (index % 2 ? 1 : -1);
+      shard.position.y = ny * viewHeight + Math.sin(t * 0.55 + phase) * 0.12;
+      shard.rotation.x = phase + t * speed * 2;
+      shard.rotation.y = phase * 0.6 + t * speed * 1.4;
+    });
+
+    // 底部数据流：粒子横向流动并随鼠标偏移
+    rippleClock = t;
+    for (let i = 0; i < streamCount; i += 1) {
+      const progress = (t * 0.06 + streamOffsets[i]) % 1;
+      const offset = i * 3;
+      streamPositions[offset] = (progress - 0.5) * viewWidth * 1.3 + pointer.x * viewWidth * 0.04;
+      streamPositions[offset + 1] = -viewHeight * 0.34
+        + Math.sin(progress * Math.PI * 3.2 + t * 0.6 + i * 0.06) * 0.22
+        + streamLanes[i] * 0.7
+        - pointer.y * 0.1;
+      streamPositions[offset + 2] = -4.4 - streamLanes[i] * 2.4;
+    }
+    streamAttribute.needsUpdate = true;
+
+    // 鼠标光晕与点击涟漪
+    cursorHalo.position.x = pointer.x * viewWidth * 0.4;
+    cursorHalo.position.y = -pointer.y * viewHeight * 0.36;
+    cursorHaloMaterial.opacity = 0.14 + Math.sin(t * 2.1) * 0.05;
+    const haloScale = 2.2 + Math.sin(t * 1.6) * 0.25;
+    cursorHalo.scale.set(haloScale, haloScale, 1);
+    ripples.forEach((ripple) => {
+      const age = t - ripple.startedAt;
+      if (age < 0 || age > 1.1) {
+        ripple.material.opacity = 0;
+        return;
+      }
+      const progress = age / 1.1;
+      ripple.mesh.scale.setScalar(0.35 + progress * 4.4);
+      ripple.material.opacity = 0.5 * (1 - progress);
+    });
+
+    camera.position.x += (pointer.x * 0.3 - camera.position.x) * 0.04;
+    camera.position.y += (0.25 - pointer.y * 0.16 - camera.position.y) * 0.04;
     camera.lookAt(0, 0.2, -2);
     renderer.render(scene, camera);
   };
@@ -721,6 +944,7 @@ function createHologramScene(canvas: HTMLCanvasElement) {
     cancelAnimationFrame(raf);
     resizeObserver.disconnect();
     window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerdown', handlePointerDown);
     window.removeEventListener('blur', resetPointer);
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();

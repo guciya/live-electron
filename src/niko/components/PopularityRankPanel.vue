@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="rank-mask" @click="emit('close')">
     <div class="rank-panel" @click.stop>
+      <ModalThreeScene variant="rank" />
       <!-- 头部：奖杯 + 人气榜标识 -->
       <div class="rank-head">
         <div class="rank-head-logo">
@@ -104,6 +105,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { resolveImageUrl } from '../config';
 import { useAuthStore } from '../store/auth';
 import { getAnchorRank, type AnchorRankResult } from '../api/live';
+import ModalThreeScene from './ModalThreeScene.vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -359,17 +361,26 @@ onUnmounted(stopRushTimer);
 }
 
 .rank-panel {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   width: 34rem;
   max-height: 94%;
   overflow: hidden;
   color: #fff;
-  /* 与用户信息卡 / 更多直播一致的深色卡片底色 */
-  background: linear-gradient(180deg, #23242b 0%, #191a20 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 50% 23%, rgba(255, 192, 85, 0.12), transparent 34%),
+    radial-gradient(circle at 90% 65%, rgba(255, 74, 135, 0.07), transparent 40%),
+    linear-gradient(180deg, rgba(37, 32, 39, 0.98) 0%, rgba(24, 22, 30, 0.98) 100%);
+  border: 1px solid rgba(255, 212, 121, 0.14);
   border-radius: 0.875rem;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 2.5rem rgba(255, 190, 80, 0.05);
+}
+
+.rank-panel > :not(.modal-three-scene) {
+  position: relative;
+  z-index: 1;
 }
 
 .rank-head {

@@ -13,13 +13,16 @@
     @cancel="handleCancel"
     @close="handleCancel"
   >
-    <LiveUserProfile
-      :userId="editableData.userId"
-      v-model:userName="editableData.userName"
-      v-model:avatarUrl="editableData.avatarUrl"
-      :userNameError="showUserNameError"
-      :avatarUrlError="showAvatarUrlError"
-    />
+    <ModalThreeScene v-if="visible" variant="profile" />
+    <div class="user-profile-content">
+      <LiveUserProfile
+        :userId="editableData.userId"
+        v-model:userName="editableData.userName"
+        v-model:avatarUrl="editableData.avatarUrl"
+        :userNameError="showUserNameError"
+        :avatarUrlError="showAvatarUrlError"
+      />
+    </div>
   </TUIDialog>
 </template>
 
@@ -31,6 +34,7 @@ import type { UserProfileInfo } from '../LiveUserProfile/index.vue';
 import { ipcBridge, IPCMessageType } from '../../ipc';
 import { isHttpUrl } from '../../utils/url';
 import { useDialogClasses } from '../../hooks/useDialogClasses';
+import ModalThreeScene from '../../../niko/components/ModalThreeScene.vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -117,6 +121,21 @@ function handleCancel() {
 </script>
 
 <style lang="scss" scoped>
+:deep(.user-profile-dialog) {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(104, 104, 255, 0.13), transparent 36%),
+    linear-gradient(145deg, rgba(28, 29, 43, 0.98), rgba(17, 18, 27, 0.98));
+  border: 1px solid rgba(157, 173, 255, 0.14);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), 0 0 40px rgba(100, 103, 255, 0.06);
+}
+
+:deep(.user-profile-dialog .tui-dialog-header),
+:deep(.user-profile-dialog .tui-dialog-footer) {
+  position: relative;
+  z-index: 1;
+}
+
 :deep(.user-profile-dialog .tui-dialog-body) {
   overflow-x: hidden;
   overflow-y: auto;
@@ -128,5 +147,15 @@ function handleCancel() {
   width: 0;
   height: 0;
   display: none;
+}
+
+.user-profile-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.user-profile-content :deep(.tui-live-user-profile) {
+  background: transparent;
 }
 </style>

@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="follow-mask" @click.self="handleClose">
     <div class="follow-panel">
+      <ModalThreeScene variant="follow" />
       <div class="follow-panel-header">
         <div class="follow-panel-title">
           <span>关注列表</span>
@@ -63,6 +64,7 @@
 import { ref, watch } from 'vue';
 import { fetchAnchorPrepareWhitelist, type AnchorPrepareWhitelistUser } from '../api/live';
 import { resolveImageUrl } from '../config';
+import ModalThreeScene from './ModalThreeScene.vue';
 
 const props = defineProps<{ visible: boolean }>();
 const emit = defineEmits<{
@@ -130,17 +132,27 @@ function handleSelect(user: AnchorPrepareWhitelistUser) {
 }
 
 .follow-panel {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   width: min(1440px, calc(50vw - 3rem));
   max-width: calc(100vw - 3rem);
   height: 80vh;
   max-height: calc(100vh - 3rem);
-  background: #15161c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 76% 40%, rgba(70, 109, 190, 0.13), transparent 42%),
+    radial-gradient(circle at 22% 82%, rgba(118, 75, 180, 0.09), transparent 38%),
+    linear-gradient(145deg, rgba(20, 23, 34, 0.98), rgba(14, 15, 23, 0.98));
+  border: 1px solid rgba(137, 180, 255, 0.13);
   border-radius: 1rem;
-  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.5), 0 0 3rem rgba(76, 114, 220, 0.06);
   overflow: hidden;
+}
+
+.follow-panel > :not(.modal-three-scene) {
+  position: relative;
+  z-index: 1;
 }
 
 .follow-panel-header {

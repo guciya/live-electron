@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="more-live-mask" @click="emit('close')">
     <div class="more-live-tray" @click.stop>
+      <ModalThreeScene variant="live" />
       <div class="more-live-head">
         <span class="more-live-head-title">正在直播（{{ list.length }}）</span>
         <button class="more-live-close" type="button" aria-label="关闭" @click="emit('close')">✕</button>
@@ -70,6 +71,7 @@ import { resolveImageUrl } from '../config';
 import { fetchRecommendLiveList } from '../api/live';
 import type { NikoLiveListItem } from '../api/liveList';
 import { createStreamPlayer, type StreamPlayerHandle } from '../utils/flvPlayer';
+import ModalThreeScene from './ModalThreeScene.vue';
 
 /** 与主播列表页同一个接口，一次拉 200 条 */
 const PAGE_SIZE = 200;
@@ -216,16 +218,25 @@ onUnmounted(stopAllPreviews);
 
 /* 长条弹窗：横向铺开，内部横向滚动 */
 .more-live-tray {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   width: 92%;
   max-width: 62rem;
   overflow: hidden;
   color: #fff;
-  background-color: rgba(22, 22, 26, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(ellipse at 72% 50%, rgba(255, 74, 143, 0.11), transparent 42%),
+    linear-gradient(100deg, rgba(19, 20, 31, 0.98), rgba(24, 18, 31, 0.97));
+  border: 1px solid rgba(255, 132, 180, 0.14);
   border-radius: 0.75rem;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 2rem rgba(255, 74, 143, 0.05);
+}
+
+.more-live-tray > :not(.modal-three-scene) {
+  position: relative;
+  z-index: 1;
 }
 
 .more-live-head {

@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="sub-page">
+      <PageThreeBackdrop variant="task" />
       <header class="sub-header">
         <div class="header-left">
           <button class="back-btn" type="button" @click="goBack">
@@ -28,6 +29,7 @@
         <!-- Banner -->
         <section class="hero">
           <div class="hero-bg"></div>
+          <PageThreeBackdrop variant="task" mode="inline" />
           <div class="hero-content">
             <div class="hero-title">主播日常开播激励</div>
             <div class="hero-sub">活动时间：2025.01.01 - 长期有效</div>
@@ -127,6 +129,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
+import PageThreeBackdrop from '../../niko/components/PageThreeBackdrop.vue';
 import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
@@ -207,7 +210,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sub-page { display: flex; flex-direction: column; height: 100vh; background: #0a0a10; color: #e6e6ea; }
+.sub-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 84% 88%, rgba(139, 92, 246, 0.1), transparent 46%),
+    radial-gradient(circle at 6% 10%, rgba(244, 114, 182, 0.05), transparent 44%),
+    #0a0a10;
+  color: #e6e6ea;
+}
+.sub-header,
+.sub-body { position: relative; z-index: 1; }
 .sub-header {
   display: flex; align-items: center; justify-content: space-between;
   height: 48px; padding: 0 10px 0 0;
@@ -237,7 +252,7 @@ onMounted(() => {
     radial-gradient(400px 180px at 100% 100%, rgba(244,114,182,0.3), transparent 60%),
     linear-gradient(135deg, #1a1033, #241644);
 }
-.hero-content { position: relative; padding: 22px 28px; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.hero-content { position: relative; z-index: 2; padding: 22px 28px; height: 100%; display: flex; flex-direction: column; justify-content: center; }
 .hero-title { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 1px; }
 .hero-sub { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 6px; }
 
@@ -245,7 +260,7 @@ onMounted(() => {
 .task-card {
   display: flex; align-items: center; gap: 16px;
   padding: 18px 22px;
-  background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9));
+  background: linear-gradient(180deg, rgba(30,30,42,0.8), rgba(22,22,30,0.74));
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 14px;
   transition: border-color 0.2s;
@@ -279,7 +294,7 @@ onMounted(() => {
 .retry-btn { height: 30px; padding: 0 16px; border: 1px solid rgba(139,92,246,0.4); border-radius: 8px; background: rgba(139,92,246,0.16); color: #b39fff; font-size: 12px; cursor: pointer; transition: background 0.15s; }
 .retry-btn:hover { background: rgba(139,92,246,0.3); color: #fff; }
 
-.explain-card { padding: 18px 22px; background: rgba(30,30,42,0.95); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; }
+.explain-card { padding: 18px 22px; background: rgba(30,30,42,0.8); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; }
 .explain-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #f0f0f4; margin-bottom: 10px; }
 .explain-title svg { width: 16px; height: 16px; color: #b39fff; }
 .explain-text { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.8; margin: 0; }

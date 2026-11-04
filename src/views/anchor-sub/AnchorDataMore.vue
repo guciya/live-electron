@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="sub-page">
+      <PageThreeBackdrop variant="data" />
       <header class="sub-header">
         <div class="header-left">
           <button class="back-btn" type="button" @click="goBack">
@@ -71,6 +72,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
+import PageThreeBackdrop from '../../niko/components/PageThreeBackdrop.vue';
 import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
@@ -126,7 +128,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sub-page { display: flex; flex-direction: column; height: 100vh; background: #0a0a10; color: #e6e6ea; }
+.sub-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 84% 88%, rgba(94, 234, 212, 0.09), transparent 46%),
+    radial-gradient(circle at 6% 10%, rgba(96, 165, 250, 0.05), transparent 44%),
+    #0a0a10;
+  color: #e6e6ea;
+}
+.sub-header,
+.sub-body { position: relative; z-index: 1; }
 .sub-header {
   display: flex; align-items: center; justify-content: space-between;
   height: 48px; padding: 0 10px 0 0;
@@ -147,7 +161,7 @@ onMounted(() => {
 .filter-bar {
   display: flex; align-items: center; gap: 12px; margin-bottom: 18px;
   padding: 12px 18px; border-radius: 12px;
-  background: rgba(30,30,42,0.95); border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(30,30,42,0.8); border: 1px solid rgba(255,255,255,0.05);
 }
 .filter-label { font-size: 12px; color: rgba(255,255,255,0.5); }
 .filter-select {
@@ -162,7 +176,7 @@ onMounted(() => {
 
 .session-list { display: flex; flex-direction: column; gap: 14px; }
 .session-card {
-  background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9));
+  background: linear-gradient(180deg, rgba(30,30,42,0.8), rgba(22,22,30,0.74));
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 14px; padding: 18px 22px;
   transition: border-color 0.2s;

@@ -1,6 +1,7 @@
 <template>
   <UIKitProvider theme="dark">
     <div class="sub-page">
+      <PageThreeBackdrop variant="rank" />
       <header class="sub-header">
         <div class="header-left">
           <button class="back-btn" type="button" @click="goBack">
@@ -123,6 +124,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { UIKitProvider } from '@tencentcloud/uikit-base-component-vue3';
 import SvgIcon from '../../TUILiveKit/common/base/SvgIcon.vue';
+import PageThreeBackdrop from '../../niko/components/PageThreeBackdrop.vue';
 import MaximizeIcon from '../../TUILiveKit/common/icons/MaximizeIcon.vue';
 import MinimizeIcon from '../../TUILiveKit/common/icons/MinimizeIcon.vue';
 import MiniIcon from '../../TUILiveKit/common/icons/MiniIcon.vue';
@@ -190,7 +192,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.sub-page { display: flex; flex-direction: column; height: 100vh; background: #0a0a10; color: #e6e6ea; }
+.sub-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 84% 88%, rgba(255, 212, 121, 0.08), transparent 46%),
+    radial-gradient(circle at 6% 12%, rgba(255, 122, 162, 0.05), transparent 44%),
+    #0a0a10;
+  color: #e6e6ea;
+}
+.sub-header,
+.sub-body { position: relative; z-index: 1; }
 .sub-header {
   display: flex; align-items: center; justify-content: space-between;
   height: 48px; padding: 0 10px 0 0;
@@ -227,7 +241,7 @@ onMounted(() => {
   position: relative;
   padding: 24px 16px 20px;
   border-radius: 16px; text-align: center;
-  background: linear-gradient(180deg, rgba(30,30,42,0.95), rgba(22,22,30,0.9));
+  background: linear-gradient(180deg, rgba(30,30,42,0.8), rgba(22,22,30,0.74));
   border: 1px solid rgba(255,255,255,0.05);
   transition: transform 0.2s;
 }
@@ -276,7 +290,7 @@ onMounted(() => {
 
 /* List */
 .rank-list {
-  background: rgba(30,30,42,0.95);
+  background: rgba(30,30,42,0.9);
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 14px; overflow: hidden;
 }
