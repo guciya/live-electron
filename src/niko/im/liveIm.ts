@@ -101,6 +101,13 @@ export interface LivePkScoreUpdate {
   raw: Record<string, any>;
 }
 
+/** 活力值更新（message_action 104/114 携带 live_popularity） */
+export interface LivePopularityUpdate {
+  popularity: number;
+  action: number;
+  raw: Record<string, any>;
+}
+
 /**
  * 复用 TUIKit 已经登录好的 IM 实例（对齐 web-obs-live 的加群/监听逻辑）。
  *
@@ -131,6 +138,7 @@ const pkInviteListeners = new Set<(invite: LivePkInvite) => void>();
 const pkStartedListeners = new Set<(event: LivePkStarted) => void>();
 const pkScoreListeners = new Set<(event: LivePkScoreUpdate) => void>();
 const pkEndedListeners = new Set<(event: LivePkEnded) => void>();
+const popularityListeners = new Set<(update: LivePopularityUpdate) => void>();
 const systemListeners = new Set<(event: LiveImSystemEvent) => void>();
 
 /** 进房提示去重：同一个人在该时间窗内只提示一次（action 101 与群系统通知会重复推送） */
@@ -367,8 +375,44 @@ function handleGiftMessage(custom: any, raw: any): void {
   emitGift(gift);
 }
 
+/** 读取 IM 消息里的活力值（字段 live_popularity，兼容字符串数值、嵌套 data 与其他 popularity 字段） */
+function readLivePopularity(custom: any): number | null {
+  const containers: any[] = [custom?.message_data, custom?.message_data?.data, custom, custom?.data];
+  for (const container of containers) {
+    if (!container || typeof container !== 'object') {
+      continue;
+    }
+    const value = container.live_popularity ?? container.livePopularity;
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  // 兜底：不同后端版本的字段名可能有差异，扫描以 popularity 结尾的字段
+  for (const container of containers) {
+    if (!container || typeof container !== 'object') {
+      continue;
+    }
+    for (const key of Object.keys(container)) {
+      if (!/popularity/i.test(key)) {
+        continue;
+      }
+      const parsed = Number(container[key]);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
 function handleCustomMessage(custom: any, raw: any): void {
   const action = Number(custom?.message_action);
+  // 调试：打印每条自定义消息，便于确认活力值的真实来源
+  console.log('[NikoIM] custom message action=', action, 'type=', custom?.message_type, 'payload=', custom);
 
   // 进房/离开（101/102）：同步观众列表，101 额外插入「来了」提示
   if (action === 101) {
@@ -385,10 +429,31 @@ function handleCustomMessage(custom: any, raw: any): void {
     handleChatMessage(custom, raw);
     return;
   }
-  // 礼物
-  if (action === 104) {
-    handleGiftMessage(custom, raw);
+  // 104/114：可能携带活力值 live_popularity；104 同时兼容原有礼物消息
+  if (action === 104 || action === 114) {
+    const popularity = readLivePopularity(custom);
+    console.log('[NikoIM] 活力值(live_popularity):', popularity, 'action:', action);
+    if (popularity !== null) {
+      popularityListeners.forEach((listener) =>
+        listener({ popularity, action, raw: custom?.message_data || {} }),
+      );
+    }
+    if (action === 104) {
+      const data = custom?.message_data || {};
+      // 纯活力值消息不带礼物字段，不弹礼物提示；其余仍按原逻辑走礼物
+      if (popularity === null || data.gift_info || data.gift_id || data.gift) {
+        handleGiftMessage(custom, raw);
+      }
+    }
     return;
+  }
+  // 兜底：其他 action 若也携带活力值（字段名/动作号有差异）同样更新左上角展示
+  const otherPopularity = readLivePopularity(custom);
+  if (otherPopularity !== null) {
+    console.log('[NikoIM] 活力值(其他动作):', otherPopularity, 'action:', action);
+    popularityListeners.forEach((listener) =>
+      listener({ popularity: otherPopularity, action, raw: custom?.message_data || {} }),
+    );
   }
   // 1001 飘屏弹幕：按普通聊天展示
   if (action === 1001) {
@@ -525,7 +590,8 @@ function parseCustomMessage(raw: any): any {
     if (text.startsWith('{') && text.endsWith('}')) {
       try {
         const parsed = JSON.parse(text);
-        if (typeof parsed?.message_action === 'number') {
+        // message_action 可能是数字或字符串（如 "104"），两种都当作动作消息
+        if (parsed && Number.isFinite(Number(parsed.message_action))) {
           return parsed;
         }
       } catch (error) {
@@ -859,6 +925,12 @@ export function onLiveImPkEnded(listener: (event: LivePkEnded) => void): () => v
 export function onLiveImSettle(listener: (stats: LiveSettleStats) => void): () => void {
   settleListeners.add(listener);
   return () => settleListeners.delete(listener);
+}
+
+/** 活力值更新订阅（action 104/114 的 live_popularity） */
+export function onLiveImPopularity(listener: (update: LivePopularityUpdate) => void): () => void {
+  popularityListeners.add(listener);
+  return () => popularityListeners.delete(listener);
 }
 
 export function isLiveChatConnected(): boolean {

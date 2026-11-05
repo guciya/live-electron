@@ -2,11 +2,19 @@
   <div v-if="visible" class="rank-mask" @click="emit('close')">
     <div class="rank-panel" @click.stop>
       <ModalThreeScene variant="rank" />
-      <!-- 头部：奖杯 + 人气榜标识 -->
+      <!-- 头部：小火苗 + 人气榜标识 -->
       <div class="rank-head">
         <div class="rank-head-logo">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-            <path d="M6 3h12v2h3v3a4 4 0 0 1-4 4h-.5A6.5 6.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6.5 6.5 0 0 1 7.5 12H7a4 4 0 0 1-4-4V5h3V3zm0 4H5v1a2 2 0 0 0 1.2 1.8A6.6 6.6 0 0 1 6 7zm12 0a6.6 6.6 0 0 1-.2 1.8A2 2 0 0 0 19 7V7h-1z" />
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z" fill="url(#rank-flame-grad)" />
+            <path d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z" fill="#fff6cf" />
+            <defs>
+              <linearGradient id="rank-flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#ffe082" />
+                <stop offset="45%" stop-color="#ff9800" />
+                <stop offset="100%" stop-color="#ef5350" />
+              </linearGradient>
+            </defs>
           </svg>
           <span>人气榜</span>
         </div>
@@ -395,14 +403,15 @@ onUnmounted(stopRushTimer);
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0.75rem;
+  padding: 0.25rem 0;
   font-size: 0.9375rem;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #ffd479;
-  background-color: rgba(255, 196, 84, 0.14);
-  border: 1px solid rgba(255, 196, 84, 0.28);
-  border-radius: 0.5rem;
+  color: #fff;
+  /* 去掉粉色/琥珀色背景与边框，只保留火苗 + 文字 */
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .rank-head-tools {

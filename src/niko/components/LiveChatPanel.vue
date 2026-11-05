@@ -100,7 +100,6 @@
         type="button"
         title="弹幕"
         aria-label="弹幕"
-        :disabled="disabled || sendingMarquee || !draft.trim()"
         @click="handleSendMarquee"
       >
         弹幕

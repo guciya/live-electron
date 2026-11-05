@@ -70,10 +70,16 @@
                 type="button"
                 @click.stop="popularityPanelVisible = true"
               >
-                <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
-                  <rect x="3" y="12" width="4" height="9" rx="1" />
-                  <rect x="10" y="7" width="4" height="14" rx="1" />
-                  <rect x="17" y="3" width="4" height="18" rx="1" />
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true" style="margin-top: 5px;">
+                  <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z" fill="url(#player-pop-flame-grad)" />
+                  <path d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z" fill="#fff6cf" />
+                  <defs>
+                    <linearGradient id="player-pop-flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#ffe082" />
+                      <stop offset="45%" stop-color="#ff9800" />
+                      <stop offset="100%" stop-color="#ef5350" />
+                    </linearGradient>
+                  </defs>
                 </svg>
                 <span>人气榜</span>
               </button>
@@ -81,6 +87,21 @@
             <div class="player-anchor-info is-clickable" @click.stop="handleAnchorClick">
               <span class="player-anchor-name">{{ anchorName || '主播' }}</span>
               <span class="player-anchor-sub">{{ title }}</span>
+              <!-- 活力值：IM action 104/114 的 live_popularity（观众观看页，左侧主播信息下方） -->
+              <span class="player-anchor-popularity" style="margin-top: 10px;">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true" style="margin-top: 5px;">
+                  <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z" fill="url(#player-flame-grad)" />
+                  <path d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z" fill="#fff6cf" />
+                  <defs>
+                    <linearGradient id="player-flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#ffe082" />
+                      <stop offset="45%" stop-color="#ff9800" />
+                      <stop offset="100%" stop-color="#ef5350" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span>{{ livePopularityText }}</span>
+              </span>
             </div>
             <button
               v-if="canFollow"
@@ -95,7 +116,7 @@
           <!-- 在线观众折叠组件 + 声音开关（视频右上角，同一行），下方为更多直播入口 -->
           <div class="player-top-right">
             <div class="player-top-right-row">
-              <!-- 人气榜入口：喇叭最左侧 -->
+              <!-- 人气榜入口：小火苗图标（与主播页/活力值同源） -->
               <button
                 class="player-rank-btn"
                 type="button"
@@ -103,8 +124,16 @@
                 aria-label="人气榜"
                 @click.stop="popularityPanelVisible = true"
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                  <path d="M6 3h12v2h3v3a4 4 0 0 1-4 4h-.5A6.5 6.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6.5 6.5 0 0 1 7.5 12H7a4 4 0 0 1-4-4V5h3V3zm0 4H5v1a2 2 0 0 0 1.2 1.8A6.6 6.6 0 0 1 6 7zm12 0a6.6 6.6 0 0 1-.2 1.8A2 2 0 0 0 19 7V7h-1z" />
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true" style="margin-top: 8px;">
+                  <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z" fill="url(#player-rank-flame-grad)" />
+                  <path d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z" fill="#fff6cf" />
+                  <defs>
+                    <linearGradient id="player-rank-flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#ffe082" />
+                      <stop offset="45%" stop-color="#ff9800" />
+                      <stop offset="100%" stop-color="#ef5350" />
+                    </linearGradient>
+                  </defs>
                 </svg>
                 <span>人气榜</span>
               </button>
@@ -255,6 +284,7 @@ import {
   joinLiveChat,
   leaveLiveChat,
   onLiveImMembers,
+  onLiveImPopularity,
   onLiveImSystem,
   type LiveImMember,
   type LiveImSystemEvent,
@@ -315,6 +345,16 @@ const userCardVisible = ref(false);
 const userCardLoading = ref(false);
 const userCardInfo: Ref<AudienceCardInfo | null> = ref(null);
 const popularityPanelVisible = ref(false);
+
+// ===== 活力值（IM action 104/114 的 live_popularity，观众观看页） =====
+const livePopularity = ref<number>(0);
+const livePopularityText = computed(() => {
+  const value = livePopularity.value;
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  if (value >= 10000) return `${(value / 10000).toFixed(1)}万`;
+  return String(Math.floor(value));
+});
+let unsubscribePopularity: (() => void) | null = null;
 
 // 视频后方的信号舱只随组件创建一次，同路由切房间时保留。
 let signalRenderer: THREE.WebGLRenderer | null = null;
@@ -1504,6 +1544,9 @@ async function doFullCleanup(preserveSignalScene = false): Promise<void> {
   unsubscribeSystem = null;
   unsubscribeMembers?.();
   unsubscribeMembers = null;
+  unsubscribePopularity?.();
+  unsubscribePopularity = null;
+  livePopularity.value = 0;
   await playerHandle?.destroy();
   playerHandle = null;
 
@@ -1754,6 +1797,11 @@ async function initLiveModules() {
   if (!unsubscribeMembers) {
     unsubscribeMembers = onLiveImMembers((members) => {
       audienceMembers.value = members;
+    });
+  }
+  if (!unsubscribePopularity) {
+    unsubscribePopularity = onLiveImPopularity((update) => {
+      livePopularity.value = update.popularity;
     });
   }
 
@@ -2022,7 +2070,6 @@ onBeforeUnmount(() => {
   /* 头像列：头像（含直播中角标）+ 人气榜入口 */
   .player-anchor-side {
     position: relative;
-    margin-top: 18px;
     display: flex;
     flex: none;
     flex-direction: column;
@@ -2076,18 +2123,18 @@ onBeforeUnmount(() => {
   .player-popularity {
     display: flex;
     align-items: center;
-    gap: 0.125rem;
+    gap: 6px;
     padding: 0 0.25rem;
-    font-size: 0.5625rem;
-    line-height: 0.875rem;
+    font-size: 12px;
+    line-height: 20px;
     color: #ffd666;
     cursor: pointer;
-    background-color: rgba(255, 214, 102, 0.12);
+    background-color: transparent;
     border: none;
     border-radius: 0.25rem;
 
     &:hover {
-      background-color: rgba(255, 214, 102, 0.24);
+      color: #fff;
     }
   }
 
@@ -2123,6 +2170,24 @@ onBeforeUnmount(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* 活力值：主播信息下方的火苗 + 数值（来自 IM action 104/114 live_popularity） */
+  .player-anchor-popularity {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 20px;
+    color: #ffb766;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 6px rgba(255, 140, 50, 0.45);
+
+    svg {
+      flex: 0 0 auto;
+      filter: drop-shadow(0 0 4px rgba(255, 140, 50, 0.6));
+    }
   }
 
   /* 关注按钮 */
@@ -2210,22 +2275,22 @@ onBeforeUnmount(() => {
 .player-rank-btn {
   flex: none;
   display: inline-flex;
-  gap: 0.25rem;
+  gap: 6px;
   align-items: center;
-  height: 2rem;
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
   color: #fff;
   cursor: pointer;
-  background-image: linear-gradient(135deg, rgba(255, 122, 162, 0.9), rgba(255, 61, 113, 0.9));
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-image: none;
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: 999px;
-  box-shadow: 0 5px 18px rgba(255, 61, 113, 0.17);
-  backdrop-filter: blur(12px);
-  transition: filter 0.2s ease, transform 0.12s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 
   &:hover {
-    filter: brightness(1.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.65);
   }
 
   &:active {

@@ -176,29 +176,44 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  overflow: hidden;
+  overflow: visible;
   z-index: 20;
 }
 
 .niko-gift-effect {
   position: absolute;
-  inset: 0;
+  inset: -6%;
   display: flex;
   align-items: center;
   justify-content: center;
   animation: niko-gift-effect-in 0.35s ease-out;
 }
 
+/* 电脑端主窗口（主播开播页 / 观众观看页）视频区通常在 900~1600px 宽，
+   礼物特效需要放大到接近铺满整个视频区，避免 VAP 透明动画缩在画面中心一小撮 */
 .niko-gift-effect-media {
-  width: 92%;
-  height: 92%;
-  max-width: 92%;
-  max-height: 92%;
+  width: 104%;
+  height: 104%;
+  max-width: 104%;
+  max-height: 104%;
   object-fit: contain;
   object-position: center;
   /* VAP/透明视频常以黑底渲染，screen 混合让黑底融入画面 */
   mix-blend-mode: screen;
-  filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 10px 36px rgba(0, 0, 0, 0.45));
+}
+
+/* 超宽屏（2K/4K 显示器，主播开播页视频区宽度 > 1400px）进一步放大 */
+@media (min-width: 1600px) {
+  .niko-gift-effect {
+    inset: -10%;
+  }
+  .niko-gift-effect-media {
+    width: 110%;
+    height: 110%;
+    max-width: 110%;
+    max-height: 110%;
+  }
 }
 
 @keyframes niko-gift-effect-in {
@@ -212,36 +227,37 @@ onBeforeUnmount(() => {
   }
 }
 
+/* 横幅字号随视口自适应：保证 1366~2560 宽度下都清晰醒目 */
 .niko-gift-banners {
   position: absolute;
-  left: 14px;
-  bottom: 14px;
+  left: 1.2vw;
+  bottom: 1.6vh;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 62%;
+  gap: 0.8vh;
+  max-width: 58%;
 }
 
 .niko-gift-banner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 14px 6px 6px;
-  border-radius: 22px;
-  background: linear-gradient(90deg, rgba(255, 136, 61, 0.72), rgba(255, 72, 72, 0.66));
-  box-shadow: 0 8px 20px rgba(255, 92, 48, 0.18);
+  gap: clamp(8px, 0.7vw, 14px);
+  padding: clamp(5px, 0.4vh, 10px) clamp(12px, 1.1vw, 22px) clamp(5px, 0.4vh, 10px) clamp(4px, 0.35vw, 8px);
+  border-radius: clamp(18px, 2vw, 30px);
+  background: linear-gradient(90deg, rgba(255, 136, 61, 0.78), rgba(255, 72, 72, 0.72));
+  box-shadow: 0 10px 24px rgba(255, 92, 48, 0.22);
   color: #fff;
-  font-size: 13px;
+  font-size: clamp(13px, 1.05vw, 18px);
   white-space: nowrap;
 }
 
 .niko-gift-banner-icon {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: clamp(26px, 2vw, 40px);
+  height: clamp(26px, 2vw, 40px);
   border-radius: 50%;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -254,20 +270,20 @@ onBeforeUnmount(() => {
 }
 
 .niko-gift-banner-fallback {
-  font-size: 12px;
+  font-size: clamp(12px, 0.85vw, 15px);
   font-weight: 600;
 }
 
 .niko-gift-banner-text {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: clamp(2px, 0.25vw, 6px);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .niko-gift-banner-action {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .niko-gift-banner-name {
@@ -276,7 +292,8 @@ onBeforeUnmount(() => {
 
 .niko-gift-banner-count {
   color: #fff3d6;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1.15em;
 }
 
 .niko-gift-banner-enter-active,

@@ -114,12 +114,42 @@
                 :disabled="!isInLive"
                 @click.stop="popularityPanelVisible = true"
               >
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
-                  <path d="M6 3h12v2h3v3a4 4 0 0 1-4 4h-.5A6.5 6.5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A6.5 6.5 0 0 1 7.5 12H7a4 4 0 0 1-4-4V5h3V3zm0 4H5v1a2 2 0 0 0 1.2 1.8A6.6 6.6 0 0 1 6 7zm12 0a6.6 6.6 0 0 1-.2 1.8A2 2 0 0 0 19 7V7h-1z" />
+                <!-- 小火苗图标（与活力值同源） -->
+                <svg viewBox="0 0 24 24" width="25" height="25" fill="none" aria-hidden="true" style="margin-top: 5px;">
+                  <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z" fill="url(#pusher-flame-grad)" />
+                  <path d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z" fill="#fff6cf" />
+                  <defs>
+                    <linearGradient id="pusher-flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#ffe082" />
+                      <stop offset="45%" stop-color="#ff9800" />
+                      <stop offset="100%" stop-color="#ef5350" />
+                    </linearGradient>
+                  </defs>
                 </svg>
                 <span>人气榜</span>
               </button>
               <span class="live-start-time">开播时长：{{ liveDurationText }}</span>
+              <!-- 活力值：IM action 104/114 的 live_popularity，紧挨时间显示 -->
+              <span class="live-popularity-inline">
+                <svg class="live-popularity-flame" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true" style="margin-top: 5px;">
+                  <path
+                    d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-1.5.6-2.6 1.3-3.4C10 8 10 6 12 2z"
+                    fill="url(#flame-grad)"
+                  />
+                  <path
+                    d="M12 9c.5 1 .5 2.2-.3 3.2-.8 1-2.1 1.4-3.3.9.2-2 1.2-3.2 2.3-4.1C11.4 8.5 11.6 8.5 12 9z"
+                    fill="#fff6cf"
+                  />
+                  <defs>
+                    <linearGradient id="flame-grad" x1="12" y1="2" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#ffe082" />
+                      <stop offset="45%" stop-color="#ff9800" />
+                      <stop offset="100%" stop-color="#ef5350" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span class="live-popularity-value">{{ livePopularityText }}</span>
+              </span>
             </div>
             <button
               class="more-live-btn"
@@ -158,6 +188,13 @@
                 </div>
               </div>
             </div>
+            <!-- PK 状态动画：开始 / 平局 / 胜利 / 失败（role 目录 SVGA，播完自动移除） -->
+            <PkStatusSvga
+              v-if="pkSvgaType"
+              :key="pkSvgaKey"
+              :type="pkSvgaType"
+              @ended="pkSvgaType = null"
+            />
             <!-- 本地混流预览用 Embedded 模式（windowId=0）直接渲染成 DOM：画面零延迟，
                  不再是原生窗口，所以礼物特效 / 用户卡片 / 弹窗都能正常盖在视频上 -->
             <!-- 主播 + 连线嘉宾统一布局：0人主播满屏，1人左右等分，2人及以上主播占2/3、嘉宾在右侧堆叠 -->
@@ -434,6 +471,7 @@ import FollowListDialog from '../niko/components/FollowListDialog.vue';
 import MessageCenter from '../niko/components/MessageCenter.vue';
 import PopularityRankPanel from '../niko/components/PopularityRankPanel.vue';
 import PkInviteDialog from '../niko/components/PkInviteDialog.vue';
+import PkStatusSvga from '../niko/components/PkStatusSvga.vue';
 import pkIcon from '../assets/pkicon.png';
 import GiftEffect from '../niko/components/GiftEffect.vue';
 import LiveMarquee from '../niko/components/LiveMarquee.vue';
@@ -448,6 +486,7 @@ import {
   onLiveImPkStarted,
   onLiveImPkScore,
   onLiveImPkEnded,
+  onLiveImPopularity,
   type LiveImSystemEvent,
   type LiveSettleStats,
   type LivePkInvite,
@@ -745,6 +784,15 @@ const pkProgressPercent = computed(() => {
 const PK_DURATION_SECONDS = 300;
 const pkCountdown = ref(0);
 let pkTimer: ReturnType<typeof setInterval> | null = null;
+/** 活力值（IM action 104/114 的 live_popularity）：5458464 → 545万，不足一万直接展示原值 */
+const livePopularity = ref<number>(0);
+const livePopularityText = computed(() => {
+  const value = livePopularity.value;
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  if (value >= 10000) return `${(value / 10000).toFixed(1)}万`;
+  return String(Math.floor(value));
+});
+let unsubscribePopularity: (() => void) | null = null;
 let unsubscribeSettle: (() => void) | null = null;
 let unsubscribeSystem: (() => void) | null = null;
 let unsubscribeJoinCount: (() => void) | null = null;
@@ -826,6 +874,7 @@ const handlePkStartedEvent = (event: LivePkStarted) => {
   }
   backendPkActive.value = true;
   startPkCountdown(PK_DURATION_SECONDS);
+  playPkStartSvga();
 };
 
 /** IM action 109：更新双方真实分数；接收方未点击 startPk 也要同步展示 PK 条 */
@@ -840,12 +889,17 @@ const handlePkScoreUpdated = (event: LivePkScoreUpdate) => {
   if (!pkActive.value) {
     backendPkActive.value = true;
     startPkCountdown(PK_DURATION_SECONDS);
+    playPkStartSvga();
   }
 };
 
 /** PK 结束 / 对方退出（action 110） */
 const handlePkEndedEvent = (event: LivePkEnded) => {
   console.log('[NikoPK] pk ended:', event.pkId);
+  // 结果动画要用最终分数，必须在清空 imPkScores 之前计算
+  if (pkActive.value) {
+    playPkResultSvga();
+  }
   pkIntentActive.value = false;
   backendPkActive.value = false;
   imPkScores.value = {};
@@ -868,6 +922,8 @@ const startPkCountdown = (seconds: number) => {
     if (pkCountdown.value <= 0) {
       if (pkTimer) clearInterval(pkTimer);
       pkTimer = null;
+      // 倒计时结束即本轮 PK 结束：按最终分数展示结果动画
+      playPkResultSvga();
     }
   }, 1000);
 };
@@ -878,6 +934,10 @@ watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
   } else if (!battleId) {
     if (pkTimer) clearInterval(pkTimer);
     pkTimer = null;
+    // SDK 侧结束（倒计时到点 / 对方掉线）：旧 battleId 消失时补一次结果动画
+    if (oldId) {
+      playPkResultSvga();
+    }
   }
 });
 
@@ -902,6 +962,8 @@ const handlePkClick = async () => {
     pkIntentActive.value = true;
     backendPkActive.value = true;
     startPkCountdown(PK_DURATION_SECONDS);
+    // 主播点击 PK 后立刻播放「开始」动画
+    playPkStartSvga();
     showMessage({ type: MessageToastType.Success, message: 'PK 已开始' });
   } catch (error: any) {
     console.warn('[NikoPK] startPk failed:', error);
@@ -911,6 +973,8 @@ const handlePkClick = async () => {
 
 /** 退出连线（连麦 / PK 都走这个）：后端 quitPk + SDK exitHostConnection 双保险 */
 const handleExitConnection = async () => {
+  // 主播放手结束 PK 时也要展示胜负结果（连麦退出不展示）
+  const wasPk = pkActive.value;
   let backendOk = false;
   // 1. 先调后端 quitPk（广播给双方 action 110，让对方也感知到退出）
   if (pkIdRef.value) {
@@ -945,6 +1009,10 @@ const handleExitConnection = async () => {
   }
   // 4. 本地立即清理连线嘉宾画面（多人群连时 SDK 的离房回调可能延迟或不触发）
   clearRemoteGuests();
+  // 4.5 结果动画要用最终分数，必须在清空 imPkScores 之前计算
+  if (wasPk) {
+    playPkResultSvga();
+  }
   // 5. 本地状态清理
   pkIntentActive.value = false;
   backendPkActive.value = false;
@@ -969,6 +1037,54 @@ const pkIntentActive = ref(false);
 const pkIdRef = ref('');
 /** PK 进行中：血条盖在视频区顶部 */
 const pkActive = computed(() => !!(currentBattleInfo.value?.battleId || backendPkActive.value));
+
+// ===== PK 状态动画（role 目录 SVGA：开始 / 平局 / 胜利 / 失败） =====
+type PkSvgaType = 'start' | 'draw' | 'win' | 'lose';
+const pkSvgaType = ref<PkSvgaType | null>(null);
+/** 递增 key：同一状态重复触发时强制重新挂载，重新播放动画 */
+const pkSvgaKey = ref(0);
+/** 本轮 PK 是否已播放过开始动画，避免 108/109/SDK 多条链路重复播放 */
+let pkStartSvgaPlayed = false;
+/** 本轮 PK 是否已播放过结果动画，避免 110 与 SDK 结束重复播放 */
+let pkResultSvgaPlayed = false;
+
+const playPkSvga = (type: PkSvgaType) => {
+  pkSvgaType.value = type;
+  pkSvgaKey.value += 1;
+};
+
+/** 点击 PK / 收到 PK 开始后播放「开始」动画 */
+const playPkStartSvga = () => {
+  if (pkStartSvgaPlayed) {
+    return;
+  }
+  pkStartSvgaPlayed = true;
+  pkResultSvgaPlayed = false;
+  playPkSvga('start');
+};
+
+/** PK 结束时按双方最终分数播放「胜利 / 平局 / 失败」（须在清空分数前调用） */
+const playPkResultSvga = () => {
+  if (pkResultSvgaPlayed) {
+    return;
+  }
+  pkResultSvgaPlayed = true;
+  const self = pkSelfScore.value;
+  const opponent = pkOpponentScore.value;
+  if (self === opponent) {
+    playPkSvga('draw');
+    return;
+  }
+  playPkSvga(self > opponent ? 'win' : 'lose');
+};
+
+/** 新一轮 PK 开始时复位标记（PK 条从无到有时） */
+watch(pkActive, (active) => {
+  if (!active) {
+    pkStartSvgaPlayed = false;
+  }
+});
+
 
 /** 连麦入口：同样走「查询开播主播」列表 */
 const openLinkMicDialog = () => {
@@ -2781,6 +2897,11 @@ onMounted(async () => {
   unsubscribePkStarted = onLiveImPkStarted(handlePkStartedEvent);
   unsubscribePkScore = onLiveImPkScore(handlePkScoreUpdated);
   unsubscribePkEnded = onLiveImPkEnded(handlePkEndedEvent);
+  // 活力值：action 104/114 的 live_popularity
+  unsubscribePopularity = onLiveImPopularity((update) => {
+    console.log('[NikoIM] 收到活力值:', update.popularity, 'action:', update.action);
+    livePopularity.value = update.popularity;
+  });
   // 累计本场进房人次：结算页「观看人数」的本地估算源之一
   // （观众列表 15s 轮询是快照，短停留观众会漏；进房消息每人必达）
   unsubscribeJoinCount = onLiveImMessage((message) => {
@@ -3339,6 +3460,9 @@ onBeforeUnmount(() => {
   unsubscribePkStarted = null;
   unsubscribePkScore?.();
   unsubscribePkScore = null;
+  unsubscribePopularity?.();
+  unsubscribePopularity = null;
+  livePopularity.value = 0;
   unsubscribePkEnded?.();
   unsubscribePkEnded = null;
   clearIncomingPkInvite();
@@ -3398,6 +3522,35 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 @import "../TUILiveKit/assets/mac.scss";
+
+/* 活力值：开播时长右侧内联胶囊（flame icon + 数值，来自 IM 104/114 live_popularity） */
+.live-popularity-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 167, 76, 0.55);
+  margin-left: 10px;
+  vertical-align: middle;
+
+  .live-popularity-flame {
+    flex: 0 0 auto;
+    filter: drop-shadow(0 0 5px rgba(255, 140, 50, 0.6));
+  }
+
+  .live-popularity-value {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 20px;
+    color: #ffc27a;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 6px rgba(255, 140, 50, 0.5);
+    white-space: nowrap;
+  }
+}
 
 /* PK 血条：盖在视频区顶部（视频已是 DOM，可以正常叠加） */
 .pk-overlay {
@@ -4536,11 +4689,11 @@ onBeforeUnmount(() => {
           .pusher-rank-btn {
             flex: none;
             display: inline-flex;
-            gap: 4px;
+            gap: 6px;
             align-items: center;
-            height: 22px;
-            padding: 0 8px;
-            font-size: 12px;
+            height: 28px;
+            padding: 0 10px;
+            font-size: 13px;
             color: rgba(255, 255, 255, 0.85);
             cursor: pointer;
             background: transparent;

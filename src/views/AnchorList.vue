@@ -560,7 +560,32 @@ function handleCardClick(item: NikoLiveListItem) {
   });
 }
 
-/** 圆形光点贴图：让星座星点呈现柔和光晕，而不是默认的方块 */
+/** 颗粒感强的星点贴图：硬边中心 + 很窄的外圈，让粒子像真实尘埃颗粒而非闪光星星 */
+function createGrainyParticleTexture(): THREE.CanvasTexture {
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  // 硬边中心（半径 8，纯白）
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 8, 0, Math.PI * 2);
+  ctx.fill();
+  // 窄外圈柔化到边缘，不是大面积发光
+  const halo = ctx.createRadialGradient(size / 2, size / 2, 8, size / 2, size / 2, size / 2);
+  halo.addColorStop(0, 'rgba(255,255,255,0.35)');
+  halo.addColorStop(0.5, 'rgba(180,210,255,0.08)');
+  halo.addColorStop(1, 'rgba(120,180,255,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/** 圆形光点贴图：用于流星头部高光，呈现柔和光晕 */
 function createConstellationStarTexture(): THREE.CanvasTexture {
   const size = 64;
   const starCanvas = document.createElement('canvas');
@@ -581,377 +606,74 @@ function createConstellationStarTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-interface ConstellationSpec {
-  stars: [number, number][];
-  links: [number, number][];
-  position: [number, number, number];
-  scale: number;
-  rotationZ: number;
-  starColor: number;
-  lineColor: number;
-  starSize: number;
-  lineOpacity: number;
-  hazeScale: [number, number];
+interface MeteorState {
+  mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  /** 极薄的一层光晕：只比拖尾稍宽一点点，增加一点空气感而不是做成陨石 */
+  exhaust: THREE.Mesh;
+  exhaustMaterial: THREE.MeshBasicMaterial;
+  head: THREE.Sprite;
+  headMaterial: THREE.SpriteMaterial;
+  start: THREE.Vector2;
+  dir: THREE.Vector2;
+  travel: number;
+  life: number;
+  age: number;
+  delay: number;
+  brightness: number;
+  /** 微扰动：让流星路径略有弧线，不像硬直线 */
+  jitterAmp: number;
+  jitterFreq: number;
+  jitterPhase: number;
 }
 
-/** 星点闪烁着色器：圆形光点 + 每颗星独立相位闪烁 */
-const TWINKLE_VERTEX_SHADER = `
-  attribute float aSize;
-  attribute float aPhase;
-  attribute vec3 aColor;
-
-  uniform float uTime;
-  uniform float uPixelRatio;
-  uniform float uSizeScale;
-
-  varying vec3 vColor;
-  varying float vTwinkle;
-
-  void main() {
-    vColor = aColor;
-    // 每颗星以不同相位闪烁
-    vTwinkle = 0.65 + 0.35 * sin(uTime * 2.0 + aPhase);
-
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = aSize * uSizeScale * uPixelRatio * vTwinkle / max(0.1, -mvPosition.z);
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`;
-
-const TWINKLE_FRAGMENT_SHADER = `
-  varying vec3 vColor;
-  varying float vTwinkle;
-
-  void main() {
-    vec2 uv = gl_PointCoord * 2.0 - 1.0;
-    float radius = length(uv);
-    if (radius > 1.0) discard;
-
-    float core = pow(1.0 - radius, 2.2);
-    float halo = pow(1.0 - radius, 0.7) * 0.25;
-    vec3 color = vColor * (core + halo) * vTwinkle;
-
-    gl_FragColor = vec4(color, core * vTwinkle);
-    #include <colorspace_fragment>
-  }
-`;
-
-/** 构建星座：发光星点 + 连线 + 背后淡光雾，整体可做漂浮动画 */
-function createConstellation(spec: ConstellationSpec, spriteTexture: THREE.CanvasTexture): THREE.Group {
-  const group = new THREE.Group();
-  group.position.set(...spec.position);
-  group.rotation.z = spec.rotationZ;
-
-  const starGeometry = new THREE.BufferGeometry();
-  const starPositions = new Float32Array(spec.stars.length * 3);
-  const starSizes = new Float32Array(spec.stars.length);
-  const starPhases = new Float32Array(spec.stars.length);
-  const starColors = new Float32Array(spec.stars.length * 3);
-  const starColor = new THREE.Color(spec.starColor);
-  spec.stars.forEach(([x, y], index) => {
-    starPositions[index * 3] = x;
-    starPositions[index * 3 + 1] = y;
-    starPositions[index * 3 + 2] = 0;
-    starSizes[index] = spec.starSize;
-    starPhases[index] = Math.random() * Math.PI * 2;
-    starColors[index * 3] = starColor.r;
-    starColors[index * 3 + 1] = starColor.g;
-    starColors[index * 3 + 2] = starColor.b;
-  });
-  starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(starSizes, 1));
-  starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhases, 1));
-  starGeometry.setAttribute('aColor', new THREE.BufferAttribute(starColors, 3));
-  const starMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: { value: 0 },
-      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 1.5) },
-      uSizeScale: { value: window.innerHeight / (2 * Math.tan((48 * Math.PI) / 360)) },
-    },
-    vertexShader: TWINKLE_VERTEX_SHADER,
-    fragmentShader: TWINKLE_FRAGMENT_SHADER,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const stars = new THREE.Points(starGeometry, starMaterial);
-  group.add(stars);
-  // 供动画循环统一推进 uTime、窗口变化时更新 uSizeScale
-  group.userData.starMaterial = starMaterial;
-
-  const linePositions: number[] = [];
-  spec.links.forEach(([from, to]) => {
-    const a = spec.stars[from];
-    const b = spec.stars[to];
-    if (!a || !b) {
-      return;
-    }
-    linePositions.push(a[0], a[1], 0, b[0], b[1], 0);
-  });
-  const lineGeometry = new THREE.BufferGeometry();
-  lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-  const lines = new THREE.LineSegments(
-    lineGeometry,
-    new THREE.LineBasicMaterial({
-      color: spec.lineColor,
-      transparent: true,
-      opacity: spec.lineOpacity,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
-  group.add(lines);
-
-  const haze = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: spriteTexture,
-      color: 0x2d78c8,
-      transparent: true,
-      opacity: 0.1,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
-  haze.scale.set(spec.hazeScale[0], spec.hazeScale[1], 1);
-  group.add(haze);
-
-  group.scale.setScalar(spec.scale);
-  return group;
-}
-
-/** 鱼身波动着色器：越靠近鱼尾摆幅越大 */
-const FISH_VERTEX_SHADER = `
-  uniform float uTime;
-  uniform float uHalfLength;
-  uniform float uWaveAmp;
-  uniform float uWaveFreq;
-  uniform float uWaveSpeed;
-
-  varying vec2 vUv;
-
-  void main() {
-    vUv = uv;
-    vec3 transformed = position;
-
-    // x 归一化：鱼头 +1 → 鱼尾 -1
-    float normX = transformed.x / uHalfLength;
-    // 鱼头几乎不动，鱼尾摆幅最大
-    float tailWeight = 1.0 - smoothstep(-0.6, 0.6, normX);
-
-    float phase = normX * uWaveFreq - uTime * uWaveSpeed;
-    transformed.y += sin(phase) * uWaveAmp * tailWeight;
-    transformed.z += cos(phase) * uWaveAmp * 0.4 * tailWeight;
-
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
-  }
-`;
-
-const FISH_FRAGMENT_SHADER = `
-  uniform sampler2D uMap;
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  uniform float uTime;
-
-  varying vec2 vUv;
-
-  void main() {
-    vec4 tex = texture2D(uMap, vUv);
-    if (tex.a < 0.02) discard;
-
-    // 沿身体流动的能量高光
-    float sheen = pow(max(0.0, sin(vUv.x * 14.0 - uTime * 3.0)), 10.0);
-    vec3 color = tex.rgb * uColor + sheen * vec3(0.25, 0.55, 0.9);
-
-    gl_FragColor = vec4(color, tex.a * uOpacity);
-    #include <colorspace_fragment>
-  }
-`;
-
-/** 写实鱼身贴图（鱼头朝右）：流线型身体 + 背鳍/胸鳍 + 发光眼睛 */
-function createFishBodyTexture(): THREE.CanvasTexture {
-  const fishCanvas = document.createElement('canvas');
-  fishCanvas.width = 512;
-  fishCanvas.height = 256;
-  const ctx = fishCanvas.getContext('2d');
+/** 流星拖尾贴图：右端为明亮头部，左端渐隐为尾巴。
+ *  height 24 做得很窄，让最终渲染的拖尾是细长光条而非粗短陨石 */
+function createMeteorTexture(): THREE.CanvasTexture {
+  const width = 256;
+  const height = 24;
+  const meteorCanvas = document.createElement('canvas');
+  meteorCanvas.width = width;
+  meteorCanvas.height = height;
+  const ctx = meteorCanvas.getContext('2d');
   if (!ctx) {
     throw new Error('Canvas 2D context unavailable');
   }
+  // 横向渐变：从几乎不可见的蓝尾巴 → 明亮白蓝头部
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, 'rgba(80, 140, 255, 0)');
+  gradient.addColorStop(0.25, 'rgba(120, 180, 255, 0.06)');
+  gradient.addColorStop(0.55, 'rgba(180, 225, 255, 0.32)');
+  gradient.addColorStop(0.85, 'rgba(235, 248, 255, 0.88)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
 
-  // 背鳍
-  ctx.beginPath();
-  ctx.moveTo(250, 86);
-  ctx.bezierCurveTo(238, 40, 228, 22, 244, 20);
-  ctx.bezierCurveTo(286, 32, 320, 54, 338, 72);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(108, 178, 255, 0.28)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(150, 220, 255, 0.55)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // 垂直方向强烈柔化，两端快速衰减，形成"针状"细长光条
+  const vertical = ctx.createLinearGradient(0, 0, 0, height);
+  vertical.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vertical.addColorStop(0.35, 'rgba(0, 0, 0, 0.7)');
+  vertical.addColorStop(0.5, 'rgba(0, 0, 0, 1)');
+  vertical.addColorStop(0.65, 'rgba(0, 0, 0, 0.7)');
+  vertical.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = vertical;
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-over';
 
-  // 身体轮廓
-  ctx.beginPath();
-  ctx.moveTo(464, 128);
-  ctx.bezierCurveTo(424, 76, 322, 56, 226, 80);
-  ctx.bezierCurveTo(174, 92, 140, 104, 116, 128);
-  ctx.bezierCurveTo(140, 152, 174, 164, 226, 176);
-  ctx.bezierCurveTo(322, 200, 424, 180, 464, 128);
-  ctx.closePath();
-  const bodyGradient = ctx.createLinearGradient(464, 128, 116, 128);
-  bodyGradient.addColorStop(0, 'rgba(214, 244, 255, 0.95)');
-  bodyGradient.addColorStop(0.45, 'rgba(126, 192, 255, 0.72)');
-  bodyGradient.addColorStop(1, 'rgba(78, 110, 220, 0.35)');
-  ctx.fillStyle = bodyGradient;
-  ctx.shadowColor = 'rgba(90, 200, 255, 0.75)';
-  ctx.shadowBlur = 22;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(178, 233, 255, 0.9)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  // 头部小范围高光，不再大面积
+  const headGlow = ctx.createRadialGradient(width - 6, height / 2, 0, width - 6, height / 2, 8);
+  headGlow.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  headGlow.addColorStop(1, 'rgba(180, 230, 255, 0)');
+  ctx.fillStyle = headGlow;
+  ctx.fillRect(width - 20, 0, 20, height);
 
-  // 胸鳍
-  ctx.beginPath();
-  ctx.moveTo(372, 148);
-  ctx.bezierCurveTo(348, 184, 330, 198, 344, 206);
-  ctx.bezierCurveTo(376, 194, 398, 172, 402, 158);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(130, 200, 255, 0.32)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(160, 224, 255, 0.6)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // 侧线
-  ctx.beginPath();
-  ctx.moveTo(438, 128);
-  ctx.bezierCurveTo(360, 138, 254, 142, 154, 130);
-  ctx.strokeStyle = 'rgba(210, 245, 255, 0.42)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // 鱼眼
-  ctx.beginPath();
-  ctx.arc(420, 112, 9, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-  ctx.shadowColor = 'rgba(120, 225, 255, 1)';
-  ctx.shadowBlur = 18;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.beginPath();
-  ctx.arc(421, 112, 4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 58, 110, 0.9)';
-  ctx.fill();
-
-  const texture = new THREE.CanvasTexture(fishCanvas);
+  const texture = new THREE.CanvasTexture(meteorCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-/** 写实鱼尾贴图：扇形尾鳍，右边缘为旋转支点 */
-function createFishTailTexture(): THREE.CanvasTexture {
-  const tailCanvas = document.createElement('canvas');
-  tailCanvas.width = 256;
-  tailCanvas.height = 256;
-  const ctx = tailCanvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Canvas 2D context unavailable');
-  }
 
-  ctx.beginPath();
-  ctx.moveTo(252, 128);
-  ctx.bezierCurveTo(198, 106, 138, 44, 64, 26);
-  ctx.bezierCurveTo(24, 66, 16, 128, 28, 194);
-  ctx.bezierCurveTo(128, 214, 198, 150, 252, 128);
-  ctx.closePath();
-  const tailGradient = ctx.createLinearGradient(252, 128, 20, 128);
-  tailGradient.addColorStop(0, 'rgba(190, 232, 255, 0.85)');
-  tailGradient.addColorStop(0.55, 'rgba(110, 170, 255, 0.55)');
-  tailGradient.addColorStop(1, 'rgba(96, 106, 235, 0.12)');
-  ctx.fillStyle = tailGradient;
-  ctx.shadowColor = 'rgba(110, 200, 255, 0.7)';
-  ctx.shadowBlur = 20;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // 尾鳍分叉纹理
-  for (let i = 0; i < 4; i += 1) {
-    ctx.beginPath();
-    ctx.moveTo(246, 128);
-    ctx.quadraticCurveTo(150, 96 + i * 12, 44 + i * 10, 44 + i * 34);
-    ctx.strokeStyle = 'rgba(196, 236, 255, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-  ctx.strokeStyle = 'rgba(178, 230, 255, 0.8)';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  const texture = new THREE.CanvasTexture(tailCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-interface RealisticFishOptions {
-  bodyTexture: THREE.CanvasTexture;
-  tailTexture: THREE.CanvasTexture;
-  length: number;
-  x: number;
-  y: number;
-  mirror?: boolean;
-  phase: number;
-}
-
-/** 写实发光鱼：身体 + 可摆动的尾巴，返回动画需要的引用 */
-function createRealisticFish(options: RealisticFishOptions) {
-  const { length, bodyTexture, tailTexture, x, y, phase } = options;
-  const group = new THREE.Group();
-  group.position.set(x, y, 0);
-  if (options.mirror) {
-    group.scale.x = -1;
-  }
-
-  // 宽度分段必须够多，否则顶点着色器弯不起来
-  const bodyMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      uMap: { value: bodyTexture },
-      uTime: { value: 0 },
-      uHalfLength: { value: length / 2 },
-      uWaveAmp: { value: 0.06 },
-      uWaveFreq: { value: 7 },
-      uWaveSpeed: { value: 3.2 },
-      uColor: { value: new THREE.Color(0xcdeeff) },
-      uOpacity: { value: 0.94 },
-    },
-    vertexShader: FISH_VERTEX_SHADER,
-    fragmentShader: FISH_FRAGMENT_SHADER,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const body = new THREE.Mesh(new THREE.PlaneGeometry(length, length / 2, 64, 8), bodyMaterial);
-  group.add(body);
-
-  const tailPivot = new THREE.Group();
-  tailPivot.position.set(-length * 0.37, 0, -0.02);
-  const tail = new THREE.Mesh(
-    new THREE.PlaneGeometry(length * 0.62, length * 0.62),
-    new THREE.MeshBasicMaterial({
-      map: tailTexture,
-      color: 0xb7e0ff,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  tail.position.x = -length * 0.31;
-  tailPivot.add(tail);
-  group.add(tailPivot);
-
-  return { group, body, bodyMaterial, tailPivot, baseX: x, baseY: y, phase };
-}
 
 function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
@@ -961,34 +683,59 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
   camera.position.set(0, 0, 8);
 
-  const starCount = 650;
+  // 深空尘埃：1500 颗粒子，更大更有颗粒感，不用软闪的小星星 ✨
+  const starCount = 1500;
+  const grainyTexture = createGrainyParticleTexture();
   const positions = new Float32Array(starCount * 3);
   const colors = new Float32Array(starCount * 3);
-  const blue = new THREE.Color(0x4c8eff);
-  const cyan = new THREE.Color(0xb5f2ff);
+  const sizes = new Float32Array(starCount);
+  const speeds = new Float32Array(starCount);
+  const baseBlue = new THREE.Color(0x4c8eff);
+  const baseCyan = new THREE.Color(0xb5f2ff);
+  const baseViolet = new THREE.Color(0x9b7dff);
+  const baseMint = new THREE.Color(0x7dffb5);
   for (let i = 0; i < starCount; i += 1) {
-    positions[i * 3] = (Math.random() - 0.5) * 24;
-    positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
-    positions[i * 3 + 2] = -15 + Math.random() * 17;
-    const color = blue.clone().lerp(cyan, Math.random());
+    positions[i * 3] = (Math.random() - 0.5) * 30;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 18;
+    positions[i * 3 + 2] = -18 + Math.random() * 20;
+    const palettePick = Math.random();
+    let color: THREE.Color;
+    if (palettePick < 0.45) {
+      color = baseBlue.clone().lerp(baseCyan, Math.random());
+    } else if (palettePick < 0.82) {
+      color = baseCyan.clone().lerp(baseBlue, Math.random() * 0.5);
+    } else if (palettePick < 0.93) {
+      color = baseViolet.clone().lerp(baseCyan, Math.random() * 0.6);
+    } else {
+      color = baseMint.clone().lerp(baseCyan, Math.random() * 0.7);
+    }
     colors[i * 3] = color.r;
     colors[i * 3 + 1] = color.g;
     colors[i * 3 + 2] = color.b;
+    // 更大颗粒：70% 中等 0.04~0.07，30% 较大 0.08~0.13
+    sizes[i] = Math.random() < 0.7 ? 0.04 + Math.random() * 0.03 : 0.08 + Math.random() * 0.05;
+    speeds[i] = 0.004 + Math.random() * 0.012;
   }
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const stars = new THREE.Points(
-    starGeometry,
-    new THREE.PointsMaterial({
-      size: 0.032,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
+  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+  const starMaterial = new THREE.PointsMaterial({
+    size: 1,
+    map: grainyTexture,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.88,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+  starMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('attribute float size;', 'attribute float size;\nattribute float aSize;')
+      .replace('gl_PointSize = size;', 'gl_PointSize = size * aSize * 850.0 / -mvPosition.z;');
+  };
+  const stars = new THREE.Points(starGeometry, starMaterial);
   scene.add(stars);
 
   const grid = new THREE.GridHelper(34, 44, 0x245fa5, 0x132d53);
@@ -998,89 +745,155 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   gridMaterial.opacity = 0.16;
   scene.add(grid);
 
-  // 星座背景：左侧北斗七星（连线），右侧双鱼座
+  // 背景只保留流星：不再绘制北斗七星 / 双鱼座，星光点贴图仅用于流星头部光点
   const constellationTexture = createConstellationStarTexture();
-  const bigDipper = createConstellation(
-    {
-      stars: [
-        [-2.4, 1.35],
-        [-2.05, 0.95],
-        [-1.2, 0.7],
-        [-0.95, 1.15],
-        [-0.45, 1.4],
-        [0.05, 1.5],
-        [0.6, 1.8],
-      ],
-      links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]],
-      position: [-4.2, 1.4, -5.2],
-      scale: 1.5,
-      rotationZ: -0.1,
-      starColor: 0xdff2ff,
-      lineColor: 0x6fc3ff,
-      starSize: 0.09,
-      lineOpacity: 0.55,
-      hazeScale: [5.4, 4],
-    },
-    constellationTexture,
-  );
-  scene.add(bigDipper);
 
-  // 双鱼座：两条写实发光鱼 + 连接绳索星点
-  const fishBodyTexture = createFishBodyTexture();
-  const fishTailTexture = createFishTailTexture();
-  const pisces = new THREE.Group();
-  pisces.position.set(0.8, -1.0, -5.2);
-  pisces.rotation.z = 0.1;
-  pisces.scale.setScalar(1.3);
+  // 流星雨：24 条细长高速流星，从右上斜向左下划过，随机重生。
+  // 关键：长度远大于宽度（长宽比 150~400），让它像光针而不是陨石。
+  const meteorTexture = createMeteorTexture();
+  const meteors: MeteorState[] = [];
+  const meteorRange = (min: number, max: number) => min + Math.random() * (max - min);
+  const respawnMeteor = (meteor: MeteorState) => {
+    // 198°~216°：向左下方划过
+    const angle = THREE.MathUtils.degToRad(meteorRange(196, 218));
+    meteor.dir.set(Math.cos(angle), Math.sin(angle));
+    meteor.start.set(meteorRange(-1.5, 10), meteorRange(0.5, 7.2));
+    meteor.travel = meteorRange(7, 13);
+    meteor.life = meteorRange(2.0, 4.5);
+    meteor.age = 0;
+    meteor.delay = meteorRange(0.3, 5);
+    meteor.brightness = meteorRange(0.5, 1);
+    // 细长拖尾：长 8~20，宽 0.035~0.075 → 长宽比 170~450，慢速划过像真实流星
+    meteor.mesh.scale.set(meteorRange(8, 20), meteorRange(0.035, 0.075), 1);
+    meteor.mesh.rotation.z = angle;
+    meteor.mesh.position.z = meteorRange(-13, -6);
+    // 头部亮点做得小一些，像流星的光点，不是大灯泡
+    meteor.head.scale.setScalar(meteorRange(0.12, 0.26));
+    // 微扰动参数：给轨迹加一点弧线感
+    meteor.jitterAmp = meteorRange(0.08, 0.22);
+    meteor.jitterFreq = meteorRange(1.5, 3.5);
+    meteor.jitterPhase = Math.random() * Math.PI * 2;
+  };
+  const meteorCount = 24;
+  for (let index = 0; index < meteorCount; index += 1) {
+    const material = new THREE.MeshBasicMaterial({
+      map: meteorTexture,
+      color: 0xe6f6ff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+    mesh.visible = false;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    // 极薄的光晕层：只比拖尾稍宽一点，增加空气感，不再像陨石那样臃肿
+    const exhaustMaterial = new THREE.MeshBasicMaterial({
+      map: meteorTexture,
+      color: 0xb0dcff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const exhaust = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), exhaustMaterial);
+    exhaust.visible = false;
+    exhaust.frustumCulled = false;
+    scene.add(exhaust);
+    // 头部光点
+    const headMaterial = new THREE.SpriteMaterial({
+      map: constellationTexture,
+      color: 0xf0fbff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const head = new THREE.Sprite(headMaterial);
+    head.visible = false;
+    scene.add(head);
+    const meteor: MeteorState = {
+      mesh,
+      material,
+      exhaust,
+      exhaustMaterial,
+      head,
+      headMaterial,
+      start: new THREE.Vector2(),
+      dir: new THREE.Vector2(),
+      travel: 0,
+      life: 1,
+      age: 0,
+      delay: 0,
+      brightness: 1,
+      jitterAmp: 0.1,
+      jitterFreq: 2,
+      jitterPhase: 0,
+    };
+    respawnMeteor(meteor);
+    meteor.delay = index < 6 ? 0 : meteorRange(0.4, 5);
+    meteors.push(meteor);
+  }
+  const updateMeteors = (delta: number) => {
+    meteors.forEach((meteor) => {
+      if (meteor.delay > 0) {
+        meteor.delay -= delta;
+        meteor.mesh.visible = false;
+        meteor.exhaust.visible = false;
+        meteor.head.visible = false;
+        return;
+      }
+      meteor.age += delta;
+      const progress = meteor.age / meteor.life;
+      if (progress >= 1) {
+        respawnMeteor(meteor);
+        meteor.mesh.visible = false;
+        meteor.exhaust.visible = false;
+        meteor.head.visible = false;
+        meteor.material.opacity = 0;
+        meteor.exhaustMaterial.opacity = 0;
+        meteor.headMaterial.opacity = 0;
+        return;
+      }
+      meteor.mesh.visible = true;
+      // 主轨迹（沿 dir 直线）
+      const baseX = meteor.start.x + meteor.dir.x * meteor.travel * progress;
+      const baseY = meteor.start.y + meteor.dir.y * meteor.travel * progress;
+      // 微扰动：sin 让轨迹有轻微弧线，不是硬直线
+      const jitter = Math.sin(meteor.jitterPhase + progress * meteor.jitterFreq * Math.PI * 2) * meteor.jitterAmp * progress;
+      // 扰动垂直于运动方向
+      const perpX = -meteor.dir.y;
+      const perpY = meteor.dir.x;
+      meteor.mesh.position.x = baseX + perpX * jitter;
+      meteor.mesh.position.y = baseY + perpY * jitter;
 
-  const fishA = createRealisticFish({
-    bodyTexture: fishBodyTexture,
-    tailTexture: fishTailTexture,
-    length: 2.2,
-    x: -1.5,
-    y: 0.55,
-    mirror: true,
-    phase: 0,
-  });
-  const fishB = createRealisticFish({
-    bodyTexture: fishBodyTexture,
-    tailTexture: fishTailTexture,
-    length: 2,
-    x: 1.35,
-    y: -0.35,
-    phase: 2.2,
-  });
-  pisces.add(fishA.group, fishB.group);
+      // 极薄光晕层：只比拖尾宽 1.3 倍，opacity 极低
+      const halfLength = meteor.mesh.scale.x / 2;
+      meteor.exhaust.visible = true;
+      meteor.exhaust.position.set(
+        meteor.mesh.position.x,
+        meteor.mesh.position.y,
+        meteor.mesh.position.z - 0.05,
+      );
+      meteor.exhaust.rotation.z = meteor.mesh.rotation.z;
+      meteor.exhaust.scale.set(meteor.mesh.scale.x * 1.1, meteor.mesh.scale.y * 1.3, 1);
 
-  const piscesCord = createConstellation(
-    {
-      stars: [
-        [-0.55, 0.28],
-        [-0.1, -0.08],
-        [0.4, 0.16],
-        [0.95, -0.5],
-        [1.15, -0.62],
-      ],
-      links: [[0, 1], [1, 2], [2, 3], [3, 4]],
-      position: [0, 0, 0.05],
-      scale: 1,
-      rotationZ: 0,
-      starColor: 0xd8ecff,
-      lineColor: 0x8f7bff,
-      starSize: 0.06,
-      lineOpacity: 0.4,
-      hazeScale: [6.4, 3.4],
-    },
-    constellationTexture,
-  );
-  pisces.add(piscesCord);
-  scene.add(pisces);
-
-  // 星座星点的闪烁材质，动画循环统一推进时间
-  const twinkleMaterials: THREE.ShaderMaterial[] = [
-    bigDipper.userData.starMaterial as THREE.ShaderMaterial,
-    piscesCord.userData.starMaterial as THREE.ShaderMaterial,
-  ];
+      // 头部光点放在拖尾前端
+      meteor.head.visible = true;
+      meteor.head.position.set(
+        meteor.mesh.position.x + meteor.dir.x * halfLength,
+        meteor.mesh.position.y + meteor.dir.y * halfLength,
+        meteor.mesh.position.z + 0.1,
+      );
+      // 生命期两端淡入淡出，中段最亮（sin^0.5 让中段更平直，不闪）
+      const envelope = Math.pow(Math.sin(Math.PI * progress), 0.5);
+      const opacity = envelope * meteor.brightness;
+      meteor.material.opacity = opacity;
+      meteor.exhaustMaterial.opacity = opacity * 0.18;
+      meteor.headMaterial.opacity = opacity;
+    });
+  };
 
   const pointer = { x: 0, y: 0 };
   const handlePointer = (event: PointerEvent) => {
@@ -1095,12 +908,6 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
     renderer.setSize(width, height, false);
     camera.aspect = width / Math.max(height, 1);
     camera.updateProjectionMatrix();
-    // 星点像素尺寸随视口高度变化，保持不同分辨率下大小一致
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
-    twinkleMaterials.forEach((material) => {
-      material.uniforms.uPixelRatio.value = pixelRatio;
-      material.uniforms.uSizeScale.value = height / (2 * Math.tan((48 * Math.PI) / 360));
-    });
   };
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(canvas);
@@ -1108,44 +915,21 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
 
   const clock = new THREE.Clock();
   let raf = 0;
-  let lastFrame = 0;
   const animate = () => {
-    const elapsed = clock.getElapsedTime();
-    if (elapsed - lastFrame < 1 / 30) {
-      raf = requestAnimationFrame(animate);
-      return;
-    }
-    lastFrame = elapsed;
-    // 推进着色器时间：星点闪烁 + 鱼身波浪
-    twinkleMaterials.forEach((material) => {
-      material.uniforms.uTime.value = elapsed;
-    });
-    fishA.bodyMaterial.uniforms.uTime.value = elapsed;
-    fishB.bodyMaterial.uniforms.uTime.value = elapsed;
+    // 60fps 流畅运行，不再硬限 30fps
+    const delta = Math.min(0.1, clock.getDelta());
+    updateMeteors(delta);
+    // 2000 颗粒子：每个有自己的速度（近快远慢形成视差）
     const starPositions = starGeometry.attributes.position.array as Float32Array;
     for (let i = 0; i < starCount; i += 1) {
-      const zIndex = i * 3 + 2;
-      starPositions[zIndex] += 0.006;
-      if (starPositions[zIndex] > 2) starPositions[zIndex] = -15;
+      const zIdx = i * 3 + 2;
+      starPositions[zIdx] += speeds[i] * delta * 60;
+      if (starPositions[zIdx] > 3) starPositions[zIdx] = -18;
     }
     starGeometry.attributes.position.needsUpdate = true;
-    bigDipper.position.y = 1.4 + Math.sin(elapsed * 0.32) * 0.05;
-    bigDipper.rotation.z = -0.1 + Math.sin(elapsed * 0.2) * 0.012;
-    pisces.position.y = -1.0 + Math.sin(elapsed * 0.22 + 1) * 0.06;
-    pisces.rotation.z = 0.1 + Math.sin(elapsed * 0.18 + 2) * 0.012;
-
-    // 双鱼游动：身体左右轻微起伏、尾巴摆动、位置做小幅巡游
-    fishA.group.position.x = fishA.baseX + Math.sin(elapsed * 0.7) * 0.22;
-    fishA.group.position.y = fishA.baseY + Math.sin(elapsed * 0.95 + 0.6) * 0.12;
-    fishA.body.rotation.z = Math.sin(elapsed * 1.7) * 0.05;
-    fishA.tailPivot.rotation.z = Math.sin(elapsed * 2.1) * 0.45;
-    fishB.group.position.x = fishB.baseX + Math.sin(elapsed * 0.55 + 1.4) * 0.26;
-    fishB.group.position.y = fishB.baseY + Math.sin(elapsed * 0.85 + 2) * 0.14;
-    fishB.body.rotation.z = Math.sin(elapsed * 1.5 + 1) * 0.05;
-    fishB.tailPivot.rotation.z = Math.sin(elapsed * 1.9 + 1.2) * 0.45;
-    grid.position.z = -4 + (elapsed * 0.08) % 0.7;
-    camera.position.x += (pointer.x * 0.16 - camera.position.x) * 0.025;
-    camera.position.y += (-pointer.y * 0.1 - camera.position.y) * 0.025;
+    grid.position.z = -4 + (clock.elapsedTime * 0.1) % 0.7;
+    camera.position.x += (pointer.x * 0.16 - camera.position.x) * 0.03;
+    camera.position.y += (-pointer.y * 0.1 - camera.position.y) * 0.03;
     camera.lookAt(0, 0, -2);
     renderer.render(scene, camera);
     raf = requestAnimationFrame(animate);
@@ -1166,8 +950,8 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
       }
     });
     constellationTexture.dispose();
-    fishBodyTexture.dispose();
-    fishTailTexture.dispose();
+    meteorTexture.dispose();
+    grainyTexture.dispose();
     renderer.dispose();
   };
 }

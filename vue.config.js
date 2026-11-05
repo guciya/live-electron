@@ -55,6 +55,19 @@ module.exports = defineConfig({
               : './node_modules/trtc-electron-sdk/build/Release',
           },
         },
+        {
+          // SVGA 动画（PK 开始/平局/胜利/失败）：内联成 SVGAPlayer-Web 识别的 data URL。
+          // Parser 只认 data:svga/2.0;base64 前缀，默认 mime 会被当成普通二进制导致解析失败；
+          // 内联后无需 XHR 读取本地文件，file:// 与 http 环境下都能直接播放。
+          // 失败动画的文件名是 pk_shiabaisvga（没有扩展名点），一并匹配
+          test: /\.svga$|pk_shiabaisvga$/,
+          type: 'asset/inline',
+          parser: { dataUrlCondition: { maxSize: 8 * 1024 * 1024 } },
+          generator: {
+            dataUrl: (content) =>
+              `data:svga/2.0;base64,${Buffer.from(content).toString('base64')}`,
+          },
+        },
       ],
     },
     // Suppress known non-actionable warnings so the console stays readable.
