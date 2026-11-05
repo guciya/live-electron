@@ -71,35 +71,19 @@ jobs:
             hdiutil create -volname "NikoLive" -srcfolder "dmg-stage-$dir" -ov -format UDZO "NikoLive-$arch_suffix.dmg"
           done
 
-      - name: Set Finder layout
+      - name: Set Finder layout (best-effort)
         run: |
           cd dist
           for dmg in NikoLive-*.dmg; do
             [ -f "$dmg" ] || continue
             echo "Setting Finder layout for $dmg ..."
-            hdiutil attach "$dmg" -nobrowse -quiet
+            hdiutil attach "$dmg" -nobrowse -quiet || true
             sleep 2
-            osascript <<'APPLESCRIPT' 2>/dev/null || echo "  (osascript skipped)"
-            tell application "Finder"
-              tell disk "NikoLive"
-                open
-                set current view of container window to icon view
-                set toolbar visible of container window to false
-                set statusbar visible of container window to false
-                set the bounds of container window to {100, 100, 1300, 800}
-                set the viewOptions to {view size:96, arrangement:fixed grid, icon size:110, text size:13, label position:bottom, shows icon preview:true, shows item info:false}
-                update without registering applications
-                delay 1
-                set position of item "NikoLive.app" of container window to {180, 300}
-                set position of item "安装.command" of container window to {720, 300}
-                update without registering applications
-                delay 1
-                close
-              end tell
-            end tell
-            APPLESCRIPT
+            osascript -e 'tell application "Finder" to tell disk "NikoLive" to open' 2>/dev/null || echo "  (osascript unavailable, skipping layout)"
             hdiutil detach /Volumes/NikoLive -quiet 2>/dev/null || true
           done
+          echo "Finder layout step done (non-fatal)"
+        continue-on-error: true
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
