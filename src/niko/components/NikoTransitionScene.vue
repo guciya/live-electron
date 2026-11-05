@@ -45,7 +45,7 @@
 
       <div class="scene-core-label" aria-hidden="true">
         <span>LIVE</span>
-        <small>{{ variant === 'welcome' ? 'MIC READY' : 'AUDIO CONNECTING' }}</small>
+        <small>{{ variant === 'welcome' ? 'BRAND READY' : 'BRAND ONLINE' }}</small>
       </div>
     </main>
 
@@ -73,6 +73,66 @@ const props = withDefaults(defineProps<{
 
 const canvasEl = ref<HTMLCanvasElement | null>(null);
 let cleanupScene: (() => void) | null = null;
+
+/**
+ * 用 Canvas 生成「Niko 直播伴侣」立体字贴图。
+ * 不依赖外部中文字体文件（TextGeometry 需要 typeface JSON，中文不可行），
+ * 通过多层偏移绘制阴影 + 渐变正面模拟厚度，再贴到平面上做 3D 漂浮。
+ */
+function createBrandTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas 2D context unavailable');
+  }
+  const text = 'Niko 直播伴侣';
+  const fontOf = (size: number) => `700 ${size}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  let fontSize = 400;
+  ctx.font = fontOf(fontSize);
+  const maxWidth = canvas.width * 0.9;
+  const measured = ctx.measureText(text).width;
+  if (measured > maxWidth) {
+    fontSize = Math.floor((fontSize * maxWidth) / measured);
+    ctx.font = fontOf(fontSize);
+  }
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // 厚度层：沿右下方向逐层堆叠，越靠后越暗，形成立体侧面
+  const depth = 26;
+  for (let i = depth; i >= 1; i -= 1) {
+    const t = i / depth;
+    ctx.fillStyle = `rgb(${Math.round(12 + t * 16)}, ${Math.round(28 + t * 50)}, ${Math.round(58 + t * 90)})`;
+    ctx.fillText(text, cx + i * 2.6, cy + i * 2.1);
+  }
+
+  // 正面：冷白到冰蓝渐变 + 外发光
+  const gradient = ctx.createLinearGradient(0, cy - fontSize * 0.5, 0, cy + fontSize * 0.5);
+  gradient.addColorStop(0, '#ffffff');
+  gradient.addColorStop(0.55, '#e8f6ff');
+  gradient.addColorStop(1, '#9fdcff');
+  ctx.shadowColor = 'rgba(72, 200, 255, 0.85)';
+  ctx.shadowBlur = 34;
+  ctx.fillStyle = gradient;
+  ctx.fillText(text, cx, cy);
+  ctx.shadowBlur = 0;
+
+  // 高光描边
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(190, 240, 255, 0.85)';
+  ctx.strokeText(text, cx, cy);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
 
 function createScene(canvas: HTMLCanvasElement) {
   const renderer = new THREE.WebGLRenderer({
@@ -122,50 +182,36 @@ function createScene(canvas: HTMLCanvasElement) {
     ring.add(satellite);
   });
 
-  const microphone = new THREE.Group();
-  microphone.rotation.set(0.12, -0.28, -0.12);
-  const micSolidMaterial = new THREE.MeshBasicMaterial({
-    color: primary,
-    transparent: true,
-    opacity: 0.2,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const micWireMaterial = new THREE.MeshBasicMaterial({
-    color: 0xb8f3ff,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.48,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const addMicPart = (geometry: THREE.BufferGeometry, y: number) => {
-    const solid = new THREE.Mesh(geometry, micSolidMaterial);
-    const wire = new THREE.Mesh(geometry.clone(), micWireMaterial);
-    solid.position.y = y;
-    wire.position.y = y;
-    microphone.add(solid, wire);
-  };
-  addMicPart(new THREE.CapsuleGeometry(0.28, 0.22, 8, 20), 0.36);
-  addMicPart(new THREE.CylinderGeometry(0.115, 0.16, 0.82, 20, 4), -0.38);
-  addMicPart(new THREE.CylinderGeometry(0.18, 0.18, 0.1, 24), -0.02);
-
-  for (let i = 0; i < 4; i += 1) {
-    const band = new THREE.Mesh(
-      new THREE.TorusGeometry(0.282, 0.008, 6, 40),
-      new THREE.MeshBasicMaterial({
-        color: secondary,
-        transparent: true,
-        opacity: 0.72,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
-    band.rotation.x = Math.PI / 2;
-    band.position.y = 0.22 + i * 0.1;
-    microphone.add(band);
+  // 3D 品牌字「Niko 直播伴侣」：Canvas 立体贴图 + 多层平面制造真实厚度
+  const brandTexture = createBrandTexture();
+  const brandText = new THREE.Group();
+  brandText.rotation.set(0.05, -0.12, 0);
+  const brandWidth = 4.2;
+  const brandHeight = brandWidth / 4;
+  const brandDepth = 8;
+  for (let i = brandDepth; i >= 1; i -= 1) {
+    const backMaterial = new THREE.MeshBasicMaterial({
+      map: brandTexture,
+      color: new THREE.Color(0x16375f),
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+    });
+    const backMesh = new THREE.Mesh(new THREE.PlaneGeometry(brandWidth, brandHeight), backMaterial);
+    backMesh.position.set(i * 0.02, -i * 0.016, -i * 0.02);
+    brandText.add(backMesh);
   }
-  core.add(microphone);
+  const brandFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(brandWidth, brandHeight),
+    new THREE.MeshBasicMaterial({
+      map: brandTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  brandText.add(brandFace);
+  core.add(brandText);
 
   const orbitCount = 240;
   const orbitPositions = new Float32Array(orbitCount * 3);
@@ -244,8 +290,11 @@ function createScene(canvas: HTMLCanvasElement) {
     camera.updateProjectionMatrix();
     if (width > 760) {
       core.position.set(2.35, 0.2, 0);
+      brandText.scale.setScalar(1);
     } else {
       core.position.set(0, 1.45, -0.5);
+      // 窄屏缩小字体，避免「Niko 直播伴侣」横向超出画面
+      brandText.scale.setScalar(0.55);
     }
   };
   const resizeObserver = new ResizeObserver(resize);
@@ -261,8 +310,10 @@ function createScene(canvas: HTMLCanvasElement) {
     rings.forEach(({ mesh, speed, axis }) => {
       mesh.rotation[axis] += delta * speed;
     });
-    microphone.rotation.y += delta * 0.32;
-    microphone.position.y = Math.sin(elapsed * 1.7) * 0.055;
+    // 字体轻微左右摆动 + 上下漂浮，保持正面可读
+    brandText.rotation.y = -0.12 + Math.sin(elapsed * 0.55) * 0.14;
+    brandText.rotation.x = 0.05 + Math.sin(elapsed * 0.38) * 0.035;
+    brandText.position.y = Math.sin(elapsed * 1.4) * 0.05;
     orbitParticles.rotation.y += delta * 0.1;
     orbitParticles.rotation.z -= delta * 0.06;
     core.rotation.y += (pointer.x * 0.12 - core.rotation.y) * 0.025;
@@ -297,6 +348,7 @@ function createScene(canvas: HTMLCanvasElement) {
         drawable.material?.dispose?.();
       }
     });
+    brandTexture.dispose();
     renderer.dispose();
   };
 }
