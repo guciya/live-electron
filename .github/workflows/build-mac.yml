@@ -1,15 +1,10 @@
 name: Build Mac DMG
 
-# 触发方式（任选其一）：
-#  1. push 到 main/master 分支自动触发
-#  2. GitHub Actions 页面手动点 "Run workflow"，可选架构
 on:
   push:
     branches: [main, master]
     paths-ignore:
       - '**/*.md'
-      - '**/*.png'
-      - '**/*.jpg'
   workflow_dispatch:
     inputs:
       arch:
@@ -25,19 +20,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 15
-
-    strategy:
-      matrix:
-        arch: ${{ inputs.arch == '' && 'both' || inputs.arch == 'x64' && 'x64' || inputs.arch == 'arm64' && 'arm64' || 'both' }}
-        include:
-          - arch: x64
-            name: NikoLive-x64
-          - arch: arm64
-            name: NikoLive-arm64
-          - arch: both
-            name: NikoLive-universal
-
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,10 +39,11 @@ jobs:
 
       - name: Build Electron app
         run: |
-          if [ "${{ matrix.arch }}" = "both" ]; then
+          ARCH="${{ github.event.inputs.arch }}"
+          if [ "$ARCH" = "" ] || [ "$ARCH" = "both" ]; then
             npx electron-builder --mac --x64 --arm64 --dir
           else
-            npx electron-builder --mac --${{ matrix.arch }} --dir
+            npx electron-builder --mac --$ARCH --dir
           fi
 
       - name: Stage DMG contents
@@ -67,7 +51,7 @@ jobs:
           cd dist
           for dir in mac mac-arm64; do
             if [ -d "$dir" ]; then
-              staging="dmg-stage-$(basename $dir)"
+              staging="dmg-stage-$dir"
               mkdir -p "$staging"
               app=$(ls -d "$dir"/*.app | head -1)
               ditto "$app" "$staging/NikoLive.app"
@@ -76,22 +60,27 @@ jobs:
             fi
           done
 
-      - name: Create DMG with Finder layout
+      - name: Create DMG
         run: |
           cd dist
-          if [ -d mac ]; then
-            hdiutil create -volname "NikoLive" -srcfolder dmg-stage-mac -ov -format UDZO NikoLive-x64.dmg
-          fi
-          if [ -d mac-arm64 ]; then
-            hdiutil create -volname "NikoLive" -srcfolder dmg-stage-mac-arm64 -ov -format UDZO NikoLive-arm64.dmg
-          fi
-          # 设置 Finder 视图
+          for dir in mac mac-arm64; do
+            [ -d "$dir" ] || continue
+            arch_suffix="${dir#mac}"
+            [ "$arch_suffix" = "" ] && arch_suffix="x64"
+            echo "Creating DMG for $arch_suffix ..."
+            hdiutil create -volname "NikoLive" -srcfolder "dmg-stage-$dir" -ov -format UDZO "NikoLive-$arch_suffix.dmg"
+          done
+
+      - name: Set Finder layout
+        run: |
+          cd dist
           for dmg in NikoLive-*.dmg; do
             [ -f "$dmg" ] || continue
-            echo "Setting layout for $dmg ..."
+            echo "Setting Finder layout for $dmg ..."
             hdiutil attach "$dmg" -nobrowse -quiet
             sleep 2
-            osascript -e 'tell application "Finder"
+            osascript <<'APPLESCRIPT' 2>/dev/null || echo "  (osascript skipped)"
+            tell application "Finder"
               tell disk "NikoLive"
                 open
                 set current view of container window to icon view
@@ -107,13 +96,14 @@ jobs:
                 delay 1
                 close
               end tell
-            end tell' 2>/dev/null || echo "  (osascript skipped — not fatal)"
+            end tell
+            APPLESCRIPT
             hdiutil detach /Volumes/NikoLive -quiet 2>/dev/null || true
           done
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
+          name: NikoLive-mac-dmg
           path: dist/NikoLive-*.dmg
           retention-days: 30
