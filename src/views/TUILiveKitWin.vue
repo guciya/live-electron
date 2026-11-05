@@ -550,7 +550,7 @@ function createLiveConsoleScene(canvas: HTMLCanvasElement) {
     powerPreference: 'low-power',
   });
   renderer.setClearColor(0x020610, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 60);
@@ -558,37 +558,6 @@ function createLiveConsoleScene(canvas: HTMLCanvasElement) {
 
   const universe = new THREE.Group();
   scene.add(universe);
-
-  const starCount = 420;
-  const positions = new Float32Array(starCount * 3);
-  const colors = new Float32Array(starCount * 3);
-  const cyan = new THREE.Color(0x55d9ff);
-  const violet = new THREE.Color(0x737dff);
-  for (let i = 0; i < starCount; i += 1) {
-    positions[i * 3] = (Math.random() - 0.5) * 24;
-    positions[i * 3 + 1] = (Math.random() - 0.5) * 14;
-    positions[i * 3 + 2] = -10 + Math.random() * 11;
-    const color = i % 5 === 0 ? violet : cyan;
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-  }
-  const starGeometry = new THREE.BufferGeometry();
-  starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const stars = new THREE.Points(
-    starGeometry,
-    new THREE.PointsMaterial({
-      size: 0.035,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.58,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      sizeAttenuation: true,
-    }),
-  );
-  universe.add(stars);
 
   const grid = new THREE.GridHelper(34, 44, 0x2ba9e8, 0x153a66);
   grid.position.set(0, -3.4, -4);
@@ -675,17 +644,13 @@ function createLiveConsoleScene(canvas: HTMLCanvasElement) {
   resize();
 
   const clock = new THREE.Clock();
-  let lastFrame = -1;
   let raf = 0;
   const animate = () => {
     raf = requestAnimationFrame(animate);
     const elapsed = clock.getElapsedTime();
-    if (elapsed - lastFrame < 1 / 30) return;
-    lastFrame = elapsed;
 
     universe.rotation.y = pointer.x * 0.025 + Math.sin(elapsed * 0.12) * 0.012;
     universe.rotation.x = pointer.y * 0.015;
-    stars.rotation.y = elapsed * 0.006;
     grid.position.z = -4 + (elapsed * 0.22) % 0.77;
     orbitals.rotation.y = 0.25 + Math.sin(elapsed * 0.22) * 0.08;
     rings.forEach((ring, index) => {

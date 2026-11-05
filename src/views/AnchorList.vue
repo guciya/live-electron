@@ -563,183 +563,64 @@ function handleCardClick(item: NikoLiveListItem) {
   });
 }
 
-/** 颗粒感强的星点贴图：硬边中心 + 很窄的外圈，让粒子像真实尘埃颗粒而非闪光星星 */
-function createGrainyParticleTexture(): THREE.CanvasTexture {
-  const size = 32;
+/** 真实感五角星贴图：硬边几何 + 白色核心 + 外圈柔光，像真的流星星头 */
+function createStarTexture(): THREE.CanvasTexture {
+  const size = 128;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
-  // 硬边中心（半径 8，纯白）
-  ctx.fillStyle = '#ffffff';
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR = size * 0.44; // 星尖外半径
+  const innerR = size * 0.18; // 凹处内半径
+  const spikes = 5;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-Math.PI / 2); // 顶尖朝上
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, 8, 0, Math.PI * 2);
+  for (let i = 0; i < spikes * 2; i += 1) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i * Math.PI) / spikes;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  // 亮青白色填充
+  ctx.fillStyle = '#f0fbff';
   ctx.fill();
-  // 窄外圈柔化到边缘，不是大面积发光
-  const halo = ctx.createRadialGradient(size / 2, size / 2, 8, size / 2, size / 2, size / 2);
-  halo.addColorStop(0, 'rgba(255,255,255,0.35)');
-  halo.addColorStop(0.5, 'rgba(180,210,255,0.08)');
-  halo.addColorStop(1, 'rgba(120,180,255,0)');
-  ctx.fillStyle = halo;
+  // 白色高光核心
+  const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.2);
+  coreGrad.addColorStop(0, 'rgba(255,255,255,1)');
+  coreGrad.addColorStop(0.6, 'rgba(220,245,255,0.7)');
+  coreGrad.addColorStop(1, 'rgba(180,220,255,0)');
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = coreGrad;
+  ctx.fillRect(-size / 2, -size / 2, size, size);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+  // 外圈柔光（additive blending 下会发光）
+  const haloGrad = ctx.createRadialGradient(cx, cy, outerR * 0.9, cx, cy, size * 0.5);
+  haloGrad.addColorStop(0, 'rgba(180,220,255,0.55)');
+  haloGrad.addColorStop(0.4, 'rgba(120,190,255,0.2)');
+  haloGrad.addColorStop(1, 'rgba(80,160,255,0)');
+  ctx.fillStyle = haloGrad;
   ctx.fillRect(0, 0, size, size);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-/** 圆形光点贴图：用于流星头部高光，呈现柔和光晕 */
-function createConstellationStarTexture(): THREE.CanvasTexture {
-  const size = 64;
-  const starCanvas = document.createElement('canvas');
-  starCanvas.width = size;
-  starCanvas.height = size;
-  const ctx = starCanvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Canvas 2D context unavailable');
-  }
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-  gradient.addColorStop(0.3, 'rgba(214, 240, 255, 0.9)');
-  gradient.addColorStop(1, 'rgba(120, 190, 255, 0)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-  const texture = new THREE.CanvasTexture(starCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-interface MeteorState {
-  mesh: THREE.Mesh;
-  material: THREE.MeshBasicMaterial;
-  /** 极薄的一层光晕：只比拖尾稍宽一点点，增加一点空气感而不是做成陨石 */
-  exhaust: THREE.Mesh;
-  exhaustMaterial: THREE.MeshBasicMaterial;
-  head: THREE.Sprite;
-  headMaterial: THREE.SpriteMaterial;
-  start: THREE.Vector2;
-  dir: THREE.Vector2;
-  travel: number;
-  life: number;
-  age: number;
-  delay: number;
-  brightness: number;
-  /** 微扰动：让流星路径略有弧线，不像硬直线 */
-  jitterAmp: number;
-  jitterFreq: number;
-  jitterPhase: number;
-}
-
-/** 流星拖尾贴图：右端为明亮头部，左端渐隐为尾巴。
- *  height 24 做得很窄，让最终渲染的拖尾是细长光条而非粗短陨石 */
-function createMeteorTexture(): THREE.CanvasTexture {
-  const width = 256;
-  const height = 24;
-  const meteorCanvas = document.createElement('canvas');
-  meteorCanvas.width = width;
-  meteorCanvas.height = height;
-  const ctx = meteorCanvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Canvas 2D context unavailable');
-  }
-  // 横向渐变：从几乎不可见的蓝尾巴 → 明亮白蓝头部
-  const gradient = ctx.createLinearGradient(0, 0, width, 0);
-  gradient.addColorStop(0, 'rgba(80, 140, 255, 0)');
-  gradient.addColorStop(0.25, 'rgba(120, 180, 255, 0.06)');
-  gradient.addColorStop(0.55, 'rgba(180, 225, 255, 0.32)');
-  gradient.addColorStop(0.85, 'rgba(235, 248, 255, 0.88)');
-  gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-
-  // 垂直方向强烈柔化，两端快速衰减，形成"针状"细长光条
-  const vertical = ctx.createLinearGradient(0, 0, 0, height);
-  vertical.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  vertical.addColorStop(0.35, 'rgba(0, 0, 0, 0.7)');
-  vertical.addColorStop(0.5, 'rgba(0, 0, 0, 1)');
-  vertical.addColorStop(0.65, 'rgba(0, 0, 0, 0.7)');
-  vertical.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.fillStyle = vertical;
-  ctx.fillRect(0, 0, width, height);
-  ctx.globalCompositeOperation = 'source-over';
-
-  // 头部小范围高光，不再大面积
-  const headGlow = ctx.createRadialGradient(width - 6, height / 2, 0, width - 6, height / 2, 8);
-  headGlow.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-  headGlow.addColorStop(1, 'rgba(180, 230, 255, 0)');
-  ctx.fillStyle = headGlow;
-  ctx.fillRect(width - 20, 0, 20, height);
-
-  const texture = new THREE.CanvasTexture(meteorCanvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-
-
 function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
   camera.position.set(0, 0, 8);
-
-  // 深空尘埃：1500 颗粒子，更大更有颗粒感，不用软闪的小星星 ✨
-  const starCount = 1500;
-  const grainyTexture = createGrainyParticleTexture();
-  const positions = new Float32Array(starCount * 3);
-  const colors = new Float32Array(starCount * 3);
-  const sizes = new Float32Array(starCount);
-  const speeds = new Float32Array(starCount);
-  const baseBlue = new THREE.Color(0x4c8eff);
-  const baseCyan = new THREE.Color(0xb5f2ff);
-  const baseViolet = new THREE.Color(0x9b7dff);
-  const baseMint = new THREE.Color(0x7dffb5);
-  for (let i = 0; i < starCount; i += 1) {
-    positions[i * 3] = (Math.random() - 0.5) * 30;
-    positions[i * 3 + 1] = (Math.random() - 0.5) * 18;
-    positions[i * 3 + 2] = -18 + Math.random() * 20;
-    const palettePick = Math.random();
-    let color: THREE.Color;
-    if (palettePick < 0.45) {
-      color = baseBlue.clone().lerp(baseCyan, Math.random());
-    } else if (palettePick < 0.82) {
-      color = baseCyan.clone().lerp(baseBlue, Math.random() * 0.5);
-    } else if (palettePick < 0.93) {
-      color = baseViolet.clone().lerp(baseCyan, Math.random() * 0.6);
-    } else {
-      color = baseMint.clone().lerp(baseCyan, Math.random() * 0.7);
-    }
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-    // 更大颗粒：70% 中等 0.04~0.07，30% 较大 0.08~0.13
-    sizes[i] = Math.random() < 0.7 ? 0.04 + Math.random() * 0.03 : 0.08 + Math.random() * 0.05;
-    speeds[i] = 0.004 + Math.random() * 0.012;
-  }
-  const starGeometry = new THREE.BufferGeometry();
-  starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-  const starMaterial = new THREE.PointsMaterial({
-    size: 1,
-    map: grainyTexture,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.88,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: true,
-  });
-  starMaterial.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('attribute float size;', 'attribute float size;\nattribute float aSize;')
-      .replace('gl_PointSize = size;', 'gl_PointSize = size * aSize * 850.0 / -mvPosition.z;');
-  };
-  const stars = new THREE.Points(starGeometry, starMaterial);
-  scene.add(stars);
 
   const grid = new THREE.GridHelper(34, 44, 0x245fa5, 0x132d53);
   grid.position.set(0, -3.1, -4);
@@ -748,155 +629,46 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   gridMaterial.opacity = 0.16;
   scene.add(grid);
 
-  // 背景只保留流星：不再绘制北斗七星 / 双鱼座，星光点贴图仅用于流星头部光点
-  const constellationTexture = createConstellationStarTexture();
+  // 能量核心 + 鼠标吸引粒子环：中心发光 20 面体 + 300 颗粒子绕核心一圈
+  const coreTexture = createStarTexture();
+  scene.userData.starTexture = coreTexture;
 
-  // 流星雨：24 条细长高速流星，从右上斜向左下划过，随机重生。
-  // 关键：长度远大于宽度（长宽比 150~400），让它像光针而不是陨石。
-  const meteorTexture = createMeteorTexture();
-  const meteors: MeteorState[] = [];
-  const meteorRange = (min: number, max: number) => min + Math.random() * (max - min);
-  const respawnMeteor = (meteor: MeteorState) => {
-    // 198°~216°：向左下方划过
-    const angle = THREE.MathUtils.degToRad(meteorRange(196, 218));
-    meteor.dir.set(Math.cos(angle), Math.sin(angle));
-    meteor.start.set(meteorRange(-1.5, 10), meteorRange(0.5, 7.2));
-    meteor.travel = meteorRange(7, 13);
-    meteor.life = meteorRange(2.0, 4.5);
-    meteor.age = 0;
-    meteor.delay = meteorRange(0.3, 5);
-    meteor.brightness = meteorRange(0.5, 1);
-    // 细长拖尾：长 8~20，宽 0.035~0.075 → 长宽比 170~450，慢速划过像真实流星
-    meteor.mesh.scale.set(meteorRange(8, 20), meteorRange(0.035, 0.075), 1);
-    meteor.mesh.rotation.z = angle;
-    meteor.mesh.position.z = meteorRange(-13, -6);
-    // 头部亮点做得小一些，像流星的光点，不是大灯泡
-    meteor.head.scale.setScalar(meteorRange(0.12, 0.26));
-    // 微扰动参数：给轨迹加一点弧线感
-    meteor.jitterAmp = meteorRange(0.08, 0.22);
-    meteor.jitterFreq = meteorRange(1.5, 3.5);
-    meteor.jitterPhase = Math.random() * Math.PI * 2;
-  };
-  const meteorCount = 24;
-  for (let index = 0; index < meteorCount; index += 1) {
-    const material = new THREE.MeshBasicMaterial({
-      map: meteorTexture,
-      color: 0xe6f6ff,
+  // 中心发光点：Sprite 做成柔光球
+  const coreGlow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: coreTexture,
+      color: 0xbfe8ff,
       transparent: true,
-      opacity: 0,
+      opacity: 0.85,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-    mesh.visible = false;
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-    // 极薄的光晕层：只比拖尾稍宽一点，增加空气感，不再像陨石那样臃肿
-    const exhaustMaterial = new THREE.MeshBasicMaterial({
-      map: meteorTexture,
-      color: 0xb0dcff,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const exhaust = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), exhaustMaterial);
-    exhaust.visible = false;
-    exhaust.frustumCulled = false;
-    scene.add(exhaust);
-    // 头部光点
-    const headMaterial = new THREE.SpriteMaterial({
-      map: constellationTexture,
-      color: 0xf0fbff,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const head = new THREE.Sprite(headMaterial);
-    head.visible = false;
-    scene.add(head);
-    const meteor: MeteorState = {
-      mesh,
-      material,
-      exhaust,
-      exhaustMaterial,
-      head,
-      headMaterial,
-      start: new THREE.Vector2(),
-      dir: new THREE.Vector2(),
-      travel: 0,
-      life: 1,
-      age: 0,
-      delay: 0,
-      brightness: 1,
-      jitterAmp: 0.1,
-      jitterFreq: 2,
-      jitterPhase: 0,
-    };
-    respawnMeteor(meteor);
-    meteor.delay = index < 6 ? 0 : meteorRange(0.4, 5);
-    meteors.push(meteor);
-  }
-  const updateMeteors = (delta: number) => {
-    meteors.forEach((meteor) => {
-      if (meteor.delay > 0) {
-        meteor.delay -= delta;
-        meteor.mesh.visible = false;
-        meteor.exhaust.visible = false;
-        meteor.head.visible = false;
-        return;
-      }
-      meteor.age += delta;
-      const progress = meteor.age / meteor.life;
-      if (progress >= 1) {
-        respawnMeteor(meteor);
-        meteor.mesh.visible = false;
-        meteor.exhaust.visible = false;
-        meteor.head.visible = false;
-        meteor.material.opacity = 0;
-        meteor.exhaustMaterial.opacity = 0;
-        meteor.headMaterial.opacity = 0;
-        return;
-      }
-      meteor.mesh.visible = true;
-      // 主轨迹（沿 dir 直线）
-      const baseX = meteor.start.x + meteor.dir.x * meteor.travel * progress;
-      const baseY = meteor.start.y + meteor.dir.y * meteor.travel * progress;
-      // 微扰动：sin 让轨迹有轻微弧线，不是硬直线
-      const jitter = Math.sin(meteor.jitterPhase + progress * meteor.jitterFreq * Math.PI * 2) * meteor.jitterAmp * progress;
-      // 扰动垂直于运动方向
-      const perpX = -meteor.dir.y;
-      const perpY = meteor.dir.x;
-      meteor.mesh.position.x = baseX + perpX * jitter;
-      meteor.mesh.position.y = baseY + perpY * jitter;
+    }),
+  );
+  coreGlow.scale.setScalar(1.8);
+  scene.add(coreGlow);
 
-      // 极薄光晕层：只比拖尾宽 1.3 倍，opacity 极低
-      const halfLength = meteor.mesh.scale.x / 2;
-      meteor.exhaust.visible = true;
-      meteor.exhaust.position.set(
-        meteor.mesh.position.x,
-        meteor.mesh.position.y,
-        meteor.mesh.position.z - 0.05,
-      );
-      meteor.exhaust.rotation.z = meteor.mesh.rotation.z;
-      meteor.exhaust.scale.set(meteor.mesh.scale.x * 1.1, meteor.mesh.scale.y * 1.3, 1);
-
-      // 头部光点放在拖尾前端
-      meteor.head.visible = true;
-      meteor.head.position.set(
-        meteor.mesh.position.x + meteor.dir.x * halfLength,
-        meteor.mesh.position.y + meteor.dir.y * halfLength,
-        meteor.mesh.position.z + 0.1,
-      );
-      // 生命期两端淡入淡出，中段最亮（sin^0.5 让中段更平直，不闪）
-      const envelope = Math.pow(Math.sin(Math.PI * progress), 0.5);
-      const opacity = envelope * meteor.brightness;
-      meteor.material.opacity = opacity;
-      meteor.exhaustMaterial.opacity = opacity * 0.18;
-      meteor.headMaterial.opacity = opacity;
-    });
-  };
+  // 20 面体 wireframe（半透明，核心轮廓）
+  const coreWire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.85, 0),
+    new THREE.MeshBasicMaterial({
+      color: 0x7ed0ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.28,
+    }),
+  );
+  scene.add(coreWire);
+  // 稍大一点的反向 20 面体：错开顶点产生"呼吸"轮廓感
+  const coreWireOuter = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.15, 0),
+    new THREE.MeshBasicMaterial({
+      color: 0x5ba9ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.16,
+    }),
+  );
+  scene.add(coreWireOuter);
 
   const pointer = { x: 0, y: 0 };
   const handlePointer = (event: PointerEvent) => {
@@ -919,18 +691,20 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   const clock = new THREE.Clock();
   let raf = 0;
   const animate = () => {
-    // 60fps 流畅运行，不再硬限 30fps
     const delta = Math.min(0.1, clock.getDelta());
-    updateMeteors(delta);
-    // 2000 颗粒子：每个有自己的速度（近快远慢形成视差）
-    const starPositions = starGeometry.attributes.position.array as Float32Array;
-    for (let i = 0; i < starCount; i += 1) {
-      const zIdx = i * 3 + 2;
-      starPositions[zIdx] += speeds[i] * delta * 60;
-      if (starPositions[zIdx] > 3) starPositions[zIdx] = -18;
-    }
-    starGeometry.attributes.position.needsUpdate = true;
-    grid.position.z = -4 + (clock.elapsedTime * 0.1) % 0.7;
+    const elapsed = clock.elapsedTime;
+
+    // 能量核心：双 20 面体反向慢速旋转 + 呼吸缩放
+    coreWire.rotation.y += delta * 0.32;
+    coreWire.rotation.x += delta * 0.22;
+    coreWireOuter.rotation.y -= delta * 0.24;
+    coreWireOuter.rotation.x -= delta * 0.14;
+    const breathe = 1 + Math.sin(elapsed * 1.4) * 0.04;
+    coreWire.scale.setScalar(breathe);
+    coreWireOuter.scale.setScalar(breathe * 1.02);
+    coreGlow.scale.setScalar(1.8 + Math.sin(elapsed * 2.3) * 0.15);
+
+    grid.position.z = -4 + (elapsed * 0.1) % 0.7;
     camera.position.x += (pointer.x * 0.16 - camera.position.x) * 0.03;
     camera.position.y += (-pointer.y * 0.1 - camera.position.y) * 0.03;
     camera.lookAt(0, 0, -2);
@@ -952,17 +726,14 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
         drawable.material?.dispose?.();
       }
     });
-    constellationTexture.dispose();
-    meteorTexture.dispose();
-    grainyTexture.dispose();
     renderer.dispose();
   };
 }
 
 function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElement) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
@@ -1280,9 +1051,9 @@ const followGravityCanvas = ref<HTMLCanvasElement | null>(null);
 let cleanupFollowGravity: (() => void) | null = null;
 
 function createFollowGravityScene(canvas: HTMLCanvasElement) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.18;

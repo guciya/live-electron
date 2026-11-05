@@ -2104,27 +2104,6 @@ function createTray() {
           }
         },
       },
-      {
-        label: '公会|家族',
-        icon: trayIcon('users'),
-        // 交给渲染进程处理：URL 与组织 id 都依赖当前环境（测试域 / 正式域）
-        click: () => notifyMainWindow('open-organization-page', '公会|家族'),
-      },
-      {
-        label: '提现',
-        icon: trayIcon('wallet'),
-        click: () => notifyMainWindow('open-withdraw-page', '提现'),
-      },
-      {
-        label: '家族入驻',
-        icon: trayIcon('home'),
-        click: () => notifyMainWindow('open-settle-page', '家族入驻'),
-      },
-      {
-        label: '公会入驻',
-        icon: trayIcon('building'),
-        click: () => notifyMainWindow('open-settle-page', '公会入驻'),
-      },
       { type: 'separator' },
       {
         label: '重启 Niko',
