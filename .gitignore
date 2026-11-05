@@ -7,6 +7,7 @@ node_modules
 /release-test4
 /dist
 /dist-dev
+/mac-dmg
 /release-asar-false
 !package-lock.json
 

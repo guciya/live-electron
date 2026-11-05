@@ -1,0 +1,1007 @@
+﻿2026-11-05T10:21:30.7488080Z Current runner version: '2.338.2'
+2026-11-05T10:21:30.7508740Z ##[group]Runner Image Provisioner
+2026-11-05T10:21:30.7509430Z Hosted Compute Agent
+2026-11-05T10:21:30.7509890Z Version: 20261021.618
+2026-11-05T10:21:30.7510360Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-05T10:21:30.7510880Z Build Date: 2026-10-21T00:45:21Z
+2026-11-05T10:21:30.7511310Z Worker ID: {3b49a413-df80-4318-9847-85b20c38191d}
+2026-11-05T10:21:30.7511860Z Region: westus
+2026-11-05T10:21:30.7512200Z Cloud: MacCloud
+2026-11-05T10:21:30.7512540Z ##[endgroup]
+2026-11-05T10:21:30.7513440Z ##[group]Operating System
+2026-11-05T10:21:30.7513820Z macOS
+2026-11-05T10:21:30.7514130Z 26.6.2
+2026-11-05T10:21:30.7514450Z 25G83
+2026-11-05T10:21:30.7514860Z ##[endgroup]
+2026-11-05T10:21:30.7515270Z ##[group]Runner Image
+2026-11-05T10:21:30.7515700Z Image: macos-26-arm64
+2026-11-05T10:21:30.7516060Z Version: 20261026.0455.2
+2026-11-05T10:21:30.7516880Z Included Software: https://github.com/actions/runner-images/blob/macos-26-arm64/20261026.0455/images/macos/macos-26-arm64-Readme.md
+2026-11-05T10:21:30.7517900Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-26-arm64%2F20261026.0455
+2026-11-05T10:21:30.7518550Z ##[endgroup]
+2026-11-05T10:21:30.7519420Z ##[group]GITHUB_TOKEN Permissions
+2026-11-05T10:21:30.7520620Z Contents: read
+2026-11-05T10:21:30.7520980Z Metadata: read
+2026-11-05T10:21:30.7521320Z Packages: read
+2026-11-05T10:21:30.7521800Z ##[endgroup]
+2026-11-05T10:21:30.7523280Z Secret source: Actions
+2026-11-05T10:21:30.7523890Z Cache mode: write
+2026-11-05T10:21:30.7524320Z Prepare workflow directory
+2026-11-05T10:21:30.7817280Z Prepare all required actions
+2026-11-05T10:21:30.7858110Z Getting action download info
+2026-11-05T10:21:31.2027080Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-05T10:21:31.5128940Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-05T10:21:31.6223040Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-05T10:21:31.8337870Z Complete job name: build
+2026-11-05T10:21:31.9081290Z ##[group]Run actions/checkout@v4
+2026-11-05T10:21:31.9082080Z with:
+2026-11-05T10:21:31.9082440Z   repository: guciya/live-electron
+2026-11-05T10:21:31.9085570Z   token: ***
+2026-11-05T10:21:31.9085910Z   ssh-strict: true
+2026-11-05T10:21:31.9086280Z   ssh-user: git
+2026-11-05T10:21:31.9087780Z   persist-credentials: true
+2026-11-05T10:21:31.9088300Z   clean: true
+2026-11-05T10:21:31.9088780Z   sparse-checkout-cone-mode: true
+2026-11-05T10:21:31.9089310Z   fetch-depth: 1
+2026-11-05T10:21:31.9089920Z   fetch-tags: false
+2026-11-05T10:21:31.9090300Z   show-progress: true
+2026-11-05T10:21:31.9090700Z   lfs: false
+2026-11-05T10:21:31.9091120Z   submodules: false
+2026-11-05T10:21:31.9091560Z   set-safe-directory: true
+2026-11-05T10:21:31.9092100Z   allow-unsafe-pr-checkout: false
+2026-11-05T10:21:31.9092980Z ##[endgroup]
+2026-11-05T10:21:32.5938250Z Syncing repository: guciya/live-electron
+2026-11-05T10:21:32.5940330Z ##[group]Getting Git version info
+2026-11-05T10:21:32.5941260Z Working directory is '/Users/runner/work/live-electron/live-electron'
+2026-11-05T10:21:32.5942680Z [command]/opt/homebrew/bin/git version
+2026-11-05T10:21:32.6436350Z git version 2.56.0
+2026-11-05T10:21:32.6477170Z ##[endgroup]
+2026-11-05T10:21:32.6501930Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/cff22f87-59a2-4711-af9c-b2b3d0a7f817/.gitconfig'
+2026-11-05T10:21:32.6518780Z Temporarily overriding HOME='/Users/runner/work/_temp/cff22f87-59a2-4711-af9c-b2b3d0a7f817' before making global git config changes
+2026-11-05T10:21:32.6524080Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-05T10:21:32.6528620Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/live-electron/live-electron
+2026-11-05T10:21:32.6693570Z Deleting the contents of '/Users/runner/work/live-electron/live-electron'
+2026-11-05T10:21:32.6700700Z ##[group]Initializing the repository
+2026-11-05T10:21:32.6708950Z [command]/opt/homebrew/bin/git init /Users/runner/work/live-electron/live-electron
+2026-11-05T10:21:32.7014370Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-05T10:21:32.7022210Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-05T10:21:32.7027830Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-05T10:21:32.7039180Z hint: call:
+2026-11-05T10:21:32.7040370Z hint:
+2026-11-05T10:21:32.7041550Z hint: 	git config --global init.defaultBranch <name>
+2026-11-05T10:21:32.7043370Z hint:
+2026-11-05T10:21:32.7044850Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-05T10:21:32.7052300Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-05T10:21:32.7056570Z hint:
+2026-11-05T10:21:32.7059250Z hint: 	git branch -m <name>
+2026-11-05T10:21:32.7062050Z hint:
+2026-11-05T10:21:32.7065790Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-05T10:21:32.7071720Z Initialized empty Git repository in /Users/runner/work/live-electron/live-electron/.git/
+2026-11-05T10:21:32.7082270Z [command]/opt/homebrew/bin/git remote add origin https://github.com/guciya/live-electron
+2026-11-05T10:21:32.7167570Z ##[endgroup]
+2026-11-05T10:21:32.7173510Z ##[group]Disabling automatic garbage collection
+2026-11-05T10:21:32.7177260Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2026-11-05T10:21:32.7269540Z ##[endgroup]
+2026-11-05T10:21:32.7273270Z ##[group]Setting up auth
+2026-11-05T10:21:32.7277500Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-05T10:21:32.7395720Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-05T10:21:32.8601160Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-05T10:21:32.8684610Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-05T10:21:32.9725010Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-05T10:21:32.9858010Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-05T10:21:33.0621430Z [command]/opt/homebrew/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-05T10:21:33.0681450Z ##[endgroup]
+2026-11-05T10:21:33.0682970Z ##[group]Fetching the repository
+2026-11-05T10:21:33.0687160Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ee99e44f515cde970eb2e388eb9813e4a31c44bf:refs/remotes/origin/master
+2026-11-05T10:21:34.9344930Z From https://github.com/guciya/live-electron
+2026-11-05T10:21:34.9346620Z  * [new ref]         ee99e44f515cde970eb2e388eb9813e4a31c44bf -> origin/master
+2026-11-05T10:21:34.9447830Z ##[endgroup]
+2026-11-05T10:21:34.9520050Z ##[group]Determining the checkout info
+2026-11-05T10:21:34.9536450Z ##[endgroup]
+2026-11-05T10:21:34.9538890Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2026-11-05T10:21:34.9592410Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-05T10:21:34.9648000Z ##[group]Checking out the ref
+2026-11-05T10:21:34.9666220Z [command]/opt/homebrew/bin/git checkout --progress --force -B master refs/remotes/origin/master
+2026-11-05T10:21:35.1948700Z Reset branch 'master'
+2026-11-05T10:21:35.1955000Z branch 'master' set up to track 'origin/master'.
+2026-11-05T10:21:35.1978550Z ##[endgroup]
+2026-11-05T10:21:35.2115310Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2026-11-05T10:21:35.2215620Z ee99e44f515cde970eb2e388eb9813e4a31c44bf
+2026-11-05T10:21:35.2572420Z ##[group]Run actions/setup-node@v4
+2026-11-05T10:21:35.2572710Z with:
+2026-11-05T10:21:35.2572860Z   node-version: 20
+2026-11-05T10:21:35.2573020Z   cache: npm
+2026-11-05T10:21:35.2573180Z   always-auth: false
+2026-11-05T10:21:35.2573350Z   check-latest: false
+2026-11-05T10:21:35.2576130Z   token: ***
+2026-11-05T10:21:35.2576290Z ##[endgroup]
+2026-11-05T10:21:35.4254550Z Attempting to download 20...
+2026-11-05T10:21:35.4503420Z (node:2242) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-05T10:21:35.4508860Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-05T10:21:36.6732960Z Acquiring 20.20.2 - arm64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-darwin-arm64.tar.gz
+2026-11-05T10:21:37.2903520Z Extracting ...
+2026-11-05T10:21:37.3036850Z [command]/usr/bin/tar xz --strip 1 -C /Users/runner/work/_temp/c7eeef76-1c39-4a2b-ac02-5d61631c2fb9 -f /Users/runner/work/_temp/bf086ecc-e469-464d-8578-8242973df2db
+2026-11-05T10:21:38.9018240Z Adding to the cache ...
+2026-11-05T10:21:41.5740420Z ##[group]Environment details
+2026-11-05T10:21:42.0270170Z node: v20.20.2
+2026-11-05T10:21:42.0274360Z npm: 10.8.2
+2026-11-05T10:21:42.0277430Z yarn: 1.22.22
+2026-11-05T10:21:42.0278760Z ##[endgroup]
+2026-11-05T10:21:42.0279470Z [command]/Users/runner/hostedtoolcache/node/20.20.2/arm64/bin/npm config get cache
+2026-11-05T10:21:42.2133040Z /Users/runner/.npm
+2026-11-05T10:21:42.5040520Z npm cache is not found
+2026-11-05T10:21:42.5232860Z ##[group]Run npm ci
+2026-11-05T10:21:42.5236680Z [36;1mnpm ci[0m
+2026-11-05T10:21:42.5309260Z shell: /bin/bash -e {0}
+2026-11-05T10:21:42.5309490Z ##[endgroup]
+2026-11-05T10:21:46.4502370Z npm warn deprecated uuid@3.4.0: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
+2026-11-05T10:21:46.5183950Z npm warn deprecated stable@0.1.8: Modern JS already guarantees Array#sort() is a stable sort, so this library is deprecated. See the compatibility table on MDN: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#browser_compatibility
+2026-11-05T10:21:46.8090600Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2026-11-05T10:21:47.1739080Z npm warn deprecated webpack-chain@6.5.1: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2026-11-05T10:21:47.4671110Z npm warn deprecated tar@6.2.1: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-11-05T10:21:47.5602630Z npm warn deprecated request@2.88.2: request has been deprecated, see https://github.com/request/request/issues/3142
+2026-11-05T10:21:47.6634710Z npm warn deprecated lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+2026-11-05T10:21:47.9268480Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-11-05T10:21:48.1878150Z npm warn deprecated har-validator@5.1.5: this library is no longer supported
+2026-11-05T10:21:48.2847430Z npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+2026-11-05T10:21:49.2146260Z npm warn deprecated consolidate@0.15.1: Please upgrade to consolidate v1.0.0+ as it has been modernized with several long-awaited fixes implemented. Maintenance is supported by Forward Email at https://forwardemail.net ; follow/watch https://github.com/ladjs/consolidate for updates and release changelog
+2026-11-05T10:21:49.7380910Z npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2026-11-05T10:21:50.5139240Z npm warn deprecated @humanwhocodes/config-array@0.5.0: Use @eslint/config-array instead
+2026-11-05T10:21:50.8593890Z npm warn deprecated @humanwhocodes/object-schema@1.2.1: Use @eslint/object-schema instead
+2026-11-05T10:21:51.1692720Z npm warn deprecated @babel/plugin-proposal-class-properties@7.18.6: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-class-properties instead.
+2026-11-05T10:21:52.2605930Z npm warn deprecated jose@1.28.2: this version is no longer supported
+2026-11-05T10:21:52.2876630Z npm warn deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+2026-11-05T10:21:55.0346510Z npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-11-05T10:22:01.3940960Z npm warn deprecated eslint@7.32.0: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+2026-11-05T10:22:48.4124290Z 
+2026-11-05T10:22:48.4127950Z added 1503 packages, and audited 1504 packages in 1m
+2026-11-05T10:22:48.4128790Z 
+2026-11-05T10:22:48.4129230Z 215 packages are looking for funding
+2026-11-05T10:22:48.4129710Z   run `npm fund` for details
+2026-11-05T10:22:48.7151350Z 
+2026-11-05T10:22:48.7154290Z 124 vulnerabilities (4 low, 60 moderate, 52 high, 8 critical)
+2026-11-05T10:22:48.7154790Z 
+2026-11-05T10:22:48.7155210Z To address issues that do not require attention, run:
+2026-11-05T10:22:48.7155680Z   npm audit fix
+2026-11-05T10:22:48.7156060Z 
+2026-11-05T10:22:48.7156650Z To address all issues possible (including breaking changes), run:
+2026-11-05T10:22:48.7157540Z   npm audit fix --force
+2026-11-05T10:22:48.7157790Z 
+2026-11-05T10:22:48.7158090Z Some issues need review, and may require choosing
+2026-11-05T10:22:48.7158550Z a different dependency.
+2026-11-05T10:22:48.7158750Z 
+2026-11-05T10:22:48.7159040Z Run `npm audit` for details.
+2026-11-05T10:22:48.7945700Z ##[group]Run npm run build
+2026-11-05T10:22:48.7946960Z [36;1mnpm run build[0m
+2026-11-05T10:22:49.0033660Z shell: /bin/bash -e {0}
+2026-11-05T10:22:49.0034070Z ##[endgroup]
+2026-11-05T10:22:49.4012260Z 
+2026-11-05T10:22:49.4012840Z > ultra-live-electron@6.5.0 build
+2026-11-05T10:22:49.4013710Z > vue-cli-service build
+2026-11-05T10:22:49.4013950Z 
+2026-11-05T10:22:50.2549220Z process.env.NODE_ENV: production
+2026-11-05T10:22:50.2559620Z process.env.VUE_APP_RUNTIME_SCENE: undefined
+2026-11-05T10:22:50.3844840Z All browser targets in the browserslist configuration have supported ES module.
+2026-11-05T10:22:50.3849490Z Therefore we don't build two separate bundles for differential loading.
+2026-11-05T10:22:50.3850080Z 
+2026-11-05T10:22:50.4148180Z 
+2026-11-05T10:22:50.4153020Z -  Building for production...
+2026-11-05T10:23:31.0950380Z  WARNING  Compiled with 61 warnings10:23:31 AM
+2026-11-05T10:23:31.0950870Z 
+2026-11-05T10:23:31.0967250Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.0968900Z 
+2026-11-05T10:23:31.0970080Z export 'WindowType' (reexported as 'WindowType') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.0971200Z 
+2026-11-05T10:23:31.0972860Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.0973150Z 
+2026-11-05T10:23:31.0974190Z export 'MessageTarget' (reexported as 'MessageTarget') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.0974930Z 
+2026-11-05T10:23:31.0975210Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.0975980Z 
+2026-11-05T10:23:31.0976930Z export 'IPCMessage' (reexported as 'IPCMessage') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.0990400Z 
+2026-11-05T10:23:31.0991140Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.0991750Z 
+2026-11-05T10:23:31.0993930Z export 'IPCMessageHandler' (reexported as 'IPCMessageHandler') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.0995510Z 
+2026-11-05T10:23:31.0995920Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.0996490Z 
+2026-11-05T10:23:31.0999140Z export 'SetCurrentDevicePayload' (reexported as 'SetCurrentDevicePayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1000690Z 
+2026-11-05T10:23:31.1001130Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1001670Z 
+2026-11-05T10:23:31.1003670Z export 'CameraTestPayload' (reexported as 'CameraTestPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1005330Z 
+2026-11-05T10:23:31.1005800Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1006280Z 
+2026-11-05T10:23:31.1008880Z export 'HandleUserApplyPayload' (reexported as 'HandleUserApplyPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1010760Z 
+2026-11-05T10:23:31.1113110Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1114170Z 
+2026-11-05T10:23:31.1116350Z export 'DeviceVolumePayload' (reexported as 'DeviceVolumePayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1118010Z 
+2026-11-05T10:23:31.1118420Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1118890Z 
+2026-11-05T10:23:31.1120860Z export 'MicTestPayload' (reexported as 'MicTestPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1122390Z 
+2026-11-05T10:23:31.1122920Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1127650Z 
+2026-11-05T10:23:31.1129890Z export 'ShowChildPanelPayload' (reexported as 'ShowChildPanelPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1131650Z 
+2026-11-05T10:23:31.1132150Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1132720Z 
+2026-11-05T10:23:31.1134420Z export 'UpdateChildDataPayload' (reexported as 'UpdateChildDataPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1135250Z 
+2026-11-05T10:23:31.1135490Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1135820Z 
+2026-11-05T10:23:31.1137140Z export 'MediaKind' (reexported as 'MediaKind') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1138530Z 
+2026-11-05T10:23:31.1138760Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1139040Z 
+2026-11-05T10:23:31.1140190Z export 'AddLocalVideoPayload' (reexported as 'AddLocalVideoPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1140900Z 
+2026-11-05T10:23:31.1141150Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1141360Z 
+2026-11-05T10:23:31.1142470Z export 'UpdateLocalVideoPayload' (reexported as 'UpdateLocalVideoPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1143180Z 
+2026-11-05T10:23:31.1143440Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1143630Z 
+2026-11-05T10:23:31.1145240Z export 'AddOnlineVideoPayload' (reexported as 'AddOnlineVideoPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1145920Z 
+2026-11-05T10:23:31.1146080Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1147370Z 
+2026-11-05T10:23:31.1148780Z export 'UpdateOnlineVideoPayload' (reexported as 'UpdateOnlineVideoPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1149670Z 
+2026-11-05T10:23:31.1149980Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1150220Z 
+2026-11-05T10:23:31.1151150Z export 'MusicPanelSnapshot' (reexported as 'MusicPanelSnapshot') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1152010Z 
+2026-11-05T10:23:31.1152170Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1152380Z 
+2026-11-05T10:23:31.1153390Z export 'MusicActionPayload' (reexported as 'MusicActionPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1154040Z 
+2026-11-05T10:23:31.1154270Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1155350Z 
+2026-11-05T10:23:31.1156610Z export 'MusicEventPayload' (reexported as 'MusicEventPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1157300Z 
+2026-11-05T10:23:31.1157540Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1157810Z 
+2026-11-05T10:23:31.1158640Z export 'BattleStateSnapshot' (reexported as 'BattleStateSnapshot') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1159390Z 
+2026-11-05T10:23:31.1159520Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1159820Z 
+2026-11-05T10:23:31.1160720Z export 'CoHostPanelSnapshot' (reexported as 'CoHostPanelSnapshot') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1161710Z 
+2026-11-05T10:23:31.1162530Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1162860Z 
+2026-11-05T10:23:31.1163730Z export 'CoHostActionPayload' (reexported as 'CoHostActionPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1164510Z 
+2026-11-05T10:23:31.1164740Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1164940Z 
+2026-11-05T10:23:31.1166760Z export 'CoHostEventPayload' (reexported as 'CoHostEventPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1167590Z 
+2026-11-05T10:23:31.1167780Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1168130Z 
+2026-11-05T10:23:31.1169130Z export 'BeautyUpdatePayload' (reexported as 'BeautyUpdatePayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1169810Z 
+2026-11-05T10:23:31.1170060Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1170250Z 
+2026-11-05T10:23:31.1171200Z export 'CameraRemovedPayload' (reexported as 'CameraRemovedPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1171940Z 
+2026-11-05T10:23:31.1172210Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1172480Z 
+2026-11-05T10:23:31.1173540Z export 'CameraAddFailedPayload' (reexported as 'CameraAddFailedPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1174610Z 
+2026-11-05T10:23:31.1174860Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1175650Z 
+2026-11-05T10:23:31.1176510Z export 'CameraOpDonePayload' (reexported as 'CameraOpDonePayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1177260Z 
+2026-11-05T10:23:31.1177440Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1177710Z 
+2026-11-05T10:23:31.1178670Z export 'LiveSettingActionType' (reexported as 'LiveSettingActionType') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1179510Z 
+2026-11-05T10:23:31.1179740Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1180030Z 
+2026-11-05T10:23:31.1181000Z export 'ApplyLiveSettingPayload' (reexported as 'ApplyLiveSettingPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1181760Z 
+2026-11-05T10:23:31.1181970Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1182310Z 
+2026-11-05T10:23:31.1183170Z export 'LiveTitleSettingInitialData' (reexported as 'LiveTitleSettingInitialData') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1184300Z 
+2026-11-05T10:23:31.1184430Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1184730Z 
+2026-11-05T10:23:31.1185740Z export 'ApplyLiveTitlePayload' (reexported as 'ApplyLiveTitlePayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1186450Z 
+2026-11-05T10:23:31.1186640Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1186800Z 
+2026-11-05T10:23:31.1188060Z export 'ConfirmDialogScene' (reexported as 'ConfirmDialogScene') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1188770Z 
+2026-11-05T10:23:31.1188960Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1189930Z 
+2026-11-05T10:23:31.1191360Z export 'ConfirmDialogSceneLike' (reexported as 'ConfirmDialogSceneLike') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1192060Z 
+2026-11-05T10:23:31.1192290Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1192560Z 
+2026-11-05T10:23:31.1193510Z export 'ConfirmDialogActionPayload' (reexported as 'ConfirmDialogActionPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1194440Z 
+2026-11-05T10:23:31.1194720Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1194940Z 
+2026-11-05T10:23:31.1195910Z export 'ShowConfirmDialogPayload' (reexported as 'ShowConfirmDialogPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1197100Z 
+2026-11-05T10:23:31.1197310Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1197590Z 
+2026-11-05T10:23:31.1198560Z export 'CloseConfirmDialogPayload' (reexported as 'CloseConfirmDialogPayload') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1199750Z 
+2026-11-05T10:23:31.1199970Z  warning  in ./src/TUILiveKit/ipc/index.ts
+2026-11-05T10:23:31.1200170Z 
+2026-11-05T10:23:31.1201060Z export 'EndLiveAction' (reexported as 'EndLiveAction') was not found in './types' (possible exports: ChildPanelType, EndLiveActionValue, IPCMessageType, MainProcessAction)
+2026-11-05T10:23:31.1201850Z 
+2026-11-05T10:23:31.1201920Z  warning  
+2026-11-05T10:23:31.1202040Z 
+2026-11-05T10:23:31.1202200Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1202700Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1205580Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/SvgIcon.vue?vue&type=style&index=0&id=4966b6a0&lang=scss&scoped=true
+2026-11-05T10:23:31.1207860Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1209940Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/index.vue?vue&type=style&index=0&id=719b9857&lang=scss&scoped=true
+2026-11-05T10:23:31.1211560Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1212250Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1214570Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/UserProfileDialog.vue?vue&type=style&index=0&id=488145b5&lang=scss&scoped=true
+2026-11-05T10:23:31.1216650Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1217330Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1219100Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/ModalThreeScene.vue?vue&type=style&index=0&id=24c5bc06&scoped=true&lang=css
+2026-11-05T10:23:31.1220760Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1221450Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1223670Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveUserProfile/index.vue?vue&type=style&index=0&id=d1a4ad0e&lang=scss&scoped=true
+2026-11-05T10:23:31.1225770Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1226480Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1227670Z 
+2026-11-05T10:23:31.1227740Z  warning  
+2026-11-05T10:23:31.1228020Z 
+2026-11-05T10:23:31.1228350Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1228920Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1231130Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveScenePanel/LiveSceneSelect.vue?vue&type=style&index=0&id=2ac13478&scoped=true&lang=scss
+2026-11-05T10:23:31.1233540Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1235530Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/index.vue?vue&type=style&index=0&id=719b9857&lang=scss&scoped=true
+2026-11-05T10:23:31.1238860Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1239480Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1241560Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/UserProfileDialog.vue?vue&type=style&index=0&id=488145b5&lang=scss&scoped=true
+2026-11-05T10:23:31.1244430Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1244990Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1248910Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/ModalThreeScene.vue?vue&type=style&index=0&id=24c5bc06&scoped=true&lang=css
+2026-11-05T10:23:31.1252880Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1254380Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1258860Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveUserProfile/index.vue?vue&type=style&index=0&id=d1a4ad0e&lang=scss&scoped=true
+2026-11-05T10:23:31.1260760Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1261350Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1261740Z 
+2026-11-05T10:23:31.1261940Z  warning  
+2026-11-05T10:23:31.1262180Z 
+2026-11-05T10:23:31.1262360Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1265310Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1270580Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveScenePanel/MaterialItem.vue?vue&type=style&index=0&id=457f53fd&scoped=true&lang=scss
+2026-11-05T10:23:31.1275240Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1280410Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/index.vue?vue&type=style&index=0&id=719b9857&lang=scss&scoped=true
+2026-11-05T10:23:31.1284500Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1285680Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1290880Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/UserProfileDialog.vue?vue&type=style&index=0&id=488145b5&lang=scss&scoped=true
+2026-11-05T10:23:31.1296810Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1298020Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1302440Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/ModalThreeScene.vue?vue&type=style&index=0&id=24c5bc06&scoped=true&lang=css
+2026-11-05T10:23:31.1306230Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1307770Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1312880Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveUserProfile/index.vue?vue&type=style&index=0&id=d1a4ad0e&lang=scss&scoped=true
+2026-11-05T10:23:31.1318590Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1320000Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1320430Z 
+2026-11-05T10:23:31.1320600Z  warning  
+2026-11-05T10:23:31.1320790Z 
+2026-11-05T10:23:31.1320970Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1321470Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1323600Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveScenePanel/LiveScenePanel.vue?vue&type=style&index=0&id=6910904d&lang=scss&scoped=true
+2026-11-05T10:23:31.1325260Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1329570Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/index.vue?vue&type=style&index=0&id=719b9857&lang=scss&scoped=true
+2026-11-05T10:23:31.1334480Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1335680Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1340120Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/UserProfileDialog.vue?vue&type=style&index=0&id=488145b5&lang=scss&scoped=true
+2026-11-05T10:23:31.1342050Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1342610Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1344000Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/ModalThreeScene.vue?vue&type=style&index=0&id=24c5bc06&scoped=true&lang=css
+2026-11-05T10:23:31.1345360Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1345880Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1348650Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveUserProfile/index.vue?vue&type=style&index=0&id=d1a4ad0e&lang=scss&scoped=true
+2026-11-05T10:23:31.1351610Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1352040Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1352260Z 
+2026-11-05T10:23:31.1352320Z  warning  
+2026-11-05T10:23:31.1352540Z 
+2026-11-05T10:23:31.1352770Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1353180Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1355300Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveUserProfile/index.vue?vue&type=style&index=0&id=d1a4ad0e&lang=scss&scoped=true
+2026-11-05T10:23:31.1357110Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1359990Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1362250Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1362670Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1364910Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1366460Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1366880Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1368790Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1370270Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1370680Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1372350Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1374050Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1374530Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1376160Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1378120Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1378530Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1380300Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1381900Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1382420Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1384070Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1385410Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1385910Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1389490Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1393670Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1395740Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1400440Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/AddMusicDialog.vue?vue&type=style&index=0&id=6b949508&lang=scss&scoped=true
+2026-11-05T10:23:31.1404160Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1405210Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1405840Z 
+2026-11-05T10:23:31.1406020Z  warning  
+2026-11-05T10:23:31.1406610Z 
+2026-11-05T10:23:31.1406980Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1408020Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1412090Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/ModalThreeScene.vue?vue&type=style&index=0&id=24c5bc06&scoped=true&lang=css
+2026-11-05T10:23:31.1415560Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1419920Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1425150Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1425700Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1427600Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1429040Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1429640Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1431360Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1433070Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1433660Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1435420Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1439250Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1440760Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1446250Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1450110Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1451160Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1455450Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1459160Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1460230Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1464070Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1467420Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1468460Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1472840Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1478130Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1479200Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1484030Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/AddMusicDialog.vue?vue&type=style&index=0&id=6b949508&lang=scss&scoped=true
+2026-11-05T10:23:31.1488000Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1489190Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1489860Z 
+2026-11-05T10:23:31.1490040Z  warning  
+2026-11-05T10:23:31.1490280Z 
+2026-11-05T10:23:31.1490630Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1491630Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1494410Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/UserProfileDialog.vue?vue&type=style&index=0&id=488145b5&lang=scss&scoped=true
+2026-11-05T10:23:31.1498390Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1503640Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1507430Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1508490Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1512690Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1516470Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1518620Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1524200Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1525960Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1526440Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1528600Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1533710Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1534290Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1537970Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1541370Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1543520Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1548820Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1550710Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1551230Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1552880Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1554340Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1556940Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1563110Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1565530Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1566320Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1568260Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/AddMusicDialog.vue?vue&type=style&index=0&id=6b949508&lang=scss&scoped=true
+2026-11-05T10:23:31.1569740Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1570170Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1570410Z 
+2026-11-05T10:23:31.1570530Z  warning  
+2026-11-05T10:23:31.1570640Z 
+2026-11-05T10:23:31.1570770Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1571170Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1574580Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveHeader/index.vue?vue&type=style&index=0&id=719b9857&lang=scss&scoped=true
+2026-11-05T10:23:31.1579620Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1583150Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1584730Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1591720Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1593440Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1594900Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1595310Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1597100Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1598610Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1599010Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1601330Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1602870Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1603280Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1604900Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1606420Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1607460Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1611940Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1615800Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1617830Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1621860Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1625200Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1626390Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1630860Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1633480Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1634030Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1636360Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/AddMusicDialog.vue?vue&type=style&index=0&id=6b949508&lang=scss&scoped=true
+2026-11-05T10:23:31.1639890Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1640960Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1641590Z 
+2026-11-05T10:23:31.1641800Z  warning  
+2026-11-05T10:23:31.1642030Z 
+2026-11-05T10:23:31.1642380Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1643210Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1648410Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/AddMusicDialog.vue?vue&type=style&index=0&id=6b949508&lang=scss&scoped=true
+2026-11-05T10:23:31.1650070Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1651810Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1653300Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1653810Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1656430Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1657930Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1658410Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1661050Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1664750Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1665980Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1670760Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1674380Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1675250Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1677150Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1678580Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1679010Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1680830Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LivePusherNotification.vue?vue&type=style&index=0&id=856fa7aa&scoped=true&lang=scss
+2026-11-05T10:23:31.1683710Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1685070Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1690330Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-21.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-21.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-21.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/Notification/Notification.vue?vue&type=style&index=0&id=6096df2a&module=true&lang=scss
+2026-11-05T10:23:31.1692090Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1692720Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1695180Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveURLCopy.vue?vue&type=style&index=0&id=5a224b3c&lang=scss&scoped=true
+2026-11-05T10:23:31.1697280Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1697710Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1697940Z 
+2026-11-05T10:23:31.1698000Z  warning  
+2026-11-05T10:23:31.1698090Z 
+2026-11-05T10:23:31.1698220Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1698550Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1702170Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LiveURLCopy.vue?vue&type=style&index=0&id=5a224b3c&lang=scss&scoped=true
+2026-11-05T10:23:31.1705430Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1710050Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1715770Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1716940Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1719170Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1720990Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1721510Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1723250Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1724840Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1725890Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1727580Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1729260Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1729690Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1731520Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1733120Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1733550Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1735520Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1738840Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1740320Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1742160Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1743620Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1744230Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1746420Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1750390Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1750960Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1751200Z 
+2026-11-05T10:23:31.1751260Z  warning  
+2026-11-05T10:23:31.1751340Z 
+2026-11-05T10:23:31.1751480Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1753790Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1756520Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicPanel/MusicListItem.vue?vue&type=style&index=0&id=129a7bca&lang=scss&scoped=true
+2026-11-05T10:23:31.1758320Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1761970Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1764060Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1764630Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1766680Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1768820Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1769340Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1776060Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1777930Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1778750Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1781000Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1787560Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1788940Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1792480Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1795620Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1796800Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1798790Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LivePusherNotification.vue?vue&type=style&index=0&id=856fa7aa&scoped=true&lang=scss
+2026-11-05T10:23:31.1800350Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1800810Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1815010Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-21.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-21.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-21.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/Notification/Notification.vue?vue&type=style&index=0&id=6096df2a&module=true&lang=scss
+2026-11-05T10:23:31.1817020Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1818450Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1819100Z 
+2026-11-05T10:23:31.1819300Z  warning  
+2026-11-05T10:23:31.1819550Z 
+2026-11-05T10:23:31.1819890Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1821080Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1825590Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-21.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-21.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-21.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/Notification/Notification.vue?vue&type=style&index=0&id=6096df2a&module=true&lang=scss
+2026-11-05T10:23:31.1829520Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1834000Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1838250Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1839340Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1844470Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1847130Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1848270Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1852760Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1854690Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1855280Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1857810Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1859540Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1860030Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1862960Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1864480Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1864960Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1866590Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1868080Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1868500Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1870120Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1871420Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1871830Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1872100Z 
+2026-11-05T10:23:31.1872170Z  warning  
+2026-11-05T10:23:31.1872260Z 
+2026-11-05T10:23:31.1872390Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1873290Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1875040Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./src/TUILiveKit/components/MusicPanel/MusicPanel.scss?vue&type=style&index=0&id=60479718&lang=scss&scoped=true&external
+2026-11-05T10:23:31.1876490Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1878150Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1879640Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1880060Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1881720Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1883240Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1883640Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1885320Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1887200Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1887970Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1890170Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1891660Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1892130Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1894210Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1895780Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1896210Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1899910Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LivePusherNotification.vue?vue&type=style&index=0&id=856fa7aa&scoped=true&lang=scss
+2026-11-05T10:23:31.1901900Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1902320Z    - while fulfilling desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1902560Z 
+2026-11-05T10:23:31.1902610Z  warning  
+2026-11-05T10:23:31.1902710Z 
+2026-11-05T10:23:31.1902840Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1903170Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1905610Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/LivePusherNotification.vue?vue&type=style&index=0&id=856fa7aa&scoped=true&lang=scss
+2026-11-05T10:23:31.1907260Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1908940Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1910440Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1910860Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1912480Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1913860Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1914270Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1916080Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1917490Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1917900Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1919520Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1920910Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1921360Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1923750Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1925260Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1925780Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1927410Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1928900Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1929610Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1929850Z 
+2026-11-05T10:23:31.1929910Z  warning  
+2026-11-05T10:23:31.1930000Z 
+2026-11-05T10:23:31.1930140Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1930470Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1932210Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/base-component/AudioIcon.vue?vue&type=style&index=0&id=d5cca5e6&lang=scss&scoped=true
+2026-11-05T10:23:31.1933680Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1938190Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1942570Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1943670Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1944250Z 
+2026-11-05T10:23:31.1944430Z  warning  
+2026-11-05T10:23:31.1944660Z 
+2026-11-05T10:23:31.1945010Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1946510Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1950770Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MicVolumeSetting.vue?vue&type=style&index=0&id=43806e6e&lang=scss&scoped=true
+2026-11-05T10:23:31.1954660Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1958920Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1962950Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1964220Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1964810Z 
+2026-11-05T10:23:31.1964990Z  warning  
+2026-11-05T10:23:31.1965220Z 
+2026-11-05T10:23:31.1965780Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1966660Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1971160Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SpeakerVolumeSetting.vue?vue&type=style&index=0&id=c111e740&lang=scss&scoped=true
+2026-11-05T10:23:31.1976360Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.1981010Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.1983840Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1984380Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1986160Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.1988190Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1988690Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1990520Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.1994110Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.1995010Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.1995350Z 
+2026-11-05T10:23:31.1995440Z  warning  
+2026-11-05T10:23:31.1995550Z 
+2026-11-05T10:23:31.1996170Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.1996580Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.1998420Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/OrientationSwitch.vue?vue&type=style&index=0&id=1d6f79f2&scoped=true&lang=scss
+2026-11-05T10:23:31.2000210Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2002850Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.2006250Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.2006730Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2007000Z 
+2026-11-05T10:23:31.2007080Z  warning  
+2026-11-05T10:23:31.2007170Z 
+2026-11-05T10:23:31.2007320Z chunk 226 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2007710Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2009340Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/SettingButton.vue?vue&type=style&index=0&id=44e10dd3&lang=scss&scoped=true
+2026-11-05T10:23:31.2011200Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2013000Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/TUILiveKit/components/MusicButton.vue?vue&type=style&index=0&id=769ae6f8&lang=scss&scoped=true
+2026-11-05T10:23:31.2014550Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitMac
+2026-11-05T10:23:31.2014970Z    - while fulfilling desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2015260Z 
+2026-11-05T10:23:31.2015330Z  warning  
+2026-11-05T10:23:31.2015440Z 
+2026-11-05T10:23:31.2015570Z chunk 980 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2015900Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2017440Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/VapGiftPlayer.vue?vue&type=style&index=0&id=07b2ad99&scoped=true&lang=css
+2026-11-05T10:23:31.2030140Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2031980Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/PopularityRankPanel.vue?vue&type=style&index=0&id=08f90c9c&lang=scss&scoped=true
+2026-11-05T10:23:31.2033430Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2033840Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2035800Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/AudiencePanel.vue?vue&type=style&index=0&id=5a9c1cfc&lang=scss&scoped=true
+2026-11-05T10:23:31.2037310Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2037720Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2037940Z 
+2026-11-05T10:23:31.2038000Z  warning  
+2026-11-05T10:23:31.2038090Z 
+2026-11-05T10:23:31.2038210Z chunk 980 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2038540Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2039880Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-12.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-12.use[2]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/GiftEffect.vue?vue&type=style&index=0&id=71a36e9e&scoped=true&lang=css
+2026-11-05T10:23:31.2041130Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2042840Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/PopularityRankPanel.vue?vue&type=style&index=0&id=08f90c9c&lang=scss&scoped=true
+2026-11-05T10:23:31.2044380Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2044880Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2048550Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/AudiencePanel.vue?vue&type=style&index=0&id=5a9c1cfc&lang=scss&scoped=true
+2026-11-05T10:23:31.2051040Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2051540Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2051810Z 
+2026-11-05T10:23:31.2051880Z  warning  
+2026-11-05T10:23:31.2051990Z 
+2026-11-05T10:23:31.2052140Z chunk 980 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2052470Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2055390Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/LiveMarquee.vue?vue&type=style&index=0&id=7638ad07&lang=scss&scoped=true
+2026-11-05T10:23:31.2059300Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2067760Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/PopularityRankPanel.vue?vue&type=style&index=0&id=08f90c9c&lang=scss&scoped=true
+2026-11-05T10:23:31.2070000Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2070480Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2072810Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/AudiencePanel.vue?vue&type=style&index=0&id=5a9c1cfc&lang=scss&scoped=true
+2026-11-05T10:23:31.2074470Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2074930Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2075160Z 
+2026-11-05T10:23:31.2075240Z  warning  
+2026-11-05T10:23:31.2075340Z 
+2026-11-05T10:23:31.2075510Z chunk 980 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2075890Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2077790Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/UserInfoCard.vue?vue&type=style&index=0&id=7bdbab65&scoped=true&lang=scss
+2026-11-05T10:23:31.2079850Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2081510Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/PopularityRankPanel.vue?vue&type=style&index=0&id=08f90c9c&lang=scss&scoped=true
+2026-11-05T10:23:31.2083320Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2083750Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2085410Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/AudiencePanel.vue?vue&type=style&index=0&id=5a9c1cfc&lang=scss&scoped=true
+2026-11-05T10:23:31.2086900Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2087310Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2087540Z 
+2026-11-05T10:23:31.2087610Z  warning  
+2026-11-05T10:23:31.2087710Z 
+2026-11-05T10:23:31.2087870Z chunk 980 [mini-css-extract-plugin]
+2026-11-05T10:23:31.2088210Z Conflicting order. Following module has been added:
+2026-11-05T10:23:31.2089980Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/PopularityRankPanel.vue?vue&type=style&index=0&id=08f90c9c&lang=scss&scoped=true
+2026-11-05T10:23:31.2091460Z despite it was not able to fulfill desired ordering with these modules:
+2026-11-05T10:23:31.2093060Z  * css ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-22.use[1]!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-22.use[2]!./node_modules/sass-loader/dist/cjs.js??clonedRuleSet-22.use[3]!./node_modules/vue-loader/dist/index.js??ruleSet[0].use[0]!./src/niko/components/AudiencePanel.vue?vue&type=style&index=0&id=5a9c1cfc&lang=scss&scoped=true
+2026-11-05T10:23:31.2097610Z    - couldn't fulfill desired order of chunk group(s) TUILiveKitWin
+2026-11-05T10:23:31.2098680Z    - while fulfilling desired order of chunk group(s) LivePlayer
+2026-11-05T10:23:31.2099230Z 
+2026-11-05T10:23:33.9291270Z <w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (2275kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+2026-11-05T10:23:36.3643190Z   File                                      Size             Gzipped
+2026-11-05T10:23:36.3745400Z 
+2026-11-05T10:23:36.3848940Z   dist/js/617.83eee23d.js                   2880.00 KiB      945.94 KiB
+2026-11-05T10:23:36.3851240Z   dist/js/TUILiveKitWin.5250454e.js         2626.96 KiB      1883.35 KiB
+2026-11-05T10:23:36.3885090Z   dist/js/chunk-vendors.4fc198df.js         2515.97 KiB      732.99 KiB
+2026-11-05T10:23:36.3888580Z   dist/js/416.8604d070.js                   742.96 KiB       184.02 KiB
+2026-11-05T10:23:36.3972850Z   dist/js/TUILiveKitMac.1ff47f3f.js         503.29 KiB       147.37 KiB
+2026-11-05T10:23:36.3973410Z   dist/js/226.10c94cf9.js                   494.63 KiB       219.06 KiB
+2026-11-05T10:23:36.3973940Z   dist/js/app.d4dcd138.js                   398.86 KiB       120.72 KiB
+2026-11-05T10:23:36.3974380Z   dist/js/520.532aeb12.js                   164.68 KiB       38.75 KiB
+2026-11-05T10:23:36.3974790Z   dist/js/TUILiveKitChild.ed163ee3.js       87.27 KiB        21.97 KiB
+2026-11-05T10:23:36.3975190Z   dist/js/184.f583a275.js                   76.82 KiB        22.23 KiB
+2026-11-05T10:23:36.3975580Z   dist/js/76.50ad2445.js                    47.74 KiB        16.16 KiB
+2026-11-05T10:23:36.3976000Z   dist/js/LivePlayer.ecdce71e.js            42.73 KiB        13.60 KiB
+2026-11-05T10:23:36.3976490Z   dist/js/980.10cbb8e1.js                   40.20 KiB        19.57 KiB
+2026-11-05T10:23:36.3976900Z   dist/js/AnchorList.e988866e.js            37.46 KiB        12.58 KiB
+2026-11-05T10:23:36.3977320Z   dist/js/584.3e3de517.js                   31.25 KiB        11.85 KiB
+2026-11-05T10:23:36.3978370Z   dist/js/AnchorCenter.44b2ad0d.js          28.96 KiB        9.18 KiB
+2026-11-05T10:23:36.3978810Z   dist/js/646.0571fb6f.js                   18.36 KiB        5.63 KiB
+2026-11-05T10:23:36.3979280Z   dist/js/AnchorLiveSettings.3fadb52a.js    16.32 KiB        4.93 KiB
+2026-11-05T10:23:36.3979700Z   dist/js/525.73932990.js                   15.91 KiB        6.20 KiB
+2026-11-05T10:23:36.3980100Z   dist/js/719.c1206262.js                   15.26 KiB        4.47 KiB
+2026-11-05T10:23:36.3980860Z   dist/js/424.6d0d427e.js                   13.91 KiB        4.99 KiB
+2026-11-05T10:23:36.3981350Z   dist/js/TUILiveKitCover.2afa80c9.js       13.63 KiB        5.28 KiB
+2026-11-05T10:23:36.3981760Z   dist/js/779.918c8d66.js                   12.39 KiB        5.31 KiB
+2026-11-05T10:23:36.3982170Z   dist/js/AnchorDataMore.2617f6fc.js        11.59 KiB        4.16 KiB
+2026-11-05T10:23:36.3982580Z   dist/js/490.ff5f487d.js                   10.89 KiB        3.38 KiB
+2026-11-05T10:23:36.3983000Z   dist/js/877.5e0171a2.js                   8.40 KiB         2.60 KiB
+2026-11-05T10:23:36.3983420Z   dist/js/AnchorTaskCenter.5df3f3a3.js      8.15 KiB         3.16 KiB
+2026-11-05T10:23:36.3983860Z   dist/js/AnchorContributionRank.53eecd3    7.39 KiB         2.71 KiB
+2026-11-05T10:23:36.3984170Z   7.js
+2026-11-05T10:23:36.3984480Z   dist/js/AnchorPaidList.e2058974.js        7.22 KiB         2.68 KiB
+2026-11-05T10:23:36.3984940Z   dist/js/AnchorNotice.76c87c75.js          6.39 KiB         2.31 KiB
+2026-11-05T10:23:36.3985380Z   dist/js/AnchorLevel.c132a2da.js           6.27 KiB         2.55 KiB
+2026-11-05T10:23:36.3985800Z   dist/js/AnchorAdminList.ef1b0c6e.js       5.66 KiB         2.27 KiB
+2026-11-05T10:23:36.3986240Z   dist/js/TUILiveKitConfirm.ec72bb2f.js     4.26 KiB         1.76 KiB
+2026-11-05T10:23:36.3986690Z   dist/js/GiftOverlay.a0770eb4.js           1.78 KiB         0.97 KiB
+2026-11-05T10:23:36.3987130Z   dist/css/chunk-vendors.13a4ed33.css       399.51 KiB       55.53 KiB
+2026-11-05T10:23:36.3987570Z   dist/css/TUILiveKitWin.21defa06.css       65.26 KiB        11.34 KiB
+2026-11-05T10:23:36.3988010Z   dist/css/TUILiveKitChild.824065c8.css     51.81 KiB        8.15 KiB
+2026-11-05T10:23:36.3988540Z   dist/css/AnchorList.e9b9e09f.css          39.81 KiB        8.06 KiB
+2026-11-05T10:23:36.3989430Z   dist/css/226.7459b48f.css                 37.61 KiB        6.49 KiB
+2026-11-05T10:23:36.3990010Z   dist/css/980.fecbac98.css                 29.20 KiB        5.55 KiB
+2026-11-05T10:23:36.3990480Z   dist/css/LivePlayer.9513b182.css          25.23 KiB        4.13 KiB
+2026-11-05T10:23:36.3991240Z   dist/css/app.c76497cf.css                 24.22 KiB        5.79 KiB
+2026-11-05T10:23:36.3991650Z   dist/css/TUILiveKitCover.b8d30746.css     22.79 KiB        4.69 KiB
+2026-11-05T10:23:36.3992080Z   dist/css/AnchorCenter.16c3f353.css        14.06 KiB        3.37 KiB
+2026-11-05T10:23:36.3992610Z   dist/css/TUILiveKitMac.ff4d5ae6.css       14.02 KiB        2.16 KiB
+2026-11-05T10:23:36.3993070Z   dist/css/AnchorLiveSettings.ddc37fbe.c    8.06 KiB         1.86 KiB
+2026-11-05T10:23:36.3993370Z   ss
+2026-11-05T10:23:36.3993640Z   dist/css/AnchorPaidList.791cb5a6.css      7.75 KiB         1.83 KiB
+2026-11-05T10:23:36.3994060Z   dist/css/AnchorTaskCenter.67989e8a.css    7.75 KiB         1.76 KiB
+2026-11-05T10:23:36.3994520Z   dist/css/AnchorContributionRank.dd3e9a    7.71 KiB         1.88 KiB
+2026-11-05T10:23:36.3994870Z   1a.css
+2026-11-05T10:23:36.3995150Z   dist/css/GiftOverlay.e25d0489.css         7.17 KiB         1.91 KiB
+2026-11-05T10:23:36.3995570Z   dist/css/AnchorAdminList.b5546a27.css     6.30 KiB         1.54 KiB
+2026-11-05T10:23:36.3996010Z   dist/css/AnchorNotice.4d7c73db.css        5.57 KiB         1.41 KiB
+2026-11-05T10:23:36.3998600Z   dist/css/AnchorLevel.466147d7.css         5.33 KiB         1.41 KiB
+2026-11-05T10:23:36.3999240Z   dist/css/TUILiveKitConfirm.88fdafef.cs    5.02 KiB         1.28 KiB
+2026-11-05T10:23:36.3999540Z   s
+2026-11-05T10:23:36.4000020Z   dist/css/AnchorDataMore.804a96b6.css      3.95 KiB         1.15 KiB
+2026-11-05T10:23:36.4000840Z 
+2026-11-05T10:23:36.4000980Z   Images and other types of assets omitted.
+2026-11-05T10:23:36.4001580Z   Build at: 2026-11-05T10:23:36.357Z - Hash: be4d910309ff3391 - Time: 38799ms
+2026-11-05T10:23:36.4001870Z 
+2026-11-05T10:23:36.4002100Z  DONE  Build complete. The dist directory is ready to be deployed.
+2026-11-05T10:23:36.4002680Z  INFO  Check out deployment instructions at https://cli.vuejs.org/guide/deployment.html
+2026-11-05T10:23:36.4003050Z        
+2026-11-05T10:23:36.4962430Z ##[group]Run ARCH=""
+2026-11-05T10:23:36.4962790Z [36;1mARCH=""[0m
+2026-11-05T10:23:36.4963000Z [36;1mif [ "$ARCH" = "" ] || [ "$ARCH" = "both" ]; then[0m
+2026-11-05T10:23:36.4963600Z [36;1m  npx electron-builder --mac --x64 --arm64 --dir[0m
+2026-11-05T10:23:36.4963910Z [36;1melse[0m
+2026-11-05T10:23:36.4964170Z [36;1m  npx electron-builder --mac --$ARCH --dir[0m
+2026-11-05T10:23:36.4964440Z [36;1mfi[0m
+2026-11-05T10:23:36.5036390Z shell: /bin/bash -e {0}
+2026-11-05T10:23:36.5036600Z ##[endgroup]
+2026-11-05T10:23:38.5809750Z   • electron-builder  version=24.13.3 os=25.6.0
+2026-11-05T10:23:38.5810570Z   • artifacts will be published if draft release exists  reason=CI detected
+2026-11-05T10:23:38.5818250Z   • loaded configuration  file=package.json ("build" field)
+2026-11-05T10:23:39.2002850Z   • packaging       platform=darwin arch=x64 electron=19.1.9 appOutDir=release/mac
+2026-11-05T10:23:39.9950360Z   • downloading     url=https://github.com/electron/electron/releases/download/v19.1.9/electron-v19.1.9-darwin-x64.zip size=82 MB parts=6
+2026-11-05T10:23:40.8013730Z   • downloaded      url=https://github.com/electron/electron/releases/download/v19.1.9/electron-v19.1.9-darwin-x64.zip duration=1.577s
+2026-11-05T10:24:21.0382310Z   • skipped macOS application code signing  reason=cannot find valid "Developer ID Application" identity or custom non-Apple code signing certificate, it could cause some undefined behaviour, e.g. macOS localized description not visible, see https://electron.build/code-signing allIdentities=     0 identities found
+2026-11-05T10:24:21.0401320Z                                                 Valid identities only
+2026-11-05T10:24:21.0402300Z      0 valid identities found
+2026-11-05T10:24:21.0661190Z   • packaging       platform=darwin arch=arm64 electron=19.1.9 appOutDir=release/mac-arm64
+2026-11-05T10:24:21.3979640Z   • downloading     url=https://github.com/electron/electron/releases/download/v19.1.9/electron-v19.1.9-darwin-arm64.zip size=79 MB parts=6
+2026-11-05T10:24:22.2622740Z   • downloaded      url=https://github.com/electron/electron/releases/download/v19.1.9/electron-v19.1.9-darwin-arm64.zip duration=1.173s
+2026-11-05T10:24:44.9404120Z   • skipped macOS application code signing  reason=cannot find valid "Developer ID Application" identity or custom non-Apple code signing certificate, it could cause some undefined behaviour, e.g. macOS localized description not visible, see https://electron.build/code-signing allIdentities=     0 identities found
+2026-11-05T10:24:44.9406210Z                                                 Valid identities only
+2026-11-05T10:24:44.9406800Z      0 valid identities found
+2026-11-05T10:24:45.0186420Z ##[group]Run cd dist
+2026-11-05T10:24:45.0186910Z [36;1mcd dist[0m
+2026-11-05T10:24:45.0187210Z [36;1mfor dir in mac mac-arm64; do[0m
+2026-11-05T10:24:45.0187630Z [36;1m  if [ -d "$dir" ]; then[0m
+2026-11-05T10:24:45.0187930Z [36;1m    staging="dmg-stage-$dir"[0m
+2026-11-05T10:24:45.0188290Z [36;1m    mkdir -p "$staging"[0m
+2026-11-05T10:24:45.0188680Z [36;1m    app=$(ls -d "$dir"/*.app | head -1)[0m
+2026-11-05T10:24:45.0189170Z [36;1m    ditto "$app" "$staging/NikoLive.app"[0m
+2026-11-05T10:24:45.0189540Z [36;1m    cp ../build/install.command "$staging/安装.command"[0m
+2026-11-05T10:24:45.0189940Z [36;1m    chmod +x "$staging/安装.command"[0m
+2026-11-05T10:24:45.0190820Z [36;1m  fi[0m
+2026-11-05T10:24:45.0191160Z [36;1mdone[0m
+2026-11-05T10:24:45.0515550Z shell: /bin/bash -e {0}
+2026-11-05T10:24:45.0515830Z ##[endgroup]
+2026-11-05T10:24:45.1389680Z ##[group]Run cd dist
+2026-11-05T10:24:45.1390700Z [36;1mcd dist[0m
+2026-11-05T10:24:45.1391430Z [36;1mfor dir in mac mac-arm64; do[0m
+2026-11-05T10:24:45.1392310Z [36;1m  [ -d "$dir" ] || continue[0m
+2026-11-05T10:24:45.1393070Z [36;1m  arch_suffix="${dir#mac}"[0m
+2026-11-05T10:24:45.1393970Z [36;1m  [ "$arch_suffix" = "" ] && arch_suffix="x64"[0m
+2026-11-05T10:24:45.1394780Z [36;1m  echo "Creating DMG for $arch_suffix ..."[0m
+2026-11-05T10:24:45.1396180Z [36;1m  hdiutil create -volname "NikoLive" -srcfolder "dmg-stage-$dir" -ov -format UDZO "NikoLive-$arch_suffix.dmg"[0m
+2026-11-05T10:24:45.1397690Z [36;1mdone[0m
+2026-11-05T10:24:45.1456740Z shell: /bin/bash -e {0}
+2026-11-05T10:24:45.1457080Z ##[endgroup]
+2026-11-05T10:24:45.2041600Z ##[group]Run cd dist
+2026-11-05T10:24:45.2042020Z [36;1mcd dist[0m
+2026-11-05T10:24:45.2042370Z [36;1mfor dmg in NikoLive-*.dmg; do[0m
+2026-11-05T10:24:45.2042690Z [36;1m  [ -f "$dmg" ] || continue[0m
+2026-11-05T10:24:45.2042940Z [36;1m  echo "Setting Finder layout for $dmg ..."[0m
+2026-11-05T10:24:45.2043360Z [36;1m  hdiutil attach "$dmg" -nobrowse -quiet || true[0m
+2026-11-05T10:24:45.2043630Z [36;1m  sleep 2[0m
+2026-11-05T10:24:45.2044170Z [36;1m  osascript -e 'tell application "Finder" to tell disk "NikoLive" to open' 2>/dev/null || echo "  (osascript unavailable, skipping layout)"[0m
+2026-11-05T10:24:45.2044810Z [36;1m  hdiutil detach /Volumes/NikoLive -quiet 2>/dev/null || true[0m
+2026-11-05T10:24:45.2045300Z [36;1mdone[0m
+2026-11-05T10:24:45.2045630Z [36;1mecho "Finder layout step done (non-fatal)"[0m
+2026-11-05T10:24:45.2082000Z shell: /bin/bash -e {0}
+2026-11-05T10:24:45.2082230Z ##[endgroup]
+2026-11-05T10:24:45.2402260Z Finder layout step done (non-fatal)
+2026-11-05T10:24:45.2471190Z ##[group]Run actions/upload-artifact@v4
+2026-11-05T10:24:45.2471450Z with:
+2026-11-05T10:24:45.2471600Z   name: NikoLive-mac-dmg
+2026-11-05T10:24:45.2471800Z   path: dist/NikoLive-*.dmg
+2026-11-05T10:24:45.2472000Z   retention-days: 30
+2026-11-05T10:24:45.2472220Z   if-no-files-found: warn
+2026-11-05T10:24:45.2472440Z   compression-level: 6
+2026-11-05T10:24:45.2472620Z   overwrite: false
+2026-11-05T10:24:45.2472800Z   include-hidden-files: false
+2026-11-05T10:24:45.2473010Z ##[endgroup]
+2026-11-05T10:24:45.6500970Z (node:6555) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-05T10:24:45.6504530Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-05T10:24:45.6664400Z ##[warning]No files were found with the provided path: dist/NikoLive-*.dmg. No artifacts will be uploaded.
+2026-11-05T10:24:45.7208480Z Post job cleanup.
+2026-11-05T10:24:45.8879050Z (node:6556) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-05T10:24:45.8881250Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-05T10:24:45.9630140Z [command]/opt/homebrew/bin/gtar --posix -cf cache.tzst --exclude cache.tzst -P -C /Users/runner/work/live-electron/live-electron --files-from manifest.txt --delay-directory-restore --use-compress-program zstdmt
+2026-11-05T10:24:49.7214480Z (node:6556) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-05T10:24:50.7033780Z Sent 2717255 of 136934983 (2.0%), 2.6 MBs/sec
+2026-11-05T10:24:51.7035350Z Sent 2717255 of 136934983 (2.0%), 1.3 MBs/sec
+2026-11-05T10:24:52.5749090Z Sent 136934983 of 136934983 (100.0%), 45.5 MBs/sec
+2026-11-05T10:24:52.8896210Z Cache saved with the key: node-cache-macOS-arm64-npm-33077670adcd9cb55afc1dcc9aa5d031b9ec4ade7746e276ab165d38d9a3bf1a
+2026-11-05T10:24:52.9173130Z Post job cleanup.
+2026-11-05T10:24:53.1822990Z [command]/opt/homebrew/bin/git version
+2026-11-05T10:24:53.2257010Z git version 2.56.0
+2026-11-05T10:24:53.2277440Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/95e151c2-087a-4f23-974f-36a24c3c5c65/.gitconfig'
+2026-11-05T10:24:53.2296530Z Temporarily overriding HOME='/Users/runner/work/_temp/95e151c2-087a-4f23-974f-36a24c3c5c65' before making global git config changes
+2026-11-05T10:24:53.2298630Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-05T10:24:53.2322220Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/live-electron/live-electron
+2026-11-05T10:24:53.2472120Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-05T10:24:53.2552620Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-05T10:24:53.3975080Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-05T10:24:53.4046540Z http.https://github.com/.extraheader
+2026-11-05T10:24:53.4050020Z [command]/opt/homebrew/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-05T10:24:53.4170240Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-05T10:24:53.5490320Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-05T10:24:53.5715550Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-05T10:24:53.8128400Z Cleaning up orphan processes
+2026-11-05T10:24:55.8953560Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

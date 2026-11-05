@@ -1,5 +1,7 @@
 [English](README.md) | 简体中文
 
+### Mac 构建 dmg安装包 命令git push github master
+
 # ultra-live-electron
 
 本工程是一个桌面端直播推流工具，基于[腾讯云实时音视频技术](https://cloud.tencent.com/document/product/647)，快速开启在线直播。
