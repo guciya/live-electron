@@ -41,7 +41,7 @@
         type="button"
         @click="emit('openFollowList')"
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="24" height="24">
           <path d="M12 20s-7-4.35-7-9a4 4 0 017-2.65A4 4 0 0119 11c0 4.65-7 9-7 9z" fill="#ff4d8a" stroke="#ff4d8a" stroke-width="1.2" stroke-linejoin="round" />
         </svg>
         <span>关注列表</span>

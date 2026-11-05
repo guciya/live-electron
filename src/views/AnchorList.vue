@@ -629,53 +629,20 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
   gridMaterial.opacity = 0.16;
   scene.add(grid);
 
-  // 能量核心 + 鼠标吸引粒子环：中心发光 20 面体 + 300 颗粒子绕核心一圈
-  const coreTexture = createStarTexture();
-  scene.userData.starTexture = coreTexture;
-
-  // 中心发光点：Sprite 做成柔光球
-  const coreGlow = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: coreTexture,
-      color: 0xbfe8ff,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
-  coreGlow.scale.setScalar(1.8);
-  scene.add(coreGlow);
-
-  // 20 面体 wireframe（半透明，核心轮廓）
-  const coreWire = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.85, 0),
-    new THREE.MeshBasicMaterial({
-      color: 0x7ed0ff,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.28,
-    }),
-  );
-  scene.add(coreWire);
-  // 稍大一点的反向 20 面体：错开顶点产生"呼吸"轮廓感
-  const coreWireOuter = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1.15, 0),
-    new THREE.MeshBasicMaterial({
-      color: 0x5ba9ff,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.16,
-    }),
-  );
-  scene.add(coreWireOuter);
-
+  // 相机视差：鼠标移动时场景相机轻微偏移，增加深度感
   const pointer = { x: 0, y: 0 };
   const handlePointer = (event: PointerEvent) => {
     pointer.x = (event.clientX / window.innerWidth - 0.5) * 2;
     pointer.y = (event.clientY / window.innerHeight - 0.5) * 2;
   };
+  const handleWindowBlur = () => {
+    pointer.x = 0;
+    pointer.y = 0;
+  };
   window.addEventListener('pointermove', handlePointer, { passive: true });
+  window.addEventListener('blur', handleWindowBlur);
+
+  // ── 开播按钮粒子：汇聚成「NIKO LIVE」文字形状 ──
 
   const resize = () => {
     const width = canvas.clientWidth || window.innerWidth;
@@ -694,16 +661,6 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
     const delta = Math.min(0.1, clock.getDelta());
     const elapsed = clock.elapsedTime;
 
-    // 能量核心：双 20 面体反向慢速旋转 + 呼吸缩放
-    coreWire.rotation.y += delta * 0.32;
-    coreWire.rotation.x += delta * 0.22;
-    coreWireOuter.rotation.y -= delta * 0.24;
-    coreWireOuter.rotation.x -= delta * 0.14;
-    const breathe = 1 + Math.sin(elapsed * 1.4) * 0.04;
-    coreWire.scale.setScalar(breathe);
-    coreWireOuter.scale.setScalar(breathe * 1.02);
-    coreGlow.scale.setScalar(1.8 + Math.sin(elapsed * 2.3) * 0.15);
-
     grid.position.z = -4 + (elapsed * 0.1) % 0.7;
     camera.position.x += (pointer.x * 0.16 - camera.position.x) * 0.03;
     camera.position.y += (-pointer.y * 0.1 - camera.position.y) * 0.03;
@@ -717,6 +674,7 @@ function createAnchorSpaceScene(canvas: HTMLCanvasElement) {
     cancelAnimationFrame(raf);
     resizeObserver.disconnect();
     window.removeEventListener('pointermove', handlePointer);
+    window.removeEventListener('blur', handleWindowBlur);
     scene.traverse((object) => {
       const drawable = object as THREE.Mesh;
       drawable.geometry?.dispose?.();
@@ -744,12 +702,13 @@ function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElem
     attribute float aSize;
     uniform float uPixelRatio;
     uniform float uFormation;
+    uniform float uScale;
     varying vec3 vColor;
     void main() {
       vColor = color;
       vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * viewPosition;
-      gl_PointSize = aSize * uPixelRatio * mix(0.58, 1.15, uFormation);
+      gl_PointSize = aSize * uPixelRatio * mix(0.8, 1.15, uFormation) * uScale;
     }
   `;
   const fragmentShader = `
@@ -803,6 +762,7 @@ function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElem
       uniforms: {
         uPixelRatio: { value: renderer.getPixelRatio() },
         uFormation: { value: 0 },
+        uScale: { value: 1 },
       },
       vertexShader,
       fragmentShader,
@@ -823,7 +783,7 @@ function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElem
   const addCameraPoint = (x: number, y: number, z: number, color: THREE.Color) => {
     cameraTargets.push(x, y, z);
     cameraColors.push(color.r, color.g, color.b);
-    cameraSizes.push(1.8 + Math.random() * 1.15);
+    cameraSizes.push(2 + Math.random() * 0.95);
   };
   const bodyPalette = [0x1f5eae, 0x287fd0, 0x163d7a, 0x3a8dcc].map((color) => new THREE.Color(color));
   const lensPalette = [0x123c68, 0x1e9cc2, 0x77e6ff].map((color) => new THREE.Color(color));
@@ -1010,6 +970,7 @@ function createLiveCameraScene(canvas: HTMLCanvasElement, button: HTMLButtonElem
     clouds.forEach((cloud) => {
       updateCloud(cloud, elapsed);
       cloud.material.uniforms.uFormation.value = formed;
+      cloud.material.uniforms.uScale.value = 1 + formed; // hover 时放大约 2 倍
     });
     cameraCloud.points.rotation.y = (-0.22 + Math.sin(elapsed * 0.7) * 0.04) * formed;
     cameraCloud.points.rotation.x = (-0.06 + Math.sin(elapsed * 0.55) * 0.025) * formed;

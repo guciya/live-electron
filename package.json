@@ -54,19 +54,20 @@
       "installerHeaderIcon": "build/icon.ico"
     },
     "mac": {
-      "icon": "build/icon.icns",
+      "icon": "build/icon.png",
       "category": "public.app-category.social-networking",
       "target": [
         {
-          "target": "dmg",
+          "target": "dir",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ]
     },
     "dmg": {
-      "icon": "build/icon.icns"
+      "icon": "build/icon.png"
     }
   },
   "scripts": {
@@ -87,7 +88,11 @@
     "pack:test": "npm run build:test && electron-builder --win --x64 -c.directories.output=release-test -c.productName=Niko直播伴侣-test -c.artifactName=NikoLive-test-Setup-${version}.${ext}",
     "pack:prod": "npm run build:prod && electron-builder --win --x64 -c.directories.output=release -c.productName=Niko直播伴侣 -c.artifactName=NikoLive-Setup-${version}.${ext}",
     "build:mac-x64": "electron-builder --mac --x64",
-    "pack:mac-x64": "npm run build && npm run build:mac-x64",
+    "build:mac-arm64": "electron-builder --mac --arm64",
+    "build:mac-universal": "electron-builder --mac --universal",
+    "pack:mac-x64": "node scripts/build-mac-dmg.js x64",
+    "pack:mac-arm64": "node scripts/build-mac-dmg.js arm64",
+    "pack:mac": "node scripts/build-mac-dmg.js both",
     "upload-server": "npm --prefix ./upload-server run start",
     "upload-server:standalone": "npm --prefix ./upload-server run start",
     "upload-server:bootstrap": "npm --prefix ./upload-server install",
