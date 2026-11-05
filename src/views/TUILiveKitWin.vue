@@ -138,16 +138,23 @@
           </div>
           <div ref="centerRef" class="main-center-center">
             <div v-if="pkActive" class="pk-overlay">
-              <div class="pk-bar">
+              <!-- 双人 PK：血条；多人 PK 不展示血条，改到每个视频格子下方显示分数 -->
+              <div v-if="!pkIsMulti" class="pk-bar">
                 <div class="pk-side pk-left">
                   <span class="pk-score">{{ pkSelfScore }}</span>
                 </div>
                 <div class="pk-progress">
                   <div class="pk-progress-inner" :style="{ width: pkProgressPercent + '%' }"></div>
-                  <span class="pk-countdown">{{ pkCountdown }}s</span>
                 </div>
                 <div class="pk-side pk-right">
                   <span class="pk-score">{{ pkOpponentScore }}</span>
+                </div>
+              </div>
+              <!-- 血条下方的 PK 状态（对齐 web-obs-live 的 .live-status-container） -->
+              <div class="pk-status-container" :class="{ 'is-below-bar': !pkIsMulti }">
+                <div class="pk-status-badge">
+                  <img class="pk-status-icon" :src="pkIcon" alt="PK" />
+                  <span class="pk-status-text">{{ pkCountdown }}s</span>
                 </div>
               </div>
             </div>
@@ -163,11 +170,17 @@
                   @on-stream-layout-changed="onStreamLayoutChanged"
                   @on-stream-layout-area-changed="onStreamLayoutAreaChanged"
                 />
+                <span v-if="pkActive && pkIsMulti" class="video-cell-score">
+                  <span class="score-rank" :class="'rank-' + selfPkRank">{{ selfPkRank }}</span>{{ pkSelfScore }}
+                </span>
               </div>
               <div v-if="remoteGuestUsers.length" class="guest-column">
                 <div v-for="u in remoteGuestUsers" :key="u.userId" class="video-cell video-cell-guest">
                   <div :id="guestViewId(u.userId)" class="host-guest-video"></div>
                   <span class="host-guest-name">{{ u.nickName || '连线主播' }}</span>
+                  <span v-if="pkActive && pkIsMulti" class="video-cell-score">
+                    <span class="score-rank" :class="'rank-' + guestPkRank(u.userId)">{{ guestPkRank(u.userId) }}</span>{{ guestPkScore(u.userId) }}
+                  </span>
                   <button
                     class="guest-audio-btn"
                     :class="{ 'is-muted': guestAudioMuted[u.userId] }"
@@ -728,6 +741,8 @@ const pkProgressPercent = computed(() => {
   if (total <= 0) return 50;
   return Math.round((self / total) * 100);
 });
+/** PK 固定时长：5 分钟 */
+const PK_DURATION_SECONDS = 300;
 const pkCountdown = ref(0);
 let pkTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeSettle: (() => void) | null = null;
@@ -810,7 +825,7 @@ const handlePkStartedEvent = (event: LivePkStarted) => {
     return;
   }
   backendPkActive.value = true;
-  startPkCountdown(Number(event.raw.pk_keep_second ?? event.raw.pkKeepSecond) || 300);
+  startPkCountdown(PK_DURATION_SECONDS);
 };
 
 /** IM action 109：更新双方真实分数；接收方未点击 startPk 也要同步展示 PK 条 */
@@ -824,7 +839,7 @@ const handlePkScoreUpdated = (event: LivePkScoreUpdate) => {
   pkIntentActive.value = true;
   if (!pkActive.value) {
     backendPkActive.value = true;
-    startPkCountdown(300);
+    startPkCountdown(PK_DURATION_SECONDS);
   }
 };
 
@@ -834,6 +849,7 @@ const handlePkEndedEvent = (event: LivePkEnded) => {
   pkIntentActive.value = false;
   backendPkActive.value = false;
   imPkScores.value = {};
+  pkAnchorCount.value = 0;
   pkIdRef.value = '';
   pkCountdown.value = 0;
   if (pkTimer) {
@@ -858,8 +874,7 @@ const startPkCountdown = (seconds: number) => {
 // 监听 PK 开始/结束，启动/清除倒计时
 watch(() => currentBattleInfo.value?.battleId, (battleId, oldId) => {
   if (battleId && !oldId) {
-    const duration = currentBattleInfo.value?.config?.duration || 300;
-    startPkCountdown(duration);
+    startPkCountdown(PK_DURATION_SECONDS);
   } else if (!battleId) {
     if (pkTimer) clearInterval(pkTimer);
     pkTimer = null;
@@ -886,7 +901,7 @@ const handlePkClick = async () => {
     await startPk(pId);
     pkIntentActive.value = true;
     backendPkActive.value = true;
-    startPkCountdown(300);
+    startPkCountdown(PK_DURATION_SECONDS);
     showMessage({ type: MessageToastType.Success, message: 'PK 已开始' });
   } catch (error: any) {
     console.warn('[NikoPK] startPk failed:', error);
@@ -928,10 +943,13 @@ const handleExitConnection = async () => {
       return;
     }
   }
-  // 4. 本地状态清理
+  // 4. 本地立即清理连线嘉宾画面（多人群连时 SDK 的离房回调可能延迟或不触发）
+  clearRemoteGuests();
+  // 5. 本地状态清理
   pkIntentActive.value = false;
   backendPkActive.value = false;
   imPkScores.value = {};
+  pkAnchorCount.value = 0;
   pkIdRef.value = '';
   pkCountdown.value = 0;
   if (pkTimer) {
@@ -1170,6 +1188,8 @@ interface RemoteGuest {
 }
 
 const remoteGuestUsers = ref<RemoteGuest[]>([]);
+/** PK 参与主播数（action 108/109 的 anchor_list 下发），用于判断是否多人 PK */
+const pkAnchorCount = ref(0);
 const guestNameCache = new Map<string, string>();
 const guestVideoAvailable = new Set<string>();
 
@@ -1177,6 +1197,7 @@ const guestVideoAvailable = new Set<string>();
 function updateRemoteGuestNames(raw: Record<string, any>) {
   const anchors = raw?.newAnchorList || raw?.anchor_list || raw?.anchorList;
   if (!Array.isArray(anchors)) return;
+  pkAnchorCount.value = anchors.length;
   anchors.forEach((anchor: any) => {
     const userId = String(anchor.anchor_id ?? anchor.user_id ?? anchor.anchorId ?? anchor.userId ?? '');
     const nickname = String(anchor.nickname ?? anchor.nick_name ?? anchor.user_name ?? '').trim();
@@ -1210,6 +1231,38 @@ const videoLayoutClass = computed(() => {
   if (count === 1) return 'video-layout-split';
   return 'video-layout-side';
 });
+
+/** 多人 PK（3 人及以上）：不展示血条，改为每个视频格子下方显示分数 */
+const pkParticipantCount = computed(() => {
+  const scoreCount = Object.keys(imPkScores.value).length;
+  return Math.max(pkAnchorCount.value, scoreCount, remoteGuestUsers.value.length + 1);
+});
+const pkIsMulti = computed(() => pkActive.value && pkParticipantCount.value > 2);
+
+/** 连线嘉宾的 PK 分数：优先 IM 实时分数，其次 SDK battle 分数 */
+function guestPkScore(userId: string): number {
+  const imScore = imPkScores.value[userId];
+  if (typeof imScore === 'number') {
+    return imScore;
+  }
+  return battleScoreMap.value.get(userId) || 0;
+}
+
+/** 多人 PK 排名：按分数从高到低，同分按用户 id 稳定排序 */
+const pkRankMap = computed(() => {
+  const selfId = String(loginUserInfo.value?.userId || 'self');
+  const entries = [
+    { id: selfId, score: pkSelfScore.value },
+    ...remoteGuestUsers.value.map((u) => ({ id: u.userId, score: guestPkScore(u.userId) })),
+  ].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  const ranks = new Map<string, number>();
+  entries.forEach((entry, index) => ranks.set(entry.id, index + 1));
+  return ranks;
+});
+const selfPkRank = computed(() => pkRankMap.value.get(String(loginUserInfo.value?.userId || 'self')) || 1);
+function guestPkRank(userId: string): number {
+  return pkRankMap.value.get(userId) || 1;
+}
 
 /** 横屏 / 竖屏样式类：layoutTemplate 200~599 → 横屏，>=600 → 竖屏 */
 const orientationClass = computed(() => {
@@ -3407,17 +3460,40 @@ onBeforeUnmount(() => {
         border-radius: 0 12px 12px 0;
         transition: width 0.35s ease-out;
       }
-      .pk-countdown {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        color: #fff;
-        font-size: 12px;
-        font-weight: 600;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-      }
     }
+  }
+  /* PK 状态：对齐 web-obs-live 的 .live-status-container / .status-badge */
+  .pk-status-container {
+    display: flex;
+    justify-content: center;
+    /* 无血条（多人 PK）时贴视频区最上方 */
+    padding-top: 0;
+
+    &.is-below-bar {
+      /* 有血条时紧贴进度条，不留大间距 */
+      padding-top: 0;
+    }
+  }
+  .pk-status-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 120px;
+    height: 32px;
+    padding: 0 14px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    clip-path: polygon(10% 100%, 90% 100%, 100% 0, 0 0);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+  .pk-status-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
   }
 }
 /* 主播 + 连线嘉宾统一视频布局 */
@@ -3489,6 +3565,50 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+/* 多人 PK：每个视频格子底部的分数（对齐 web-obs-live 的 .anchor-score） */
+.video-cell-score {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+/* 名次图标：第一金 / 第二银 / 第三铜 / 其余默认 */
+.score-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.18);
+}
+.score-rank.rank-1 {
+  background: linear-gradient(135deg, #ffe98a, #f0a92e);
+  color: #593500;
+}
+.score-rank.rank-2 {
+  background: linear-gradient(135deg, #f5f8ff, #b9c7d9);
+  color: #33404f;
+}
+.score-rank.rank-3 {
+  background: linear-gradient(135deg, #ffcda4, #d1803e);
+  color: #4a2400;
 }
 /* 连线嘉宾声音开关（关闭其他主播声音） */
 .guest-audio-btn {
