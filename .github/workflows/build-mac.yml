@@ -45,49 +45,52 @@ jobs:
           else
             npx electron-builder --mac --$ARCH --dir
           fi
+          echo "--- electron-builder output dirs ---"
+          ls -la release/ 2>/dev/null || true
 
-      - name: Stage DMG contents
+      - name: Stage + Create DMG
         run: |
-          cd dist
-          for dir in mac mac-arm64; do
-            if [ -d "$dir" ]; then
-              staging="dmg-stage-$dir"
-              mkdir -p "$staging"
-              app=$(ls -d "$dir"/*.app | head -1)
-              ditto "$app" "$staging/NikoLive.app"
-              cp ../build/install.command "$staging/安装.command"
-              chmod +x "$staging/安装.command"
-            fi
-          done
-
-      - name: Create DMG
-        run: |
-          cd dist
-          for dir in mac mac-arm64; do
+          set -e
+          for dir in release/mac release/mac-arm64; do
             [ -d "$dir" ] || continue
-            arch_suffix="${dir#mac}"
-            [ "$arch_suffix" = "" ] && arch_suffix="x64"
-            echo "Creating DMG for $arch_suffix ..."
-            hdiutil create -volname "NikoLive" -srcfolder "dmg-stage-$dir" -ov -format UDZO "NikoLive-$arch_suffix.dmg"
+            arch_suffix=""
+            case "$dir" in
+              *mac-arm64) arch_suffix="arm64" ;;
+              *mac)        arch_suffix="x64" ;;
+            esac
+            echo "=== Processing $dir ($arch_suffix) ==="
+            staging="release/dmg-stage-$arch_suffix"
+            rm -rf "$staging"
+            mkdir -p "$staging"
+            app=$(ls -d "$dir"/*.app | head -1)
+            echo "App: $app"
+            ditto "$app" "$staging/NikoLive.app"
+            cp build/install.command "$staging/安装.command"
+            chmod +x "$staging/安装.command"
+            dmg="release/NikoLive-$arch_suffix.dmg"
+            echo "Creating DMG: $dmg"
+            hdiutil create -volname "NikoLive" -srcfolder "$staging" -ov -format UDZO "$dmg"
+            echo "✅ DMG created: $dmg"
           done
+          echo "--- Final listing ---"
+          ls -lh release/*.dmg 2>/dev/null
 
       - name: Set Finder layout (best-effort)
         run: |
-          cd dist
-          for dmg in NikoLive-*.dmg; do
+          for dmg in release/NikoLive-*.dmg; do
             [ -f "$dmg" ] || continue
             echo "Setting Finder layout for $dmg ..."
             hdiutil attach "$dmg" -nobrowse -quiet || true
             sleep 2
-            osascript -e 'tell application "Finder" to tell disk "NikoLive" to open' 2>/dev/null || echo "  (osascript unavailable, skipping layout)"
+            osascript -e 'tell application "Finder" to tell disk "NikoLive" to open' 2>/dev/null || echo "  (osascript unavailable, skipping)"
             hdiutil detach /Volumes/NikoLive -quiet 2>/dev/null || true
           done
-          echo "Finder layout step done (non-fatal)"
         continue-on-error: true
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
           name: NikoLive-mac-dmg
-          path: dist/NikoLive-*.dmg
+          path: release/NikoLive-*.dmg
+          if-no-files-found: error
           retention-days: 30
