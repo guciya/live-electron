@@ -88,12 +88,13 @@
             </svg>
             <span>关注列表</span>
           </button>
-          <button class="anchor-start-live-btn" type="button" @click="handleOpenMessage">
+          <button class="anchor-start-live-btn anchor-msg-btn" type="button" @click="handleOpenMessage">
             <svg class="start-live-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M20.5 11.5a7.5 7.5 0 0 1-11 6.7L4 20l1.6-4.4a7.5 7.5 0 1 1 14.9-4.1z" />
               <path d="M9 11h6M9 14.5h3.5" />
             </svg>
             <span>消息</span>
+            <span v-if="messageUnread > 0" class="anchor-msg-badge">{{ messageUnread > 99 ? '99+' : messageUnread }}</span>
           </button>
            <button class="anchor-text-btn" type="button" @click="handleLogout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -360,6 +361,8 @@ import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch, type Com
 import * as THREE from 'three/src/Three.js';
 import { useRoute, useRouter } from 'vue-router';
 import { IconLive, UIKitProvider, useUIKit } from '@tencentcloud/uikit-base-component-vue3';
+import { TUILogin } from '@tencentcloud/tui-core-lite';
+import { TUIChatEngine } from '@tencentcloud/chat-uikit-engine-lite';
 import TUIMessageBox from '../TUILiveKit/common/base/MessageBox';
 import { useLoginState } from 'tuikit-atomicx-vue3-electron';
 import SvgIcon from '../TUILiveKit/common/base/SvgIcon.vue';
@@ -1781,6 +1784,23 @@ async function handleOpenMessage() {
   }
 }
 
+/** 消息未读数：轮询 C2C 会话 unreadCount，显示在消息按钮右上角 */
+const messageUnread = ref(0);
+let unreadTimer: ReturnType<typeof setInterval> | null = null;
+async function refreshMessageUnread() {
+  try {
+    const chat = (TUILogin as any).getContext?.()?.chat || (TUIChatEngine as any)?.chat;
+    if (!chat?.getConversationList) return;
+    const res = await chat.getConversationList();
+    const list: any[] = res?.data?.conversationList || [];
+    messageUnread.value = list
+      .filter((conv) => String(conv.conversationID || '').startsWith('C2C'))
+      .reduce((sum, conv) => sum + Number(conv.unreadCount || 0), 0);
+  } catch {
+    // IM 未就绪 / 登录切换中，忽略
+  }
+}
+
 // 退出登录二次确认：点击「退出登录」先弹窗，确认后才执行登出
 const showLogoutConfirm = ref(false);
 
@@ -1948,6 +1968,9 @@ onMounted(() => {
   silentTimer = window.setInterval(() => {
     void refreshSilently();
   }, 2 * 1000);
+  // 消息未读数：10s 轮询，打开消息中心后立即刷新
+  void refreshMessageUnread();
+  unreadTimer = window.setInterval(refreshMessageUnread, 10000);
 });
 
 // keep-alive 场景下返回列表（组件未销毁、只被重新激活）也要立即刷新
@@ -1966,6 +1989,13 @@ watch(
   },
 );
 
+// 关闭消息中心后立即刷新未读数（标记已读后需要归零）
+watch(messageCenterVisible, (visible) => {
+  if (!visible) {
+    void refreshMessageUnread();
+  }
+});
+
 onBeforeUnmount(() => {
   cleanupFollowGravity?.();
   cleanupFollowGravity = null;
@@ -1976,6 +2006,10 @@ onBeforeUnmount(() => {
   if (silentTimer !== null) {
     window.clearInterval(silentTimer);
     silentTimer = null;
+  }
+  if (unreadTimer !== null) {
+    window.clearInterval(unreadTimer);
+    unreadTimer = null;
   }
   previewObserver?.disconnect();
   previewHandles.forEach((handle) => handle.destroy());
@@ -2327,6 +2361,26 @@ onBeforeUnmount(() => {
       width: 1rem;
       height: 1rem;
     }
+  }
+
+  .anchor-msg-btn {
+    position: relative;
+  }
+  .anchor-msg-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    box-shadow: 0 0 4px rgba(255, 59, 48, 0.6);
   }
 
   .window-tool {
